@@ -61,13 +61,11 @@ const client = read('client.js')
 }
 
 // -------------------------------------------------------------- 2. manifest --
-// Name, module id, exports and bundle patch must agree; a rename that misses one
-// of them produces a package the host cannot load.
+// 包名、模块 ID 与补丁模块名必须完整一致；宿主按完整包名查找客户端工厂。
 {
-  const unscoped = pkg.name.replace(/^@[^/]+\//, '')
-  const moduleId = /id:\s*'([^']+)'/.exec(client)?.[1]
-  if (moduleId !== unscoped) {
-    fail('manifest', `client.js registers id "${moduleId}" but the package is named "${pkg.name}" (expected "${unscoped}")`)
+  const moduleId = /window\.__ModuleLoader__\.load\(\{\s*id:\s*'([^']+)'/.exec(client)?.[1]
+  if (moduleId !== pkg.name) {
+    fail('manifest', `client.js registers id "${moduleId}" but the package is named "${pkg.name}" (expected "${pkg.name}")`)
   }
 
   const patch = pkg.dsh?.bundle?.patch
@@ -75,6 +73,11 @@ const client = read('client.js')
     fail('manifest', 'dsh.bundle.patch is missing')
   } else if (!existsSync(join(root, patch))) {
     fail('manifest', `dsh.bundle.patch points at missing ${patch}`)
+  } else {
+    const patchName = /^\s+name:\s*'([^']+)'\s*$/m.exec(read(patch))?.[1]
+    if (patchName !== pkg.name) {
+      fail('manifest', `${patch} loads "${patchName}" but the package is named "${pkg.name}"`)
+    }
   }
 
   const clientExport = pkg.exports?.['./client']

@@ -70,7 +70,7 @@
     "@deepseek-ai/dsh-client-ui-workspace": ">=0.2.1-rc.5 <0.3.0-0 || >=0.2.2-0 <0.3.0-0"
   },
   "scripts": {
-    "test": "node --test test/data.test.mjs",
+    "test": "node --test test/*.test.mjs",
     "check": "node scripts/check.mjs && node --check client.js && node --check index.js && npm test",
     "prepublishOnly": "npm run check",
     "hooks:install": "git config core.hooksPath .githooks && echo 'git hooks enabled (core.hooksPath=.githooks)'"

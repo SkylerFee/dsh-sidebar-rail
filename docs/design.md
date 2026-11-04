@@ -2,6 +2,8 @@
 
 > 本文与实现同步维护。验证记录见 [verify.md](verify.md)，需求与验收见 [PRD](PRD.md)。
 
+客户端静态模块的 `window.__ModuleLoader__.load({ id, factory })` 使用完整包名 `@skylerfee/dsh-sidebar-rail` 作为 `id`，与 `package.json.name` 和 bundle patch 的模块 `name` 一致。宿主按该包名导入工厂；不能把注册 ID 改成去掉作用域的短名。`shell.overlay` 条目 ID 和本地存储键仍使用各自已有的值。
+
 ## 1. 定位：增量插件，只补一个状态
 
 宿主只有一种状态是「空」的：**macOS Desktop + 侧栏折叠**。此时 `AppFrame` 把左侧列折到 0 宽（`const collapsedWidth = drawer || darwin || windowsTitlebar ? 0 : SIDEBAR_COLLAPSED`，`SIDEBAR_COLLAPSED = 56`），列上还有 `overflow: hidden`，样式的注释直接写着「The darwin closed sidebar has no rail」。本插件只往这个空位补一条 56px 图标轨。

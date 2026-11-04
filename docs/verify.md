@@ -1,5 +1,39 @@
 # 验证记录
 
+## 作用域包名启动失败修复（2026-11-04，第 11 轮）
+
+结论：修正客户端工厂 ID 后，Desktop `0.2.1-rc.5` 的渲染进程启动恢复正常；插件详情显示完整包名 `@skylerfee/dsh-sidebar-rail`、组件“运行中”，且无此前的图标元数据错误。折叠轨、工作区浮层和中文相对时间均已在真实窗口复验。
+
+### 错误与根因
+
+用户提供的 `crash-2026-11-04T13-33-42-871Z-web-boot.log` 记录了北京时间 2026-11-04 21:33:42 的启动失败。顶层错误为 `@skylerfee/dsh-sidebar-rail: import failed`，其 renderer console 的直接原因是 `duplicate factory registration for "dsh-sidebar-rail"`。
+
+`package.json.name`、bundle patch 的模块 `name` 和 Desktop 安装键已经使用完整作用域包名，但 `client.js` 仍以旧短名 `dsh-sidebar-rail` 注册工厂。宿主按完整包名导入时查不到工厂，随后再次执行脚本，在旧短名上触发重复注册。此前的 `scripts/check.mjs` 主动去掉包名作用域，错误地接受了这个不一致。
+
+本轮核实 profile 只有一个 scoped 依赖与 bundle 声明，旧短名仅余孤立链接；没有通过删除链接、修改用户 profile 或屏蔽宿主重复注册错误来处理本次失败。
+
+### 修复与回归验证
+
+| 项 | 结果 |
+| --- | --- |
+| 静态工厂注册 | `client.js` 的 ID 改为 `@skylerfee/dsh-sidebar-rail`，与宿主导入名一致。 |
+| 自动检查 | 改为比较完整包名，并检查 bundle patch 的模块 `name`；槽条目 ID、本地存储键和界面行为保持原值。 |
+| 注册回归 | 新增 `test/client-registration.test.mjs`，在没有 React 和 DOM 的环境执行完整静态脚本，验证只登记一个工厂且注册 ID 等于包名。 |
+| 正常路径 | `npm run check` 通过：仓库规则、两入口语法和 13 项测试全部通过。 |
+| 无效模块 ID | 在隔离目录把工厂 ID 改回旧短名，仓库检查和新注册测试均失败。 |
+| 无效补丁模块名 | 在隔离目录把 patch 的模块 `name` 改回旧短名，仓库检查失败。隔离文件已自动移除。 |
+
+### Desktop 真实复验
+
+环境为已安装的 macOS Desktop `0.2.1-rc.5`，页面 `dsh-app://app/`，中文、深色外观和 Catppuccin 皮肤。通过 Computer Use 原生窗口操作和可访问性树、截图观察；源码由现有 `link:` 安装直接加载，未重新安装依赖。
+
+1. 修复前窗口停在 `HARNESS Loading plugins…`；修改源码后按 `Command+R`，完整侧栏、会话页面和操作控件出现，启动不再阻塞。
+2. 打开插件详情，显示 `@skylerfee/dsh-sidebar-rail@0.1.0`，开关开启、一个组件运行中，图标正常，未出现包元信息错误。
+3. 收起侧栏，实际显示工作区、定时任务、插件、更多和底部账号图标。将指针从页面空白区拖入工作区图标后，浮层出现项目和最近会话，相对时间为中文；Escape 可关闭。
+4. 展开侧栏后浮轨消失，原生导航仍在。结束时保持插件原有的启用状态，侧栏恢复展开。
+
+本轮验证了渲染进程重新启动及真实客户端加载，未重启整个 Electron/Host 进程，未遍历全部交互、测试其他平台或执行发布。未保存临时截图文件。
+
 ## 第 9 轮遗留问题的定位与修复（2026-11-04，第 10 轮）
 
 第 9 轮报告详情页报错：`Plugin metadata for dsh-sidebar-rail: Error: …/dsh-sidebar-rail/icon.svg: icon must remain inside its package directory`。
@@ -65,9 +99,12 @@
 | 客户端注册 | ⏳ 安装后未重载页面，`shell.overlay` 占用者中尚无 `dsh-sidebar-rail.rail`；需重载渲染进程才会加载 client bundle |
 | 残留 | `node_modules/dsh-sidebar-rail` 仍有一个孤立符号链接（无依赖记录引用它），不影响 scoped 解析 |
 
-### 待界面复验
+### 界面复验（已完成，见第 11 轮）
 
-第 9 轮报告的详情页元数据错误按前述根因已修（声明 `icon` + 命名对齐两条都到位），但**本会话未在真实界面复验**；需在 Desktop 插件详情页确认错误消失、浮轨仍正常。
+元数据错误已在真实界面确认消失，结论与完整证据见本轮顶部的「作用域包名启动失败修复（第 11 轮）」——那一轮不仅确认了详情页，还发现并修复了随后暴露的另一个启动失败（客户端工厂 ID 仍是短名，宿主按完整包名导入失败）。
+
+本会话补充的独立证据：修复生效后，`client/Slots.listSubTree root=shell.overlay` 的占用者中出现
+`{ id: "dsh-sidebar-rail.rail", order: 10, priority: 0, active: true }`，说明 client bundle 已按完整包名加载、增量注册生效。
 
 ## 独立 Desktop 复验（2026-11-04，第 9 轮）
 

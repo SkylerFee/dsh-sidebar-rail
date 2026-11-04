@@ -63,6 +63,7 @@ dsh-sidebar-rail/
 ├─ locale/{en,zh}.json  # plugin-manager metadata
 ├─ icon.svg             # plugin icon (original)
 ├─ test/data.test.mjs   # pure-logic tests, sliced out of client.js
+├─ test/client-registration.test.mjs # static bundle registration under the full package name
 └─ docs/
    ├─ PRD.md            # requirements, interaction spec, acceptance checklist
    ├─ design.md         # architecture, constraints, data sources, known gaps
@@ -83,12 +84,12 @@ dsh-sidebar-rail/
 ## Development
 
 ```bash
-npm test               # node --test test/data.test.mjs — 12 pure-logic cases
+npm test               # node --test test/*.test.mjs — 13 cases
 npm run check          # scripts/check.mjs (repo rules) + node --check on both entries + tests
 npm run hooks:install  # enable .githooks: pre-commit runs check, commit-msg enforces conventional commits
 ```
 
-The tests slice pure helpers out of `client.js` between `#region` markers, so they cover grouping, pinning order, the recent-session cap, data normalisation, relative-time wording, locale resolution and the rail's render predicate — not rendering or slot registration.
+The logic tests slice pure helpers out of `client.js` between `#region` markers to cover grouping, pinning order, the recent-session cap, data normalisation, relative-time wording, locale resolution and the rail's render predicate. A separate registration test executes the complete static script against the host loader facade and requires its factory ID to match the complete package name, including the scope. Rendering and slot registration still require Desktop validation.
 
 `scripts/check.mjs` carries the rules a linter would own here (region markers, manifest consistency, banned patterns, i18n key parity); [CODING_STANDARDS.md](CODING_STANDARDS.md) carries the judgement calls a script cannot express, and is what a reviewer reads.
 

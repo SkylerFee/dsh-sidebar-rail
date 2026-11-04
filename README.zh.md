@@ -65,6 +65,7 @@ dsh-sidebar-rail/
 ├─ locale/{en,zh}.json  # 插件管理页展示用元数据
 ├─ icon.svg             # 插件图标（原创）
 ├─ test/data.test.mjs   # 纯逻辑测试（从 client.js 切片）
+├─ test/client-registration.test.mjs # 静态脚本按完整包名注册的回归测试
 └─ docs/
    ├─ PRD.md            # 需求、交互规格、验收清单
    ├─ design.md         # 架构、约束、数据来源、已知偏差
@@ -85,12 +86,12 @@ dsh-sidebar-rail/
 ## 开发与测试
 
 ```bash
-npm test               # node --test test/data.test.mjs —— 12 个纯逻辑用例
+npm test               # node --test test/*.test.mjs —— 13 个用例
 npm run check          # scripts/check.mjs（仓库规则）+ 两个入口 node --check + 单测
 npm run hooks:install  # 启用 .githooks：pre-commit 跑 check，commit-msg 校验 conventional commits
 ```
 
-测试从 `client.js` 的 `#region` 标记区切片，覆盖分组 / 置顶顺序 / 最近 10 条 / 数据归一 / 时间文案 / 语言解析 / 浮轨渲染判定，不涉及渲染与槽注册。
+逻辑测试从 `client.js` 的 `#region` 标记区切片，覆盖分组、置顶顺序、最近 10 条、数据归一、时间文案、语言解析与浮轨渲染判定。独立注册测试使用宿主加载接口执行完整静态脚本，要求工厂 ID 与包含作用域的完整包名一致。渲染与槽注册仍需 Desktop 实测。
 
 能被脚本判定的规则都在 `scripts/check.mjs`（标记区、清单一致性、禁用模式、i18n 对齐）；判断类规则在 [CODING_STANDARDS.md](CODING_STANDARDS.md)，由 review 时阅读。
 

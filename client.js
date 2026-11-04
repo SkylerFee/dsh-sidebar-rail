@@ -30,7 +30,7 @@
  * Pinned workspaces live in this plugin's own localStorage key.
  */
 window.__ModuleLoader__.load({
-  id: 'dsh-sidebar-rail',
+  id: '@skylerfee/dsh-sidebar-rail',
   factory(require) {
     const React = require('react')
     const { createPortal } = require('react-dom')
