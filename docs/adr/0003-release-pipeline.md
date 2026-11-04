@@ -35,6 +35,24 @@ npm error You cannot publish over the previously published versions: 0.1.0.
 
 该错误只在**认证成功之后**由 npm 的版本护栏抛出，因此可判定 OIDC 认证链路已生效；验证用的 Release 与那次失败运行均已删除，tag 保留。`0.2.0` 起可直接走 Release → OIDC 发布，无需 2FA 与 token。
 
+## 0.2.0 首发踩到的权限坑（2026-11-04）
+
+`v0.2.0` Release 第一次触发时，前置步骤全过、OIDC 认证也成功（provenance 已签名并写入 transparency log），但发布被拒：
+
+```
+npm error 403 403 Forbidden - PUT https://registry.npmjs.org/@skylerfee%2fdsh-sidebar-rail
+npm error 403 OIDC permission denied for this action
+```
+
+根因是 Trusted Publisher 的 **Allowed actions** 字段：npm 文档写明 **`npm stage publish` 总是允许**，而**直接 `npm publish` 与 `npm dist-tag` 需要显式勾选**。首配时只保留了默认，所以 stage 能过、直发被拒。
+
+两处需要注意：
+
+1. 该错误出现在 **OIDC token 已经换到之后**，所以 `id-token: write`、工作流文件名、tag 校验这些都没问题——不要往这些方向排查。
+2. **现有 trusted publisher 连接不可编辑**，改权限只能删掉重建（文档原文：*"Existing trusted publisher connections cannot be changed. To change them, delete the connection and create a new one."*）。删重建后重跑失败的工作流即可，不必重建 tag 或 Release。
+
+打开 `npm publish` 权限后重跑，`0.2.0` 一次通过（1m54s），产物带 provenance 签名与 attestations。
+
 ## 不要做什么
 
 不要在 CI 里加 `NPM_TOKEN` secret 走传统 token 发布；也不要跳过 tag 校验「先发出去再说」——那正好是这套链路要防的事。

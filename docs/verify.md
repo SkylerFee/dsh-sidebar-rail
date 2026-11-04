@@ -1,5 +1,19 @@
 # 验证记录
 
+## 0.2.0 发布（2026-11-04）
+
+走 [ADR-0003](adr/0003-release-pipeline.md) 的 Release → OIDC 链路，首次因 Trusted Publisher 权限失败，修正后一次通过。
+
+| 项 | 结果 |
+| --- | --- |
+| tag / Release | `v0.2.0`（附注 tag，指向 `60d584e`，是 `origin/main` 祖先）+ GitHub Release |
+| CI 运行 | 第一次 `41854950620` 失败；补权限后重跑同一运行 **success**（1m54s） |
+| 失败原因 | `403 OIDC permission denied for this action`：Trusted Publisher 的 Allowed actions 默认只给 `npm stage publish`，需显式勾选 `npm publish`；连接不可编辑，删重建后生效 |
+| registry | `dist-tags.latest = 0.2.0`；versions `0.0.0-stage, 0.1.0, 0.2.0` |
+| 产物 | shasum `3e20eb4b395840aaa1ce14ec849f399dbc4dbab6`，10 个文件，解包 81,441 字节，**含 provenance 签名与 attestations** |
+| 内容一致性 | ✅ 解包后 10 个文件与仓库 HEAD **逐字节相同** |
+| 包元数据 | `license: MIT`、`dependencies: 0`、`peerDependencies: 6` |
+
 ## 0.2.0 三项交互优化（2026-11-04，第 12 轮）
 
 需求来自用户对折叠态的反馈，逐项在真实 Desktop 复验。
