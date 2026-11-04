@@ -953,6 +953,10 @@ window.__ModuleLoader__.load({
        * @returns Nothing.
        */
       apply(ctx) {
+        // A Client plugin's apply runs during page boot. Any throw here can cost
+        // the user the whole navigation column, so every step is isolated: a
+        // failure is logged once and the shipped sidebar keeps rendering.
+        try {
         ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-sidebar-rail: dictionaries')
         ctx.effect(() => {
           const style = document.createElement('style')
@@ -1079,6 +1083,9 @@ window.__ModuleLoader__.load({
         }
 
         ctx.slots.inject('sidebar', () => registerSidebar())
+        } catch (error) {
+          console.error('[dsh-sidebar-rail] apply failed; leaving the shipped sidebar in place', error)
+        }
       },
     }
   },
