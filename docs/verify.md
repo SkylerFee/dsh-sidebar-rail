@@ -26,6 +26,21 @@
 
 | 项 | 改前 | 改后 | 复验 |
 | --- | --- | --- | --- |
+| 头像 | 硬编码 `'AI'` 两字母 | 先 `remote.account.getState()` 判登录态，登录后再 `getProfile` 取 `avatarUrl`；未登录用**原生同款省略号**，登录无图用原生人形图标 | ✅ 底部显示人形图标，与宿主原生账号行一致（见下方说明） |
+| 账号浮层位置 | 一律 top 对齐 + `clamp(innerHeight-200)`，头像在底部导致浮层飞到上方很远 | 账号浮层改为**底对齐**头像底边，水平间距仍 8px | ✅ 浮层紧贴头像上方展开 |
+
+**实现依据宿主源码，三处按宿主原样对齐**：
+
+1. **登录态判据**：只有 `view.status === 'credential-stored'` 算登录（`ui-settings-account/AccountMenu.tsx:37`）。
+2. **未登录形态**：宿主该状态下**不渲染头像槽**，而是省略号图标 + 「更多」文案（`AccountMenu.tsx:67-72`）。插件窄态无文案，故只渲染省略号。原实现用 `'AI'` 字母，与原生不符。
+3. **`version` 来源**：`AccountClientMetadata.version` 必填且 Host 用 strict schema 校验。手写静态模块**没有 `process`**（渲染进程 `contextIsolation`、无 node 集成，`process.env.X` 的内联只作用于宿主自己的构建产物），所以改从页面全局 `window.__DSH_BOOT__.release.version` 取（`client-modules/manifest.ts:86-98`，页面注入处 `index.ts:673`），`process.env` 仅作兜底。上一版实现用 `process.env` → 恒为 `undefined` → `metadata === null` → 头像永远取不到。
+
+**本轮无法从界面区分的一点**：该账号本身没有头像 URL，宿主原生账号行显示的也是人形图标，所以「`version` 已能取到」与「`version` 仍取不到」在界面上表现相同。已用单测固定 `clientBuildVersion` 的取值顺序（`__DSH_BOOT__` 优先、无 release 时返回 undefined 不抛错）；真实头像渲染需在有头像的账号上验证。
+
+
+
+| 项 | 改前 | 改后 | 复验 |
+| --- | --- | --- | --- |
 | 头像 | 硬编码 `'AI'` 两字母 | `remote.account.getProfile` 取 `avatarUrl`；无图/失败用宿主同款人形占位 | ✅ 底部显示原生人形占位（当前未登录） |
 | 账号浮层位置 | 一律 top 对齐 + `clamp(innerHeight-200)`，头像在底部导致浮层飞到上方很远 | 账号浮层改为**底对齐**头像底边，水平间距仍 8px | ✅ 浮层紧贴头像上方展开 |
 

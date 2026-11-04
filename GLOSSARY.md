@@ -29,9 +29,15 @@
 
 ## 我的插件 my plugins
 
-插件浮层里列出的条目：**用户自己安装并启用**的 bundle。判据是宿主 bundle 列表里的 `official !== true && enabled && installed`，与包名 scope 无关——官方发布的可选 bundle 也算「不是我的」。
+插件浮层里列出的条目：**用户自己安装并启用**的 bundle。判据是宿主 bundle 列表里的
 
-数据源必须是 `pluginManager/listBundles`（只有它带 `official`）；`pluginInventory/list` 是 Loader 条目视图，没有这个字段。
+```
+enabled === true && official !== true && installed !== false && availability !== 'installation'
+```
+
+`official` 单独不够：宿主自带的 `@deepseek-ai/dsh-base`、`dsh-web-app` 不在官方目录里，`official` 为 false，靠 `availability === 'installation'` 才能区分。包名 `@deepseek-ai/` 只作兜底启发式。
+
+数据源必须是 `pluginManager/listBundles`（只有它带 `official`/`availability`）；`pluginInventory/list` 是 Loader 条目视图，这两个字段都没有。
 
 ## 当前会话 current session
 

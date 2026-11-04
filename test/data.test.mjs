@@ -32,11 +32,11 @@ const helpers = new Function(`${region('pure-helpers')}
 ${region('pure-data')}
 return { EMPTY_SESSIONS, EMPTY_WORKSPACES, selectorHook, relativeTime, shortPath,
   resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT,
-  deriveSections, normalizeTasks, normalizePlugins, currentSessionId, profileAvatarUrl, accountClientMetadata }`)()
+  deriveSections, normalizeTasks, normalizePlugins, currentSessionId, accountSeatState, accountClientMetadata, clientBuildVersion }`)()
 
 const { deriveSections, normalizeTasks, normalizePlugins, relativeTime, shortPath, selectorHook,
-  resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT, currentSessionId, profileAvatarUrl,
-  accountClientMetadata, EMPTY_SESSIONS } = helpers
+  resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT, currentSessionId, accountSeatState,
+  accountClientMetadata, clientBuildVersion, EMPTY_SESSIONS } = helpers
 
 /**
  * Build a SessionSummary-shaped row.
@@ -180,15 +180,38 @@ test('currentSessionId: the session the main view retains', () => {
   assert.equal(currentSessionId({}), undefined)
 })
 
-test('profileAvatarUrl: reads the ready profile avatar, nothing else', () => {
-  assert.equal(profileAvatarUrl({ ok: true, value: { status: 'ready', avatarUrl: 'https://x/a.png' } }),
-    'https://x/a.png')
-  // 未登录 / 未就绪 / 空 URL 都当作没有头像，交给原生占位。
-  assert.equal(profileAvatarUrl({ ok: true, value: { status: 'signed-out' } }), undefined)
-  assert.equal(profileAvatarUrl({ ok: true, value: { status: 'ready', avatarUrl: '' } }), undefined)
-  assert.equal(profileAvatarUrl({ ok: true, value: { status: 'ready', avatarUrl: '   ' } }), undefined)
-  assert.equal(profileAvatarUrl(null), undefined)
-  assert.equal(profileAvatarUrl({ ok: true, value: null }), undefined)
+test('accountSeatState: signs the seat out, in, and in-without-a-picture', () => {
+  const signedOut = { ok: true, value: { status: 'signed-out' } }
+  const signedIn = { ok: true, value: { status: 'credential-stored' } }
+
+  // 未登录：原生不显示头像槽，交给省略号形态。
+  assert.deepEqual(accountSeatState(signedOut, null), { kind: 'signed-out', avatarUrl: undefined })
+  // 登录且有图。
+  assert.deepEqual(
+    accountSeatState(signedIn, { ok: true, value: { status: 'ready', value: { avatarUrl: 'https://x/a.png' } } }),
+    { kind: 'signed-in', avatarUrl: 'https://x/a.png' })
+  // 登录但图片未就绪 / 空 URL：仍算登录（用图标），不能退回「未登录」。
+  assert.deepEqual(accountSeatState(signedIn, { ok: true, value: { status: 'ready', value: { avatarUrl: '' } } }),
+    { kind: 'signed-in', avatarUrl: undefined })
+  assert.deepEqual(accountSeatState(signedIn, null), { kind: 'signed-in', avatarUrl: undefined })
+  // 取不到登录态：不猜测。
+  assert.equal(accountSeatState(null, null).kind, 'unknown')
+})
+
+test('clientBuildVersion: boot graph first, process env as fallback', () => {
+  const original = globalThis.__DSH_BOOT__
+  try {
+    globalThis.__DSH_BOOT__ = { release: { version: '0.2.2-rc.1' } }
+    assert.equal(clientBuildVersion(), '0.2.2-rc.1')
+    // 没有 release 时不报错，落到 process.env（Node 下存在但通常为空）。
+    globalThis.__DSH_BOOT__ = {}
+    assert.equal(clientBuildVersion(), undefined)
+    delete globalThis.__DSH_BOOT__
+    assert.equal(clientBuildVersion(), undefined)
+  } finally {
+    if (original === undefined) delete globalThis.__DSH_BOOT__
+    else globalThis.__DSH_BOOT__ = original
+  }
 })
 
 test('accountClientMetadata: host-shaped identity, null without a version', () => {

@@ -263,6 +263,12 @@ window.__ModuleLoader__.load({
       h('circle', { cx: 6, cy: 12, r: 1.5, fill: 'currentColor', stroke: 'none' }),
       h('circle', { cx: 12, cy: 12, r: 1.5, fill: 'currentColor', stroke: 'none' }),
       h('circle', { cx: 18, cy: 12, r: 1.5, fill: 'currentColor', stroke: 'none' }))
+    /** "More" ellipsis, the shape the host shows on a signed-out account seat. */
+    const IconEllipsis = (p) => h(Icon, p,
+      h('circle', { cx: 6, cy: 12, r: 1.4, fill: 'currentColor', stroke: 'none' }),
+      h('circle', { cx: 12, cy: 12, r: 1.4, fill: 'currentColor', stroke: 'none' }),
+      h('circle', { cx: 18, cy: 12, r: 1.4, fill: 'currentColor', stroke: 'none' }))
+
     /** Neutral user glyph for the account seat when no picture is available. */
     const IconUser = (p) => h(Icon, p,
       h('circle', { cx: 12, cy: 8.2, r: 3.4 }),
@@ -422,18 +428,25 @@ window.__ModuleLoader__.load({
      * @param props - Avatar URL from the account profile, when one is available.
      * @returns The avatar element.
      */
-    function AccountAvatar({ url }) {
+    function AccountAvatar({ seat }) {
       const [broken, setBroken] = useState(false)
+      const kind = seat?.kind ?? 'unknown'
+      const url = seat?.avatarUrl
       const usable = typeof url === 'string' && url !== '' && !broken
-      return h('span', { className: 'dsr-avatar', 'aria-hidden': true },
+      // Signed out is not "a person without a picture": the shipped sidebar drops
+      // the avatar slot entirely and shows a "more" ellipsis. Render the same
+      // shape here rather than inventing a face.
+      const glyph = kind === 'signed-out' ? h(IconEllipsis, { size: 16 }) : h(IconUser, { size: 16 })
+      return h('span', { className: 'dsr-avatar', 'data-dsr-seat': kind, 'aria-hidden': true },
         usable
           ? h('img', {
             className: 'dsr-avatar-img',
             src: url,
             alt: '',
+            referrerPolicy: 'no-referrer',
             onError: () => setBroken(true),
           })
-          : h(IconUser, { size: 16 }))
+          : glyph)
     }
 
     /** Grouped heading inside a flyout body. */
@@ -499,6 +512,25 @@ window.__ModuleLoader__.load({
      * @param offsetMinutes - `Date#getTimezoneOffset()` for the current zone.
      * @returns The metadata, or null when it cannot be built.
      */
+    /**
+     * Client build version for account calls.
+     *
+     * A hand-written static module has no `process` (the renderer runs with
+     * contextIsolation and no node integration), so `process.env.DSH_CLIENT_VERSION`
+     * is only inlined into the host's own bundles. The boot graph the page
+     * receives carries the same version the host was built with.
+     * @returns The version string, or undefined when neither source provides one.
+     */
+    function clientBuildVersion() {
+      const boot = typeof globalThis === 'undefined' ? undefined : globalThis.__DSH_BOOT__
+      const release = boot !== null && typeof boot === 'object' ? boot.release : undefined
+      if (release !== undefined && release !== null && typeof release.version === 'string' && release.version !== '') {
+        return release.version
+      }
+      const env = typeof process === 'undefined' ? undefined : process.env?.DSH_CLIENT_VERSION
+      return typeof env === 'string' && env !== '' ? env : undefined
+    }
+
     function accountClientMetadata(locale, version, offsetMinutes) {
       if (typeof version !== 'string' || version === '') return null
       return {
@@ -509,20 +541,37 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Pick the signed-in account's avatar URL out of a profile answer.
+     * Decide what the account seat should show.
      *
-     * `remote.account.getProfile` answers `RemoteResult<{ status, avatarUrl }>`;
-     * anything else means "no picture", which the rail renders as the host's
-     * own fallback rather than inventing an image.
-     * @param answer - Whatever the account remote returned.
-     * @returns An absolute image URL, or undefined when nothing is signed in.
+     * The shipped sidebar renders exactly two shapes
+     * (ui-settings-account AccountMenu): a signed-in avatar, or — when signed
+     * out — a "more" ellipsis with no picture slot at all. The rail keeps that
+     * split so it never invents a face for a signed-out person.
+     * @param viewAnswer - `remote.account.getState()` answer (login state only).
+     * @param profileAnswer - `remote.account.getProfile()` answer, when fetched.
+     * @returns 'signed-out', 'signed-in' with an optional avatar URL, or 'unknown'.
      */
-    function profileAvatarUrl(answer) {
-      const value = answer !== null && typeof answer === 'object' && 'value' in answer ? answer.value : answer
-      if (value === null || typeof value !== 'object') return undefined
-      if (value.status !== undefined && value.status !== 'ready') return undefined
-      const url = value.avatarUrl
-      return typeof url === 'string' && url.trim() !== '' ? url.trim() : undefined
+    function accountSeatState(viewAnswer, profileAnswer) {
+      const view = viewAnswer !== null && typeof viewAnswer === 'object' && 'value' in viewAnswer
+        ? viewAnswer.value : viewAnswer
+      if (view === null || typeof view !== 'object') return { kind: 'unknown', avatarUrl: undefined }
+      if (view.status !== 'credential-stored') return { kind: 'signed-out', avatarUrl: undefined }
+      // Three layers before the URL: RemoteResult{ value: AccountProfileRead{ status,
+      // value: AccountProfile{ avatarUrl } } }. The host reads exactly this path
+      // (ui-settings-account: `result.value.value.avatarUrl`), so the status gate
+      // and the picture sit on different levels.
+      const read = profileAnswer !== null && typeof profileAnswer === 'object' && 'value' in profileAnswer
+        ? profileAnswer.value : profileAnswer
+      if (read === null || typeof read !== 'object' || read.status !== 'ready') {
+        return { kind: 'signed-in', avatarUrl: undefined }
+      }
+      const profile = read.value !== null && typeof read.value === 'object' ? read.value : null
+      if (profile === null) return { kind: 'signed-in', avatarUrl: undefined }
+      const url = profile.avatarUrl
+      return {
+        kind: 'signed-in',
+        avatarUrl: typeof url === 'string' && url.trim() !== '' ? url.trim() : undefined,
+      }
     }
 
     /**
@@ -624,8 +673,15 @@ window.__ModuleLoader__.load({
         if (bundle.enabled !== true) continue
         if (bundle.official === true) continue
         if (bundle.installed === false) continue
+        // `official` alone is not enough: the host's own base bundles
+        // (@deepseek-ai/dsh-base, dsh-web-app) are not in the official catalog,
+        // so they report official:false while shipping with the installation.
+        // `availability: 'installation'` is the structured fact that separates them.
+        if (bundle.availability === 'installation') continue
         const name = bundle.name ?? bundle.moduleName ?? bundle.packageName ?? ''
         if (name === '') continue
+        // Belt and braces against an availability value that shifts meaning.
+        if (String(name).startsWith('@deepseek-ai/')) continue
         const meta = bundle.version === undefined ? '' : `v${bundle.version}`
         rows.push({ name: String(name), meta })
       }
@@ -713,7 +769,7 @@ window.__ModuleLoader__.load({
       const {
         toggleSidebar, selectPanel,
         panels, locale, openWorkspace, openSession, scheduleCatalog,
-        pluginInventory, useSessions, useWorkspaces, usePanelInfo, fallbackText, accountAvatar,
+        pluginInventory, useSessions, useWorkspaces, usePanelInfo, fallbackText, accountSeat: accountSeatLoader,
       } = props
       /** Translator with a raw-key fallback when the locale face is absent. */
       const t = typeof props.t === 'function' ? props.t : (key) => String(key)
@@ -764,18 +820,20 @@ window.__ModuleLoader__.load({
       //     effect on every render and reintroduce the bug above.
       // The account picture is read once per mount; an absent or failed read
       // simply leaves the neutral fallback glyph in place.
-      const [avatarUrl, setAvatarUrl] = useState(undefined)
+      const [accountSeat, setAccountSeat] = useState({ kind: 'unknown', avatarUrl: undefined })
       const avatarAsked = useRef(false)
       useEffect(() => {
         if (avatarAsked.current) return undefined
         avatarAsked.current = true
         let live = true
         Promise.resolve()
-          .then(() => (typeof accountAvatar === 'function' ? accountAvatar() : undefined))
-          .then((url) => { if (live && typeof url === 'string' && url !== '') setAvatarUrl(url) })
-          .catch(() => { /* fallback glyph is the failure state */ })
+          .then(() => (typeof accountSeatLoader === 'function' ? accountSeatLoader() : undefined))
+          .then((seat) => {
+            if (live && seat !== null && typeof seat === 'object') setAccountSeat(seat)
+          })
+          .catch(() => { /* the placeholder glyph is the failure state */ })
         return () => { live = false }
-      }, [accountAvatar])
+      }, [accountSeatLoader])
 
       const loaders = useRef({ scheduleCatalog, pluginInventory })
       loaders.current = { scheduleCatalog, pluginInventory }
@@ -1054,7 +1112,7 @@ window.__ModuleLoader__.load({
           'data-dsr-open': open === 'account' ? 'true' : undefined,
           onFocus: (event) => scheduleOpen('account', event),
           onClick: () => { setOpen(null); toggleSidebar() },
-        }, h(AccountAvatar, { url: avatarUrl }))))
+        }, h(AccountAvatar, { seat: accountSeat }))))
       return createPortal(h('div', { className: 'dsr-rail-float' }, railNav, renderFlyout()), document.body)
     }
 
@@ -1145,20 +1203,38 @@ window.__ModuleLoader__.load({
           },
           // The account seat shows the host's own avatar, so read the profile the
           // host's sidebar reads. Failures degrade to the neutral fallback glyph.
-          accountAvatar: async () => {
+          // Two calls, because they fail differently: `getState` takes no
+          // identity and answers the sign-in question alone, so a missing build
+          // version can never cost us the signed-out rendering. Only a signed-in
+          // account reaches `getProfile`, which does require the identity.
+          accountSeat: async () => {
             const account = ctx.get('remote.account')
-            if (account === undefined || typeof account.getProfile !== 'function') return undefined
+            if (account === undefined || typeof account.getState !== 'function') {
+              return { kind: 'unknown', avatarUrl: undefined }
+            }
+            let view
+            try {
+              view = await account.getState()
+            } catch (error) {
+              console.warn('[dsh-sidebar-rail] account state unavailable', error)
+              return { kind: 'unknown', avatarUrl: undefined }
+            }
+            const viewValue = view !== null && typeof view === 'object' && 'value' in view ? view.value : null
+            const signedIn = viewValue !== null && typeof viewValue === 'object'
+              && viewValue.status === 'credential-stored'
+            if (!signedIn) return accountSeatState(view, null)
+            if (typeof account.getProfile !== 'function') return { kind: 'signed-in', avatarUrl: undefined }
             const metadata = accountClientMetadata(
               resolveLocaleId(ctx.locale.getSnapshot?.() ?? null),
-              typeof process === 'undefined' ? undefined : process.env?.DSH_CLIENT_VERSION,
+              clientBuildVersion(),
               new Date().getTimezoneOffset(),
             )
-            if (metadata === null) return undefined
+            if (metadata === null) return { kind: 'signed-in', avatarUrl: undefined }
             try {
-              return profileAvatarUrl(await account.getProfile(metadata))
+              return accountSeatState(view, await account.getProfile(metadata))
             } catch (error) {
               console.warn('[dsh-sidebar-rail] account profile unavailable', error)
-              return undefined
+              return { kind: 'signed-in', avatarUrl: undefined }
             }
           },
           fallbackText: 'Sidebar rail unavailable',
