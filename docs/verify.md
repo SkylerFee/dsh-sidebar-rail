@@ -97,7 +97,17 @@
 | `dsh.profile.bundles` | ✅ `['@skylerfee/dsh-sidebar-rail']`（启用） |
 | 宿主行解析 | ✅ `host/Config.listConfigs name=@skylerfee/dsh-sidebar-rail` → `include:dsh-sidebar-rail` |
 | 客户端注册 | ⏳ 安装后未重载页面，`shell.overlay` 占用者中尚无 `dsh-sidebar-rail.rail`；需重载渲染进程才会加载 client bundle |
-| 残留 | `node_modules/dsh-sidebar-rail` 仍有一个孤立符号链接（无依赖记录引用它），不影响 scoped 解析 |
+| 残留 | 起初 `node_modules/dsh-sidebar-rail` 还有旧短名的孤立符号链接（无依赖记录引用）；已按用户要求在 scoped 安装稳定后清理，见下 |
+
+### 旧短名链接清理（2026-11-04）
+
+`node_modules/dsh-sidebar-rail` 是旧安装键留下的孤立符号链接，`package.json`、`pnpm-lock.yaml`、`node_modules/.modules.yaml` 都不再引用它。清理过程与结果：
+
+| 步骤 | 结果 |
+| --- | --- |
+| `pnpm install --frozen-lockfile --prefer-offline`（插件管理器同款 pnpm 11.28.5） | ⚠️ 输出 `EPERM … node_modules/_tmp_…`，未能写入 profile（会话沙箱只允许写工作区），lockfile 与依赖均未变；pnpm 判定 `Already up to date`，也不会主动摘掉这个不在 lockfile 里的链接 |
+| 删除该符号链接本身（`rm` 单条链接，已核实 `readlink` 指向本仓库、非实体目录） | ✅ 顶层不再有 `sidebar-rail` 链接；`node_modules/@skylerfee/dsh-sidebar-rail` 仍在 |
+| 清理后核对 | ✅ `package.json` / `pnpm-lock.yaml` / `pnpm-workspace.yaml` 与清理前逐字一致；`node_modules/.modules.yaml` 无短名引用；抽查 `dsh-context`、`dsh-notify-me`、`@nonamelego/dsh-catppuccin`、`@skylerfee/dsh-llm-opencode-go-live` 均完好；宿主行 `host/Config.listConfigs name=@skylerfee/dsh-sidebar-rail` 仍返回 `include:dsh-sidebar-rail` |
 
 ### 界面复验（已完成，见第 11 轮）
 
