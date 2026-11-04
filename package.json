@@ -1,14 +1,40 @@
 {
-  "name": "dsh-sidebar-rail",
+  "name": "@skylerfee/dsh-sidebar-rail",
   "version": "0.1.0",
-  "private": true,
-  "type": "module",
   "description": "Additive macOS Desktop icon rail for the DeepSeek Harness sidebar: a 56px rail with hover flyouts while the host column is collapsed, plus in-flyout workspace pinning.",
+  "license": "MIT",
+  "author": "SkylerFee",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SkylerFee/dsh-sidebar-rail.git"
+  },
+  "homepage": "https://github.com/SkylerFee/dsh-sidebar-rail#readme",
+  "bugs": {
+    "url": "https://github.com/SkylerFee/dsh-sidebar-rail/issues"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "cordis",
+    "sidebar",
+    "rail",
+    "macos",
+    "plugin"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
     "./locale/*.json": "./locale/*.json",
-    "./icon": "./icon.svg"
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
   },
   "files": [
     "index.js",
@@ -34,7 +60,17 @@
     },
     "manifestVersion": 1
   },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4 || ~4.0.5-alpha.1",
+    "@deepseek-ai/dsh-client-locale": ">=0.2.1-rc.5 <0.3.0-0 || >=0.2.2-0 <0.3.0-0",
+    "@deepseek-ai/dsh-client-ui-layout": ">=0.2.1-rc.5 <0.3.0-0 || >=0.2.2-0 <0.3.0-0",
+    "@deepseek-ai/dsh-client-ui-session": ">=0.2.1-rc.5 <0.3.0-0 || >=0.2.2-0 <0.3.0-0",
+    "@deepseek-ai/dsh-client-ui-slots": ">=0.2.1-rc.5 <0.3.0-0 || >=0.2.2-0 <0.3.0-0",
+    "@deepseek-ai/dsh-client-ui-workspace": ">=0.2.1-rc.5 <0.3.0-0 || >=0.2.2-0 <0.3.0-0"
+  },
   "scripts": {
-    "test": "node --test test/data.test.mjs"
+    "test": "node --test test/data.test.mjs",
+    "check": "node --check client.js && node --check index.js && npm test",
+    "prepublishOnly": "npm run check"
   }
 }

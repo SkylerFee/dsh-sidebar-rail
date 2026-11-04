@@ -42,7 +42,7 @@
 | #3 展开态设置入口 | ✅ 通过 | 展开态完全由宿主侧栏接管；点底部账号行弹出「设置 / 意见反馈 / 退出登录」，点「设置」（或 `⌘,`）**完整打开设置面板**（账号与余额、通用设置、模型、内置插件、Agent 预设、Catppuccin、通知提醒、桌面版重启）。改造前该面板因 `SettingsRoot` 不挂载而整体不可达 |
 | #4 中文相对时间 | ✅ 通过 | 最近会话显示「2 分钟前 / 46 分钟前 / 2 小时前 / 4 小时前」，项目与章节标题均为中文（工作区 / 项目 / 最近会话 / 已启用插件 / 还没有定时任务） |
 | 浮层交互 | ✅ 通过 | 悬停 120ms 后浮层出现在轨右侧（左缘实测 x≈149，即 `anchor.right + 8`）；`Esc` 关闭（关闭后浮层底色像素 365 vs 打开时 37510）；插件列表加载出真实数据；定时任务显示空态 |
-| 窄窗隐藏 | 未复验 | 本次窗口约 1060 CSS 宽（由设置面板居中位置反推，>900 阈值），未触发 `max-width:900px` 分支；窄窗表现留待下次验收 |
+| 窄窗隐藏 | ✅ 通过（第 8 轮） | 改为纯函数阈值 768 后已在真机验证：窗口 525 CSS 宽时浮轨不渲染、858.5 CSS 宽时渲染（详见第 8 轮） |
 
 ### 本轮额外修复：两个浮层永久停在「加载中…」
 
@@ -53,9 +53,43 @@
 - 修法：effect 依赖收窄为 `[open]`；loader 通过 `useRef` 读取（注入 props 每次渲染都是新对象，函数 identity 进依赖会重演同一问题）；每次打开只发起一次加载，关闭时重置；保留 5s 超时兜底，把「Host 调用不返回」转成失败态而不是永久加载。
 - 复验：修复后「已启用插件」列出真实数据（cordis:include、@deepseek-ai/dsh-plugin-manager、@deepseek-ai/cordis-plugin-timer 等），「定时任务」显示「还没有定时任务」空态，两者都有「打开面板」出口。
 
+### 第 8 轮：沟通过的改造 + 真机复验
+
+本轮先做了一轮设计追问（产品形态、窄窗策略、排版层级、发布策略共 16 个决策），再按结论改实现与元数据。
+
+**行为改动**
+
+| 项 | 改前 | 改后 |
+| --- | --- | --- |
+| 窄窗判定 | CSS `@media (max-width: 900px) { display: none }` | 纯函数 `shouldRenderRail(platform, collapsed, viewportWidth)`，阈值 `RAIL_MIN_VIEWPORT = 768`（680 正文最小宽 + 56 轨宽 + 32 安全），由 `window.innerWidth` + `resize` 监听驱动；不满足即 `return null` |
+| 文字层级 | 标题 `label-primary`、元信息 `label-secondary`、章节/提示 `label-tertiary` | 全部 `label-primary`；层级只靠字号与字重（标题 13px/600 vs 元信息 11px/400） |
+
+**发布形态（未发布，只改成可发布状）**
+
+- 包名 `@skylerfee/dsh-sidebar-rail`，去掉 `private`，`version` 仍 `0.1.0`
+- 补 `license`/`LICENSE`（MIT © 2026 SkylerFee）、`repository`/`homepage`/`bugs`/`keywords`/`engines`（node >=22.19.0）、`publishConfig`（access public + registry）
+- `peerDependencies`：`@deepseek-ai/cordis`（`~4.0.4 || ~4.0.5-alpha.1`）+ 5 个 client 包（`>=0.2.1-rc.5 <0.3.0-0 || >=0.2.2-0 <0.3.0-0`，后段是为了让将来的 `0.2.2-rc.x` 满足 semver 预发布规则）
+- `files` 只含运行必需文件（不含 docs）；`exports` 补 `./package.json`
+- 脚本：`test`、`check`（两入口 `node --check` + 单测）、`prepublishOnly`（= `check`）
+- `.github/workflows/ci.yml`（push main / PR 跑 `npm run check`）+ `publish.yml`（Release 触发、校验 tag==`v<version>`、OIDC trusted publishing、按版本推导 dist-tag）
+- README 拆成英文主 `README.md` + `README.zh.md`；`AGENTS.md` 保留
+
+**真机复验（同一 Desktop 会话，macOS 0.2.1-rc.5）**
+
+| 用例 | 方法 | 结果 |
+| --- | --- | --- |
+| 宽窗 + 折叠 | `⌘B` 折叠（窗口接近全屏） | ✅ 左侧浮轨显示：文件夹/时钟/插件/更多 + 底部 AI，位于红绿灯下方 |
+| 窄窗 + 折叠 | 拖窗口右缘缩到 **525 CSS** 宽 | ✅ 浮轨完全不渲染，内容贴窗口左缘 |
+| **区分性用例** | 拖到 **858.5 CSS** 宽（768–900 之间） | ✅ 浮轨显示 —— 旧的 `max-width:900px` 媒体查询在这里会隐藏，因此这条证明**跑的是新的 JS 判定**而非旧 CSS |
+| 动态响应 | 在 525 ↔ 858 之间来回拖窗口 | ✅ 浮轨随宽度出现/消失，说明 `resize` 监听路径工作，无需刷新 |
+| 排版 | 858 宽悬停工作区，读浮层像素 | ✅ 浮层底色 `RGB(66,69,88)`，区域内所有文字核心色均为 `RGB(200,208,242)` = `label-primary`，对比度 **6.19:1**（改前元信息为 4.26:1）—— 与新排版一致 |
+| 页面重载 | `⌘R` 后观察 | ✅ 重载后行为与重载前一致（窄窗仍不渲染），无报错可见 |
+
+测量方法说明：窗口边界用「标题栏那一行的亮天空 vs 暗窗口」判定（早期用壁纸大面积亮度判断会被深色水面/红色大桥误导，曾误读成 1401 CSS，已纠正）。
+
 ### 仍未验证
 
-- 窄窗口（<900px）下浮轨隐藏的实际表现：本次窗口约 1060 CSS 宽，未进入该分支。
+- 阈值两侧的精确边界（767 vs 769）：真机只覆盖了 525 / 858.5 两个点，边界本身由 `shouldRenderRail` 单测覆盖。
 - 浮层跨间隙移动的 200ms 关闭时序手感、键盘 Tab 遍历。
 - 亮色主题、其他皮肤下的对比度。
 - 停用/卸载后的宿主恢复（本次只在启用态验证，未卸载）。

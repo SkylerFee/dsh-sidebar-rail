@@ -1,0 +1,80 @@
+name: Publish to npm
+
+# Publishing happens from a GitHub Release, so the released tag, the package
+# version and `main` can never disagree. npm authentication uses OIDC trusted
+# publishing (no NPM_TOKEN secret): configure the Trusted Publisher for
+# `@skylerfee/dsh-sidebar-rail` on npmjs.com before the first release-driven
+# publish, and publish the very first version locally once, since npm can only
+# bind a Trusted Publisher to a package that already exists.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify the tag matches the package version
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          expected="v${version}"
+          if [ "${GITHUB_REF_NAME}" != "${expected}" ]; then
+            echo "::error::release tag ${GITHUB_REF_NAME} does not match ${expected}"
+            exit 1
+          fi
+
+      - name: Verify the released commit is on main
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "::error::released commit is not an ancestor of origin/main"
+            exit 1
+          fi
+
+      - name: Check
+        run: npm run check
+
+      - name: Resolve dist-tag
+        id: dist
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          case "${version}" in
+            *-*) tag="$(node -p "require('./package.json').version.split('-')[1].split('.')[0]")" ;;
+            *)   tag="latest" ;;
+          esac
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "publishing ${version} with dist-tag ${tag}"
+
+      - name: Publish
+        run: npm publish --ignore-scripts --provenance --tag "${{ steps.dist.outputs.tag }}"
+
+      - name: Confirm the version is visible
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          for attempt in $(seq 1 12); do
+            if npm view "@skylerfee/dsh-sidebar-rail@${version}" version > /dev/null 2>&1; then
+              echo "visible: ${version}"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::${version} did not appear in the registry"
+          exit 1
