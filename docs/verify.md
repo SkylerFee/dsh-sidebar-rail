@@ -6,10 +6,10 @@
 
 | 问题 | 根因 | 修法 | 状态 |
 | --- | --- | --- | --- |
-| #1 折叠后没有图标轨 | macOS Desktop 把折叠列宽算成 0，且 `.sidebarCol { overflow: hidden }` 裁掉列内一切内容；宿主 CSS 注释明确「darwin closed sidebar has no rail」 | 插件不再渲染在列内：改为挂载 `shell.overlay` 槽 + `createPortal(document.body)` 的固定浮轨（`left:0 / top:var(--dsh-frame-top-clearance,48px) / width:56px / z-index:60 / no-drag`），窄窗口 `max-width:900px` 隐藏 | 代码完成，Desktop 未复验 |
-| #2 深色主题文字近黑 | CSS 用了宿主不存在的 token（`--dsw-alias-text-*`、`-bg-secondary/tertiary/elevated`、`-border-subtle`），全部落回深色 fallback | 换成宿主真实 token（`--dsw-alias-label-*`、`--dsw-alias-interactive-bg-*`、`--dsw-alias-bg-overlay`、`--dsw-alias-border-l1`、`--dsw-specific-sidebar-nav-item-active`），并去掉颜色 fallback；radius/shadow token 宿主不存在，改用字面值 | 代码完成，Desktop 未复验 |
-| #3 展开态设置入口不可点 | 表层：`ctx.get('commands')` 在客户端不存在。深层：`SettingsRoot`（侧栏底部触发器 + body 弹窗）注册在 `sidebar.settings` 子槽，插件替换整个 `sidebar` 槽后从不渲染该子槽，导致设置整体不可达（连快捷键也打不开） | 架构收窄为**增量插件**：不再注册 `sidebar` 槽，展开态完全交还宿主（搜索、视图选项、添加工作区、设置座位、账号菜单全部保留）；插件只补 macOS 折叠态浮轨 | 代码完成，Desktop 未复验 |
-| #4 中文界面显示英文相对时间 | 宿主 `LocaleSnapshot` 的当前语言字段是 `active`，原代码读 `id`/`locale`，恒为 `en` | 新增纯函数 `resolveLocaleId`（`active` 优先，`id`/`locale` 仅作防御性兼容，空值回退 `en`），locale 快照按宿主字段名暴露 `active` | 单测覆盖，通过 |
+| #1 折叠后没有图标轨 | macOS Desktop 把折叠列宽算成 0，且 `.sidebarCol { overflow: hidden }` 裁掉列内一切内容；宿主 CSS 注释明确「darwin closed sidebar has no rail」 | 插件不再渲染在列内：改为挂载 `shell.overlay` 槽 + `createPortal(document.body)` 的固定浮轨（`left:0 / top:var(--dsh-frame-top-clearance,48px) / width:56px / z-index:60 / no-drag`），窄窗口 `max-width:900px` 隐藏 | ✅ 第 7 轮 Desktop 复验通过（见下） |
+| #2 深色主题文字近黑 | CSS 用了宿主不存在的 token（`--dsw-alias-text-*`、`-bg-secondary/tertiary/elevated`、`-border-subtle`），全部落回深色 fallback | 换成宿主真实 token（`--dsw-alias-label-*`、`--dsw-alias-interactive-bg-*`、`--dsw-alias-bg-overlay`、`--dsw-alias-border-l1`、`--dsw-specific-sidebar-nav-item-active`），并去掉颜色 fallback；radius/shadow token 宿主不存在，改用字面值 | ✅ 第 7 轮 Desktop 复验通过（见下） |
+| #3 展开态设置入口不可点 | 表层：`ctx.get('commands')` 在客户端不存在。深层：`SettingsRoot`（侧栏底部触发器 + body 弹窗）注册在 `sidebar.settings` 子槽，插件替换整个 `sidebar` 槽后从不渲染该子槽，导致设置整体不可达（连快捷键也打不开） | 架构收窄为**增量插件**：不再注册 `sidebar` 槽，展开态完全交还宿主（搜索、视图选项、添加工作区、设置座位、账号菜单全部保留）；插件只补 macOS 折叠态浮轨 | ✅ 第 7 轮 Desktop 复验通过（见下） |
+| #4 中文界面显示英文相对时间 | 宿主 `LocaleSnapshot` 的当前语言字段是 `active`，原代码读 `id`/`locale`，恒为 `en` | 新增纯函数 `resolveLocaleId`（`active` 优先，`id`/`locale` 仅作防御性兼容，空值回退 `en`），locale 快照按宿主字段名暴露 `active` | ✅ 单测覆盖 + 第 7 轮 Desktop 复验通过 |
 
 ### 本轮已执行的检查
 
@@ -31,14 +31,35 @@
 | 恢复关闭 | `plugin_manager set_bundle enabled=false` | ✅ `changed: true`、`application: applied`，插件已回到关闭状态 |
 | 界面视觉证据 | `screencapture` / System Events 可访问性树 | ⚠️ 均被系统权限拒绝（`could not create image from display`、`-10004`），本会话无法截图或读取 a11y 树，折叠浮轨的实际绘制仍需人眼确认 |
 
-### 本轮未验证（用户决定跳过 Desktop 复验）
+### Desktop 真实界面复验（2026-11-04，第 7 轮）
 
-- 折叠态浮轨的实际可见性、位置（是否避开红绿灯与 `shell.leading` 重开控件）、与正文的遮挡关系。
-- 深色/浅色主题下的实际对比度，以及 `@nonamelego/dsh-catppuccin` 皮肤下的表现。
-- 中文界面相对时间是否真的显示中文。
-- 浮层 120ms/200ms 时序、跨间隙移动、Escape 关闭、键盘遍历。
-- 展开态是否完整保留宿主导航（本次改为完全交还宿主，理论上不再依赖插件实现，但未目视确认）。
-- 停用/卸载后的宿主恢复、跨进程重启后的状态保持。
+环境：macOS Desktop `0.2.1-rc.5`，中文界面、深色外观、`@nonamelego/dsh-catppuccin` 皮肤；插件通过 `plugin_manager` 启用后重启应用。方法：`screencapture` 截图 + 像素测量（Retina 截图 → CSS px）+ CGEvent 合成 `⌘B` 折叠侧栏、悬停浮层、`Esc`、`⌘R`，逐项核对；窗口约 1060 CSS 宽、844 CSS 高。
+
+| 问题 | 结果 | 实测证据 |
+| --- | --- | --- |
+| #1 折叠后图标轨 | ✅ 通过 | 点 `⌘B` 折叠后左侧出现常驻轨：宽度实测 **56.5 CSS px**（含 1px 右边框），图标横向中心 x=120.8 对轨中心 120.5，纵向按钮间距 40px（首钮中心 y≈156）；顶部不遮盖红绿灯，也不与 `shell.leading` 的重开按钮重叠；底部有账号座位；再按 `⌘B` 展开后浮轨消失、无残留 |
+| #2 深色可读性 | ✅ 通过 | 浮层底 `RGB(66,69,88)`：标题 **6.19:1**、次级文字 **4.26:1**、轨内图标对轨底 **9.04:1**；改前次级文字为 3.49:1（同为实测）。浮层标题已提到 `label-primary`，空态/提示提到 `label-secondary` |
+| #3 展开态设置入口 | ✅ 通过 | 展开态完全由宿主侧栏接管；点底部账号行弹出「设置 / 意见反馈 / 退出登录」，点「设置」（或 `⌘,`）**完整打开设置面板**（账号与余额、通用设置、模型、内置插件、Agent 预设、Catppuccin、通知提醒、桌面版重启）。改造前该面板因 `SettingsRoot` 不挂载而整体不可达 |
+| #4 中文相对时间 | ✅ 通过 | 最近会话显示「2 分钟前 / 46 分钟前 / 2 小时前 / 4 小时前」，项目与章节标题均为中文（工作区 / 项目 / 最近会话 / 已启用插件 / 还没有定时任务） |
+| 浮层交互 | ✅ 通过 | 悬停 120ms 后浮层出现在轨右侧（左缘实测 x≈149，即 `anchor.right + 8`）；`Esc` 关闭（关闭后浮层底色像素 365 vs 打开时 37510）；插件列表加载出真实数据；定时任务显示空态 |
+| 窄窗隐藏 | 未复验 | 本次窗口约 1060 CSS 宽（由设置面板居中位置反推，>900 阈值），未触发 `max-width:900px` 分支；窄窗表现留待下次验收 |
+
+### 本轮额外修复：两个浮层永久停在「加载中…」
+
+真实界面验收发现的新缺陷（旧代码即存在，此前未在界面里点开过这两个浮层）：
+
+- 现象：悬停「插件」/「定时任务」后，正文停在「加载中…」永不结束；`Esc` 后再次悬停仍是加载中。
+- 根因：懒加载 `useEffect` 的依赖里含 `phase`，而 effect 体内先 `setState({phase:'loading'})`。这次 setState 触发重渲染 → React 先执行上一次 effect 的 cleanup（`live = false` + `clearTimeout`）→ 本次 effect 又因 `phase !== 'idle'` 直接 return。结果是 promise 回调全部被 `live` 丢弃、超时定时器被清掉，**数据永远写不进去**。
+- 修法：effect 依赖收窄为 `[open]`；loader 通过 `useRef` 读取（注入 props 每次渲染都是新对象，函数 identity 进依赖会重演同一问题）；每次打开只发起一次加载，关闭时重置；保留 5s 超时兜底，把「Host 调用不返回」转成失败态而不是永久加载。
+- 复验：修复后「已启用插件」列出真实数据（cordis:include、@deepseek-ai/dsh-plugin-manager、@deepseek-ai/cordis-plugin-timer 等），「定时任务」显示「还没有定时任务」空态，两者都有「打开面板」出口。
+
+### 仍未验证
+
+- 窄窗口（<900px）下浮轨隐藏的实际表现：本次窗口约 1060 CSS 宽，未进入该分支。
+- 浮层跨间隙移动的 200ms 关闭时序手感、键盘 Tab 遍历。
+- 亮色主题、其他皮肤下的对比度。
+- 停用/卸载后的宿主恢复（本次只在启用态验证，未卸载）。
+- Web 端确认不出现第二条轨（依据平台判定走查，未在浏览器中实测）。
 
 ## 历史验证说明
 

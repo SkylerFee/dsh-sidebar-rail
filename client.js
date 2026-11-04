@@ -76,6 +76,9 @@ window.__ModuleLoader__.load({
     const OPEN_DELAY_MS = 120
     /** Grace period before a flyout closes while the pointer crosses the gap. */
     const CLOSE_DELAY_MS = 200
+    /** Give up on an optional remote call after this long; a hung Host call must
+     * still end in the failure state instead of an endless "loading" line. */
+    const REMOTE_TIMEOUT_MS = 5000
     /** Recent sessions shown in the "recent" section. */
     const RECENT_LIMIT = 10
 
@@ -200,11 +203,11 @@ window.__ModuleLoader__.load({
 @keyframes dsr-in { from { opacity:0; transform:translateX(-2px); } to { opacity:1; transform:none; } }
 @media (prefers-reduced-motion: reduce) { .dsr-flyout { animation:none; } }
 .dsr-flyout-head { padding:10px 12px 4px; font-size:12px; font-weight:600;
-  color:var(--dsw-alias-label-secondary); }
+  color:var(--dsw-alias-label-primary); }
 .dsr-flyout-body { overflow-y:auto; padding:2px 6px 8px; min-height:0; }
 .dsr-flyout-foot { border-top:1px solid var(--dsw-alias-border-l1); padding:6px; }
 .dsr-section-title { padding:10px 6px 4px; font-size:11px; font-weight:600; letter-spacing:.04em;
-  text-transform:uppercase; color:var(--dsw-alias-label-tertiary); }
+  text-transform:uppercase; color:var(--dsw-alias-label-secondary); }
 .dsr-row { display:flex; align-items:center; gap:6px; width:100%; min-height:30px; padding:4px 6px;
   border:none; background:transparent; border-radius:var(--dsw-radius-sm, 8px); color:inherit;
   font:inherit; font-size:13px; text-align:left; cursor:pointer; }
@@ -214,7 +217,7 @@ window.__ModuleLoader__.load({
 .dsr-row-wrap:hover .dsr-row { background:transparent; }
 .dsr-row-main { display:flex; flex-direction:column; min-width:0; flex:1 1 auto; }
 .dsr-row-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.dsr-row-meta { font-size:11px; color:var(--dsw-alias-label-tertiary);
+.dsr-row-meta { font-size:11px; color:var(--dsw-alias-label-secondary);
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dsr-row-action { display:flex; align-items:center; justify-content:center; width:22px; height:22px; flex:none;
   margin-right:4px; border:none; background:transparent; border-radius:var(--dsw-radius-sm, 8px);
@@ -223,11 +226,11 @@ window.__ModuleLoader__.load({
 .dsr-row-action:hover { background:var(--dsw-alias-interactive-bg-active);
   color:var(--dsw-alias-label-primary); }
 .dsr-row-wrap[data-pinned="true"] .dsr-row-action { opacity:1; }
-.dsr-empty { padding:14px 8px; font-size:12px; color:var(--dsw-alias-label-tertiary); text-align:center; }
+.dsr-empty { padding:14px 8px; font-size:12px; color:var(--dsw-alias-label-secondary); text-align:center; }
 .dsr-hint { padding:4px 6px 8px; font-size:11px; line-height:1.5;
-  color:var(--dsw-alias-label-tertiary); }
+  color:var(--dsw-alias-label-secondary); }
 
-.dsr-fallback { padding:12px; font-size:12px; color:var(--dsw-alias-label-tertiary); }
+.dsr-fallback { padding:12px; font-size:12px; color:var(--dsw-alias-label-secondary); }
 `
 
     // ---------------------------------------------------------------- icons --
@@ -578,27 +581,63 @@ window.__ModuleLoader__.load({
         [workspaceItems, sessions, archivedIds, pins, language],
       )
 
-      // Lazy remote data, loaded when a flyout first opens.
-      useEffect(() => {
-        if (open !== 'tasks' || tasks.phase !== 'idle') return undefined
+      // Lazy remote data, loaded once per flyout opening. Two rules keep it
+      // working, and both were learned the hard way:
+      //   - The effect depends on `open` only. Listing the phase would re-run it
+      //     right after this code sets `loading`, and React's cleanup would then
+      //     flip `live` to false and cancel the timer — so the promise result was
+      //     always dropped and the flyout hung on "loading" forever.
+      //   - The loaders are read through a ref: injected props are a fresh object
+      //     per render, so a function identity in the deps would re-run the same
+      //     effect on every render and reintroduce the bug above.
+      const loaders = useRef({ scheduleCatalog, pluginInventory })
+      loaders.current = { scheduleCatalog, pluginInventory }
+      const started = useRef({ tasks: false, plugins: false })
+
+      /**
+       * Run one lazy remote list once per flyout opening.
+       * @param key - Which list this is, so a re-open starts a fresh attempt.
+       * @param load - Remote call returning the raw answer.
+       * @param apply - State writer taking a descriptor or an updater.
+       * @returns Effect cleanup that stops the timer and ignores late answers.
+       */
+      const loadRemote = (key, load, apply) => {
+        if (started.current[key]) return undefined
+        started.current[key] = true
         let live = true
-        setTasks({ phase: 'loading', rows: [] })
+        apply({ phase: 'loading', rows: [] })
+        const timer = window.setTimeout(() => {
+          if (live) apply((current) => (current.phase === 'loading' ? { phase: 'failed', rows: [] } : current))
+        }, REMOTE_TIMEOUT_MS)
         Promise.resolve()
-          .then(() => scheduleCatalog())
-          .then((answer) => { if (live) setTasks({ phase: 'ready', rows: normalizeTasks(answer) }) })
-          .catch(() => { if (live) setTasks({ phase: 'failed', rows: [] }) })
-        return () => { live = false }
-      }, [open, tasks.phase, scheduleCatalog])
+          .then(() => load())
+          .then((answer) => { if (live) apply({ phase: 'ready', rows: answer }) })
+          .catch(() => { if (live) apply({ phase: 'failed', rows: [] }) })
+          .finally(() => { window.clearTimeout(timer) })
+        return () => { live = false; window.clearTimeout(timer) }
+      }
+
+      /** Merge a remote descriptor into one list slot, normalizing ready rows. */
+      const writer = (setState, normalize) => (next) => setState((current) => (
+        typeof next === 'function'
+          ? next(current)
+          : { phase: next.phase, rows: next.phase === 'ready' ? normalize(next.rows) : [] }
+      ))
+
       useEffect(() => {
-        if (open !== 'plugins' || plugins.phase !== 'idle') return undefined
-        let live = true
-        setPlugins({ phase: 'loading', rows: [] })
-        Promise.resolve()
-          .then(() => pluginInventory())
-          .then((answer) => { if (live) setPlugins({ phase: 'ready', rows: normalizePlugins(answer) }) })
-          .catch(() => { if (live) setPlugins({ phase: 'failed', rows: [] }) })
-        return () => { live = false }
-      }, [open, plugins.phase, pluginInventory])
+        // A closed flyout forgets its attempt, so re-opening retries a hung call.
+        if (open === null) {
+          started.current = { tasks: false, plugins: false }
+          return undefined
+        }
+        if (open === 'tasks') {
+          return loadRemote('tasks', loaders.current.scheduleCatalog, writer(setTasks, normalizeTasks))
+        }
+        if (open === 'plugins') {
+          return loadRemote('plugins', loaders.current.pluginInventory, writer(setPlugins, normalizePlugins))
+        }
+        return undefined
+      }, [open])
 
       useEffect(() => {
         if (open === null) return undefined
