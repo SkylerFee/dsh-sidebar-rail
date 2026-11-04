@@ -29,6 +29,7 @@
     "access": "public",
     "registry": "https://registry.npmjs.org"
   },
+  "icon": "./icon.svg",
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",

@@ -1,5 +1,82 @@
 # 验证记录
 
+## 第 9 轮遗留问题的定位与修复（2026-11-04，第 10 轮）
+
+第 9 轮报告详情页报错：`Plugin metadata for dsh-sidebar-rail: Error: …/dsh-sidebar-rail/icon.svg: icon must remain inside its package directory`。
+
+### 根因
+
+宿主的插件元数据读取（`packages/boot/app-boot/src/package-meta.ts`）对图标有两条互斥分支：
+
+1. `package.json` 声明了顶层 `icon` → 走 manifest 分支：只校验「图标必须在 manifest 所在目录内」。
+2. 未声明 `icon` → 走导出分支：解析 `exports["./icon"]`，再 `assertPackageOwned(realpath(icon), barePackageName(specifier))`——**从图标目录往上找 `package.json`，要求它的 `name` 等于 specifier 推出的包名**。
+
+`specifier` 取自 bundle patch 行的 `name`（仍是旧值 `dsh-sidebar-rail`），而第 8 轮把 `package.json` 的 `name` 改成了 `@skylerfee/dsh-sidebar-rail`。两者不等，`assertPackageOwned` 一路走到文件系统根都没找到匹配的 `package.json`，于是抛出该错误。
+
+即：**包名改了、bundle patch 行与本地安装键没跟着改**。
+
+### 修复
+
+`package.json` 增加顶层 `icon: "./icon.svg"`，让宿主走 manifest 分支（该分支不比对包名）。这对已安装的旧键、以及将来按 scoped 名安装都成立，属于防御性修复。
+
+### 验证方式（复刻宿主算法，用 Node 真实 ESM 解析器）
+
+在临时目录建 `node_modules/dsh-sidebar-rail` 与 `node_modules/@skylerfee/dsh-sidebar-rail` 两条符号链接，按 `package-meta.ts` 的分支逻辑各跑一遍：
+
+| 场景 | 结果 |
+| --- | --- |
+| specifier `dsh-sidebar-rail`，**不声明** icon（第 8 轮状态） | ❌ 精确复现线上错误：`…/icon.svg: icon must remain inside its package directory` |
+| specifier `dsh-sidebar-rail`，**声明** icon（本次修复） | ✅ 通过，图标读成 `data:image/svg+xml;base64,…` |
+| specifier `@skylerfee/dsh-sidebar-rail`（正确终态安装键），不声明 icon | ✅ 通过（`packageName === manifest.name`，包名校验满足） |
+
+`npm run check` 通过（仓库规则 + 两入口语法 + 12 项单测）。
+
+### 仍未处理（需授权）
+
+`cordis.patch.yml` 的行 `name` 仍是 `dsh-sidebar-rail`，而 scoped 插件的惯例是写完整包名（对照 `@nonamelego/dsh-catppuccin`、`@skylerfee/dsh-llm-opencode-go-live`）。改成 scoped 名后，**当前 profile 的旧安装键会解析不到**，必须同时按新名字重装，否则插件加载失败。这属于修改用户 profile，未在本轮执行。
+
+在本轮修复后，详情页的元数据错误应当消失（仍待在真实界面复验一次）。
+
+## 独立 Desktop 复验（2026-11-04，第 9 轮）
+
+结论：前次验收的 4 个界面问题在当前 macOS Desktop 的深色中文环境下未复现，已测的折叠轨、浮层、置顶、键盘和原生设置路径通过；插件详情页仍显示图标元数据错误，因此安装状态不能判为完全通过。
+
+### 环境与方法
+
+- 宿主：已安装的 DeepSeek Harness Desktop `0.2.1-rc.5`，原生窗口页面 `dsh-app://app/`，中文界面，深色外观，Catppuccin 插件启用。
+- 项目：提交 `8042115`，`package.json` 名称为 `@skylerfee/dsh-sidebar-rail`、版本 `0.1.0`；Desktop 当前仍以 `dsh-sidebar-rail` 的本地 `link:` 安装记录加载。开始时插件已开启、侧栏折叠，源码工作区干净。
+- 方法：通过 Computer Use 原生应用接口操作，结合可访问性树和窗口截图核对。浮层指针进入路径使用从页面空白区域拖向图标的原生操作，另用坐标点击、Tab 和 Escape 验证交互；未使用外部 Web 页面代替 Desktop。
+- 通过原生窗口缩放操作切换宽窗与窄窗，并在各状态读取截图和可访问性树；未读取 CSS 视口宽度，不把本轮窗口复验视为 768px 精确边界测量。
+
+### 实际结果
+
+| 检查 | 结果 | 本轮观察 |
+| --- | --- | --- |
+| 折叠态浮轨 | 通过 | 宽窗中实际显示工作区、定时任务、插件、更多和底部账号座位；顶部避开窗口控制区域。 |
+| 工作区浮层及语言 | 通过 | 出现项目、路径和 5 条最近会话，时间为“16 分钟前”“1 小时前”等中文；浮层标题、项目名和路径均可辨认。 |
+| 深色可读性 | 通过当前外观的视觉复核 | 上轮近黑文字未复现，文字在深色浮层上清晰可辨；本轮没有重新测量颜色或对比度数值。 |
+| 置顶与重挂载保持 | 通过 | 在浮层置顶一个现有工作区后出现“置顶项目”；关闭并重新启用插件后该置顶仍在。验收结束已取消该测试置顶。 |
+| 定时任务取数 | 通过空态路径 | 浮层显示“还没有定时任务”及“打开面板”；点击轨道定时任务图标能进入宿主“自动化任务”面板。没有创建测试任务。 |
+| 插件取数与跳转 | 通过 | 浮层列出真实已启用条目，如 `@deepseek-ai/dsh-plugin-manager`；未停在永久加载。点击轨道插件图标能进入管理面板。 |
+| 更多与账号浮层 | 通过 | 更多浮层包含展开侧栏、MCP 连接器入口；账号浮层显示说明与展开侧栏入口，未复制账号数据。 |
+| 展开态保留宿主导航 | 通过入口保留及设置路径 | 点击账号图标后浮轨消失，宿主工作区树、搜索、视图选项、添加工作区和账号菜单都在。账号菜单中的“设置”可完整打开设置面板，关闭后按 `Command+,` 也可重新打开。 |
+| 窄窗隐藏及动态恢复 | 通过实际窗口状态 | 原生窗口缩放后浮轨与其可访问性节点消失，宿主打开侧栏按钮仍能使用；恢复原宽窗后浮轨自动重新出现，无需重启。 |
+| 键盘操作 | 通过已测路径 | 从定时任务按钮按 Tab，依次打开插件、更多和账号浮层；Escape 后浮层节点消失。未做完整焦点循环审计。 |
+| 停用与重新启用 | 通过可见清理与恢复 | 关闭后浮轨节点消失，重新启用后恢复；最终关闭插件并展开宿主侧栏，未见残留浮轨。未检查物理卸载和样式节点。 |
+| 插件包元信息 | **不通过** | 详情页同时显示组件“运行中”及 `Plugin metadata for dsh-sidebar-rail: Error: …/dsh-sidebar-rail/icon.svg: icon must remain inside its package directory`；关闭再开启后仍可复现。 |
+
+### 尚需处理的元数据问题
+
+`icon.svg` 在当前源码包目录内存在且不是符号链接；当前包名与 Desktop 旧安装键不同。两项是本地核实结果，尚不能据此确定错误由包名变更、宿主路径解析还是旧安装缓存导致。需要针对当前 `link:` 安装记录继续定位并复验；本轮没有修改实现、重新安装或清理用户 profile。
+
+### 检查与限制
+
+- `npm run check` 通过：仓库机械规则、两入口语法检查和 12 项逻辑测试全部通过。
+- `Command+R` 后没有观察到足以确认渲染进程重新加载的变化，因此不计为刷新持久化通过；置顶证据仅覆盖关闭再启用。
+- 未精确测量 120ms 打开与 200ms 关闭时序、快速划过和跨间隙手感，未测亮色、其他皮肤、Web、Windows/Linux、真实 remote 故障、完整进程重启和物理卸载。
+- 搜索、视图选项和添加工作区只确认入口保留；未创建或修改工作区，未从浮层打开业务会话。
+- 按会话中已确认的验收偏好，结束时将插件设回关闭、侧栏展开，并恢复原窗口大小。其他插件、主题和业务数据未修改；本轮未保存临时截图文件。
+
 ## 本轮修复与架构收窄（2026-11-04，第 6 轮）
 
 针对 [Desktop 验收报告](desktop-validation-2026-11-04.md) 的 4 个问题：3 项按根因修复，第 3 项在查证后改为架构收窄（用户决策）。
