@@ -46,6 +46,22 @@ window.__ModuleLoader__.load({
     /** Identity selector for whole-snapshot subscriptions. */
     const identity = (value) => value
 
+    /** Fallback list state, so a missing standard hook degrades instead of throwing. */
+    const EMPTY_SESSIONS = { ids: [], byId: {}, phase: 'empty', projectionsBySession: {} }
+    /** Fallback workspace state for the same reason. */
+    const EMPTY_WORKSPACES = { items: [], archivedSessionIds: [], pinnedSessionIds: [], state: 'idle', phase: 'empty', error: null }
+
+    /**
+     * Pick a standard selector hook, falling back to a constant reader.
+     * @param candidate - The hook injected by the framework, when present.
+     * @param fallbackValue - Value the stand-in hook returns.
+     * @returns A selector hook with the same call shape.
+     */
+    function selectorHook(candidate, fallbackValue) {
+      if (typeof candidate === 'function') return candidate
+      return (select) => (typeof select === 'function' ? select(fallbackValue) : fallbackValue)
+    }
+
     /** Locale namespace owned by this plugin (must not collide with a host one). */
     const NS = 'sidebarRail'
     /** The plugin's only localStorage key. */
@@ -511,17 +527,23 @@ window.__ModuleLoader__.load({
      */
     function SidebarRailRoot(props) {
       const {
-        collapsed, drawer, t, toggleSidebar, selectPanel, startSession,
+        collapsed, drawer, toggleSidebar, selectPanel, startSession,
         panels, locale, openWorkspace, openSession, scheduleCatalog,
         pluginInventory, openSettings, useSessions, useWorkspaces, usePanelInfo,
         fallbackText,
       } = props
+      /** Translator with a raw-key fallback when the locale face is absent. */
+      const t = typeof props.t === 'function' ? props.t : (key) => String(key)
 
-      // Standard hooks are the sanctioned way to read list state.
-      const sessions = useSessions((state) => state)
-      const workspaceItems = useWorkspaces((state) => state.items)
-      const archivedIds = useWorkspaces((state) => state.archivedSessionIds)
-      const activePanelId = usePanelInfo((info) => info?.activePanelId)
+      // Standard hooks are the sanctioned way to read list state. Each falls
+      // back to a constant reader so one missing prop cannot blank the column.
+      const readSessions = selectorHook(useSessions, EMPTY_SESSIONS)
+      const readWorkspaces = selectorHook(useWorkspaces, EMPTY_WORKSPACES)
+      const readPanelInfo = selectorHook(usePanelInfo, { activePanelId: null })
+      const sessions = readSessions((state) => state)
+      const workspaceItems = readWorkspaces((state) => state.items)
+      const archivedIds = readWorkspaces((state) => state.archivedSessionIds)
+      const activePanelId = readPanelInfo((info) => info?.activePanelId)
       const panelEntries = useObservable(panels, identity)
       const language = useObservable(locale, (snapshot) => snapshot?.id ?? 'en')
 
