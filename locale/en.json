@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Sidebar Rail",
-    "description": "Turns the collapsed left sidebar into a Codex-style icon rail: workspace, tasks, plugins and More stay visible, and hovering an icon opens its list. Pinning and section grouping apply to workspaces and recent sessions."
+    "description": "An additive macOS Desktop icon rail for DeepSeek Harness: while the host sidebar is collapsed it draws a persistent 56px rail (workspaces, tasks, plugins, More and the account seat) with hover flyouts; the expanded sidebar stays entirely the host's."
   }
 }

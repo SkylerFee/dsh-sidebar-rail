@@ -1,5 +1,48 @@
 # 验证记录
 
+## 本轮修复与架构收窄（2026-11-04，第 6 轮）
+
+针对 [Desktop 验收报告](desktop-validation-2026-11-04.md) 的 4 个问题：3 项按根因修复，第 3 项在查证后改为架构收窄（用户决策）。
+
+| 问题 | 根因 | 修法 | 状态 |
+| --- | --- | --- | --- |
+| #1 折叠后没有图标轨 | macOS Desktop 把折叠列宽算成 0，且 `.sidebarCol { overflow: hidden }` 裁掉列内一切内容；宿主 CSS 注释明确「darwin closed sidebar has no rail」 | 插件不再渲染在列内：改为挂载 `shell.overlay` 槽 + `createPortal(document.body)` 的固定浮轨（`left:0 / top:var(--dsh-frame-top-clearance,48px) / width:56px / z-index:60 / no-drag`），窄窗口 `max-width:900px` 隐藏 | 代码完成，Desktop 未复验 |
+| #2 深色主题文字近黑 | CSS 用了宿主不存在的 token（`--dsw-alias-text-*`、`-bg-secondary/tertiary/elevated`、`-border-subtle`），全部落回深色 fallback | 换成宿主真实 token（`--dsw-alias-label-*`、`--dsw-alias-interactive-bg-*`、`--dsw-alias-bg-overlay`、`--dsw-alias-border-l1`、`--dsw-specific-sidebar-nav-item-active`），并去掉颜色 fallback；radius/shadow token 宿主不存在，改用字面值 | 代码完成，Desktop 未复验 |
+| #3 展开态设置入口不可点 | 表层：`ctx.get('commands')` 在客户端不存在。深层：`SettingsRoot`（侧栏底部触发器 + body 弹窗）注册在 `sidebar.settings` 子槽，插件替换整个 `sidebar` 槽后从不渲染该子槽，导致设置整体不可达（连快捷键也打不开） | 架构收窄为**增量插件**：不再注册 `sidebar` 槽，展开态完全交还宿主（搜索、视图选项、添加工作区、设置座位、账号菜单全部保留）；插件只补 macOS 折叠态浮轨 | 代码完成，Desktop 未复验 |
+| #4 中文界面显示英文相对时间 | 宿主 `LocaleSnapshot` 的当前语言字段是 `active`，原代码读 `id`/`locale`，恒为 `en` | 新增纯函数 `resolveLocaleId`（`active` 优先，`id`/`locale` 仅作防御性兼容，空值回退 `en`），locale 快照按宿主字段名暴露 `active` | 单测覆盖，通过 |
+
+### 本轮已执行的检查
+
+| 命令 | 结果 | 覆盖范围 |
+| --- | --- | --- |
+| `node --check client.js` / `node --check index.js` | 通过 | 脚本语法 |
+| `npm test` | 11 项通过、0 失败 | 纯逻辑：分组排序、过滤、数据归一、相对时间、语言解析、hook 替身 |
+| `git diff --check` | 通过 | 空白错误 |
+
+### 宿主侧与安装态
+
+| 项 | 方法 | 结果 |
+| --- | --- | --- |
+| 临时启用 | `plugin_manager set_bundle dsh-sidebar-rail enabled=true` | ✅ `application: applied`、`warnings: []` |
+| Host 行生效 | Cordis Inspect `host/Config.listConfigs name=dsh-sidebar-rail` | ✅ 返回 `include:dsh-sidebar-rail`（status `absent`，本插件无配置项，属正常） |
+| Client 侧是否加载 | Cordis Inspect `client/Slots.listSubTree` 全树检索 `dsh-sidebar-rail` | ⚠️ 0 命中：客户端 bundle 清单在页面启动时拉取，运行中的渲染进程不会热加载新插件，需刷新页面才生效 |
+| 恢复关闭 | `plugin_manager set_bundle enabled=false` | ✅ `changed: true`、`application: applied`，插件已回到关闭状态 |
+
+### 本轮未验证（用户决定跳过 Desktop 复验）
+
+- 折叠态浮轨的实际可见性、位置（是否避开红绿灯与 `shell.leading` 重开控件）、与正文的遮挡关系。
+- 深色/浅色主题下的实际对比度，以及 `@nonamelego/dsh-catppuccin` 皮肤下的表现。
+- 中文界面相对时间是否真的显示中文。
+- 浮层 120ms/200ms 时序、跨间隙移动、Escape 关闭、键盘遍历。
+- 展开态是否完整保留宿主导航（本次改为完全交还宿主，理论上不再依赖插件实现，但未目视确认）。
+- 停用/卸载后的宿主恢复、跨进程重启后的状态保持。
+
+## 历史验证说明
+
+本节以下为**替换 `sidebar` 槽时代**（第 1-5 轮）的记录，其架构与当前实现不同：当时的展开态自绘列、native 模式、折叠状态持久化均已在第 6 轮移除，相关条目只用于追溯历史，不代表当前实现。
+
+下文为此前的验证记录，其中的安装状态、端口与工具限制只描述当次环境；当前 Desktop 结果以上述报告为准。
+
 > 依据插件开发规范：无浏览器控制时，验证止于「JS 语法 + 清单合法性 + 实时 Client Slot 注册」，并如实报告视觉验证不可用。
 
 ## 已执行
@@ -76,15 +119,17 @@
 | 亮/暗主题下的浮层配色 | 同上（全部使用 `--dsw-alias-*` token，未硬编码颜色） |
 | 宿主侧栏是否被正确替换 | Slot 树不暴露单槽占用者列表，无法从 Inspect 侧确认；需页面刷新后目视 |
 
-## 复验步骤（人工）
+## 复验步骤（人工，当前实现）
 
-1. 刷新 `http://127.0.0.1:65028` 页面。
-2. 收起左侧栏 → 应看到 4 个功能图标 + 底部头像。
-3. 悬浮「工作区」→ 120ms 后左侧出现浮层，分「置顶项目 / 项目 / 最近会话」。
-4. 点项目行的图钉 → 该项目移入「置顶项目」；刷新页面后仍在。
-5. 展开侧栏 → 品牌行 / 新会话 / 面板行 / 分组列表 / 底部设置。
-6. 收起侧栏后刷新 → 应保持收起状态。
-7. 打开控制台确认无 `[dsh-sidebar-rail] render failed` 与 slot crash。
+前置：在 `~/.dsh/profiles/desktop` 中启用 `dsh-sidebar-rail`，然后**刷新渲染进程**（Desktop 窗口按 `Cmd+R`；宿主进程与本会话不受影响）。
+
+1. 展开态先确认宿主侧栏原样：搜索、视图选项、添加工作区、底部设置座位、账号菜单都在，且点击设置能打开设置面板。
+2. 点「收起侧栏」→ 左侧应出现 56px 浮轨，从窗口顶部 48px 处开始（上方是红绿灯与宿主自己的展开按钮），底部是账号座位。
+3. 悬浮「工作区」→ 120ms 后右侧出现浮层，含「置顶项目 / 项目 / 最近会话」；移开后 200ms 关闭，Escape 也能关闭。
+4. 点项目行图钉 → 移入「置顶项目」；刷新页面后仍在。
+5. 深色主题下检查浮轨与浮层文字对比度；中文界面下检查最近会话的相对时间是否显示「5 分钟前」等中文。
+6. 把窗口缩到 900px 以下 → 浮轨应隐藏（避免压住正文），宿主折叠态的展开按钮仍可用。
+7. 展开侧栏 → 浮轨消失，交给宿主原生侧栏；控制台无 `[dsh-sidebar-rail]` 报错。
 
 ## 若出现异常
 

@@ -1,28 +1,33 @@
 /**
  * dsh-sidebar-rail — Client half.
  *
- * Replaces the DSH sidebar shell (`sidebar` slot) with a Codex-style navigation
- * column:
+ * Adds the icon rail macOS Desktop otherwise lacks. The plugin is additive: the
+ * shipped sidebar is never replaced, so search, view options, add-workspace, the
+ * settings seat and the account menu all stay shipped behavior.
  *
- *   - collapsed: a 56px icon rail whose entries stay visible (Workspaces, Tasks,
- *     Plugins, More) with a user avatar pinned to the foot; hovering an entry
- *     opens its list in a flyout beside the rail.
- *   - expanded: the familiar DSH column — brand row, New Session, panel rows,
- *     the grouped workspace/session list, and a settings entry at the foot.
+ *   - macOS Desktop, column collapsed: a 56px icon rail (Workspaces, Tasks,
+ *     Plugins, More) with an account seat at the foot; hovering an entry opens
+ *     its list in a flyout beside the rail.
+ *   - expanded, or any other platform: nothing is drawn. The host owns the
+ *     expanded column, and the Web build already ships its own 56px collapsed
+ *     rail, so this entry must not draw a second one.
  *
  * Contract notes (verified against the shipped client):
- *   - `sidebar` is a `single` slot already occupied by ui-sidebar, which
- *     declared its seven child holes. Declaring those holes again throws
- *     "slot is already declared", so this registration omits `children` and
- *     therefore receives no `renderSlot`; every surface is drawn here.
- *   - A static `__ModuleLoader__` package must pass `priority: -1` to win the
- *     single slot; the dynamic runner would assign a negative priority itself.
- *   - `collapsed`, `width`, `drawer` and the standard hooks (`useSessions`,
- *     `useWorkspaces`, `usePanelInfo`) arrive as props; no service injection is
- *     needed for list data.
+ *   - The rail is mounted from the frame-wide `shell.overlay` seat (a `list`
+ *     slot owned by ui-layout), the same additive seat other plugins use for
+ *     floating surfaces. Overlay entries receive no owner props, so the fold
+ *     state comes from the `data-sidebar-collapsed` attribute the host publishes
+ *     on the frame.
+ *   - macOS Desktop folds the column to zero width and clips it with
+ *     `overflow: hidden` (`AppFrame: collapsedWidth = darwin ? 0 : 56`), so the
+ *     rail is portalled beside `#root` and pinned below the 48px window-chrome
+ *     strip (`--dsh-frame-top-clearance`) that holds the traffic lights and the
+ *     host's own reopen controls.
+ *   - Standard hooks (`useSessions`, `useWorkspaces`, `usePanelInfo`) arrive as
+ *     props; navigation and list actions come from injected services instead
+ *     (`layout`, `uiWorkspace`, `remote`). The Host is never written to.
  *
- * Workspace pinning and fold-state persistence live in this plugin's own
- * localStorage key; the Host is never written to.
+ * Pinned workspaces live in this plugin's own localStorage key.
  */
 window.__ModuleLoader__.load({
   id: 'dsh-sidebar-rail',
@@ -83,8 +88,6 @@ window.__ModuleLoader__.load({
       'rail.more': '更多',
       'rail.account': '账号与设置',
       'rail.expand': '展开侧栏',
-      'rail.collapse': '收起侧栏',
-      'rail.newSession': '新会话',
       'section.pinned': '置顶项目',
       'section.workspaces': '项目',
       'section.recent': '最近会话',
@@ -94,17 +97,12 @@ window.__ModuleLoader__.load({
       'pin.pin': '置顶项目',
       'pin.unpin': '取消置顶',
       'empty.workspaces': '还没有工作区',
-      'empty.recent': '还没有会话',
       'empty.tasks': '还没有定时任务',
       'empty.plugins': '没有已启用的插件',
       'state.loading': '加载中…',
       'state.failed': '加载失败，可打开面板查看',
       'action.openPanel': '打开面板',
-      'action.settings': '设置',
-      'settings.unavailable': '请展开侧栏后从底部进入设置',
-      'settings.shortcutHint': '设置：按 {keys} 打开',
       'account.hint': '账号信息与用量由设置中的账号页提供。',
-      'workspace.noSessions': '暂无会话',
     }
     const en = {
       'rail.label': 'Navigation rail',
@@ -114,8 +112,6 @@ window.__ModuleLoader__.load({
       'rail.more': 'More',
       'rail.account': 'Account and settings',
       'rail.expand': 'Expand sidebar',
-      'rail.collapse': 'Collapse sidebar',
-      'rail.newSession': 'New session',
       'section.pinned': 'Pinned projects',
       'section.workspaces': 'Projects',
       'section.recent': 'Recent sessions',
@@ -125,17 +121,12 @@ window.__ModuleLoader__.load({
       'pin.pin': 'Pin project',
       'pin.unpin': 'Unpin project',
       'empty.workspaces': 'No workspaces yet',
-      'empty.recent': 'No sessions yet',
       'empty.tasks': 'No scheduled tasks',
       'empty.plugins': 'No enabled plugins',
       'state.loading': 'Loading…',
       'state.failed': 'Could not load; open the panel instead',
       'action.openPanel': 'Open panel',
-      'action.settings': 'Settings',
-      'settings.unavailable': 'Expand the sidebar to reach Settings at its foot',
-      'settings.shortcutHint': 'Settings: press {keys}',
       'account.hint': 'Account and usage details live in the Settings account page.',
-      'workspace.noSessions': 'No sessions',
     }
 
     // --------------------------------------------------------------- storage --
@@ -167,104 +158,76 @@ window.__ModuleLoader__.load({
 
     // ---------------------------------------------------------------- styles --
     const CSS = `
-.dsr-root { display:flex; flex-direction:column; height:100%; min-height:0; width:100%; }
-.dsr-root * { box-sizing:border-box; }
 
 .dsr-rail { display:flex; flex-direction:column; align-items:center; height:100%; padding:10px 0 8px; gap:4px; }
 .dsr-rail-top { display:flex; flex-direction:column; align-items:center; gap:4px; }
 .dsr-rail-spacer { flex:1 1 auto; min-height:8px; }
+/* macOS Desktop only: the host clips the collapsed column to 0 width, so the
+   rail is portalled beside #root and pinned below the window-chrome strip —
+   the traffic lights and the host's own reopen controls live in the top 48px
+   (--dsh-frame-top-clearance, declared on the root element so portalled
+   overlays inherit it). Clicking must not drag the window: -webkit-app-region
+   is opted out explicitly even though body-level portals already are. */
+.dsr-rail-float { position:fixed; left:0; top:var(--dsh-frame-top-clearance, 48px); bottom:0; width:56px;
+  z-index:60; display:flex; flex-direction:column; align-items:center;
+  background:var(--dsw-specific-sidebar-fill);
+  border-right:.5px solid var(--dsw-alias-border-l3);
+  -webkit-app-region:no-drag; }
+.dsr-rail-float .dsr-rail { width:100%; }
+/* Narrow frames: a floating rail would sit on top of the conversation copy. The
+   host keeps its own reopen control in shell.leading, so hiding the rail here
+   costs no way back. */
+@media (max-width: 900px) { .dsr-rail-float { display:none; } }
 .dsr-rail-btn { display:flex; align-items:center; justify-content:center; width:36px; height:36px; padding:0;
-  border:none; background:transparent; border-radius:var(--dsw-radius-md, 8px);
-  color:var(--dsw-alias-text-tertiary, #64748b); cursor:pointer;
+  border:none; background:transparent; border-radius:var(--dsw-radius-sm, 8px);
+  color:var(--dsw-alias-label-tertiary); cursor:pointer;
   transition:background-color 120ms ease, color 120ms ease; }
-.dsr-rail-btn:hover, .dsr-rail-btn:focus-visible { background:var(--dsw-alias-bg-secondary, rgba(120,130,150,.14));
-  color:var(--dsw-alias-text-primary, #0f172a); outline:none; }
+.dsr-rail-btn:hover, .dsr-rail-btn:focus-visible { background:var(--dsw-alias-interactive-bg-hover);
+  color:var(--dsw-alias-label-primary); outline:none; }
 .dsr-rail-btn[aria-current="page"], .dsr-rail-btn[data-dsr-open="true"] {
-  background:var(--dsw-alias-bg-secondary, rgba(120,130,150,.14)); color:var(--dsw-alias-text-primary, #0f172a); }
+  background:var(--dsw-specific-sidebar-nav-item-active); color:var(--dsw-alias-label-primary); }
 .dsr-avatar-dot { display:flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:50%;
-  background:var(--dsw-alias-bg-tertiary, rgba(120,130,150,.26));
-  color:var(--dsw-alias-text-primary, #0f172a); font-size:11px; font-weight:600; }
+  background:var(--dsw-alias-interactive-bg-active);
+  color:var(--dsw-alias-label-primary); font-size:11px; font-weight:600; }
 
 .dsr-flyout { position:fixed; z-index:2147483000; width:288px; max-height:calc(100vh - 32px);
   display:flex; flex-direction:column;
-  background:var(--dsw-alias-bg-elevated, #fff); color:var(--dsw-alias-text-primary, #0f172a);
-  border:1px solid var(--dsw-alias-border-subtle, rgba(120,130,150,.22));
-  border-radius:var(--dsw-radius-lg, 12px);
-  box-shadow:var(--dsw-alias-shadow-popover, 0 12px 32px rgba(15,23,42,.18));
+  background:var(--dsw-alias-bg-overlay); color:var(--dsw-alias-label-primary);
+  border:1px solid var(--dsw-alias-border-l1);
+  border-radius:var(--dsw-radius-lg, 16px);
+  box-shadow:var(--dsw-shadow-lv3, 0 12px 32px rgba(0,0,0,.18));
   overflow:hidden; animation:dsr-in 120ms ease-out; }
 @keyframes dsr-in { from { opacity:0; transform:translateX(-2px); } to { opacity:1; transform:none; } }
 @media (prefers-reduced-motion: reduce) { .dsr-flyout { animation:none; } }
 .dsr-flyout-head { padding:10px 12px 4px; font-size:12px; font-weight:600;
-  color:var(--dsw-alias-text-secondary, #475569); }
+  color:var(--dsw-alias-label-secondary); }
 .dsr-flyout-body { overflow-y:auto; padding:2px 6px 8px; min-height:0; }
-.dsr-flyout-foot { border-top:1px solid var(--dsw-alias-border-subtle, rgba(120,130,150,.22)); padding:6px; }
+.dsr-flyout-foot { border-top:1px solid var(--dsw-alias-border-l1); padding:6px; }
 .dsr-section-title { padding:10px 6px 4px; font-size:11px; font-weight:600; letter-spacing:.04em;
-  text-transform:uppercase; color:var(--dsw-alias-text-tertiary, #94a3b8); }
+  text-transform:uppercase; color:var(--dsw-alias-label-tertiary); }
 .dsr-row { display:flex; align-items:center; gap:6px; width:100%; min-height:30px; padding:4px 6px;
-  border:none; background:transparent; border-radius:var(--dsw-radius-sm, 6px); color:inherit;
+  border:none; background:transparent; border-radius:var(--dsw-radius-sm, 8px); color:inherit;
   font:inherit; font-size:13px; text-align:left; cursor:pointer; }
-.dsr-row:hover, .dsr-row:focus-visible { background:var(--dsw-alias-bg-secondary, rgba(120,130,150,.14)); outline:none; }
-.dsr-row-wrap { display:flex; align-items:center; border-radius:var(--dsw-radius-sm, 6px); }
-.dsr-row-wrap:hover { background:var(--dsw-alias-bg-secondary, rgba(120,130,150,.14)); }
+.dsr-row:hover, .dsr-row:focus-visible { background:var(--dsw-alias-interactive-bg-hover); outline:none; }
+.dsr-row-wrap { display:flex; align-items:center; border-radius:var(--dsw-radius-sm, 8px); }
+.dsr-row-wrap:hover { background:var(--dsw-alias-interactive-bg-hover); }
 .dsr-row-wrap:hover .dsr-row { background:transparent; }
 .dsr-row-main { display:flex; flex-direction:column; min-width:0; flex:1 1 auto; }
 .dsr-row-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.dsr-row-meta { font-size:11px; color:var(--dsw-alias-text-tertiary, #94a3b8);
+.dsr-row-meta { font-size:11px; color:var(--dsw-alias-label-tertiary);
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dsr-row-action { display:flex; align-items:center; justify-content:center; width:22px; height:22px; flex:none;
-  margin-right:4px; border:none; background:transparent; border-radius:var(--dsw-radius-sm, 6px);
-  cursor:pointer; color:var(--dsw-alias-text-tertiary, #94a3b8); opacity:0; }
+  margin-right:4px; border:none; background:transparent; border-radius:var(--dsw-radius-sm, 8px);
+  cursor:pointer; color:var(--dsw-alias-label-tertiary); opacity:0; }
 .dsr-row-wrap:hover .dsr-row-action, .dsr-row-action:focus-visible { opacity:1; }
-.dsr-row-action:hover { background:var(--dsw-alias-bg-tertiary, rgba(120,130,150,.26));
-  color:var(--dsw-alias-text-primary, #0f172a); }
+.dsr-row-action:hover { background:var(--dsw-alias-interactive-bg-active);
+  color:var(--dsw-alias-label-primary); }
 .dsr-row-wrap[data-pinned="true"] .dsr-row-action { opacity:1; }
-.dsr-empty { padding:14px 8px; font-size:12px; color:var(--dsw-alias-text-tertiary, #94a3b8); text-align:center; }
+.dsr-empty { padding:14px 8px; font-size:12px; color:var(--dsw-alias-label-tertiary); text-align:center; }
 .dsr-hint { padding:4px 6px 8px; font-size:11px; line-height:1.5;
-  color:var(--dsw-alias-text-tertiary, #94a3b8); }
+  color:var(--dsw-alias-label-tertiary); }
 
-.dsr-wide { display:flex; flex-direction:column; height:100%; min-height:0; padding:6px 8px; }
-.dsr-wide-brand { display:flex; align-items:center; gap:8px; height:34px; flex:none;
-  font-size:14px; font-weight:600; overflow:hidden; }
-.dsr-wide-brand-mark { display:flex; align-items:center; justify-content:center; width:24px; height:24px; flex:none; }
-.dsr-wide-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.dsr-wide-toggle { display:flex; align-items:center; justify-content:center; width:26px; height:26px; flex:none;
-  margin-left:auto; padding:0; border:none; background:transparent;
-  border-radius:var(--dsw-radius-sm, 6px); color:var(--dsw-alias-text-tertiary, #94a3b8); cursor:pointer; }
-.dsr-wide-toggle:hover { background:var(--dsw-alias-bg-secondary, rgba(120,130,150,.14));
-  color:var(--dsw-alias-text-primary, #0f172a); }
-.dsr-wide-new { display:flex; align-items:center; gap:8px; width:100%; height:34px; margin:4px 0 6px;
-  padding:0 8px; border:1px solid var(--dsw-alias-border-subtle, rgba(120,130,150,.22));
-  background:transparent; border-radius:var(--dsw-radius-md, 8px);
-  color:var(--dsw-alias-text-primary, #0f172a); font:inherit; font-size:13px; cursor:pointer; flex:none; }
-.dsr-wide-new:hover { background:var(--dsw-alias-bg-secondary, rgba(120,130,150,.14)); }
-.dsr-wide-panels { display:flex; flex-direction:column; gap:2px; padding:0 0 4px; flex:none; }
-.dsr-wide-panel { display:flex; align-items:center; gap:8px; width:100%; height:30px; padding:0 8px;
-  border:none; background:transparent; border-radius:var(--dsw-radius-md, 8px);
-  color:var(--dsw-alias-text-primary, #0f172a); font:inherit; font-size:13px; text-align:left; cursor:pointer; }
-.dsr-wide-panel:hover { background:var(--dsw-alias-bg-secondary, rgba(120,130,150,.14)); }
-.dsr-wide-panel[aria-current="page"] { background:var(--dsw-alias-bg-secondary, rgba(120,130,150,.14)); }
-.dsr-wide-list { flex:1 1 auto; min-height:0; overflow-y:auto; padding-bottom:4px; }
-.dsr-ws { display:flex; align-items:center; gap:6px; width:100%; height:30px; padding:0 6px;
-  border:none; background:transparent; border-radius:var(--dsw-radius-sm, 6px);
-  color:var(--dsw-alias-text-primary, #0f172a); font:inherit; font-size:13px; text-align:left; cursor:pointer; }
-.dsr-ws:hover { background:var(--dsw-alias-bg-secondary, rgba(120,130,150,.14)); }
-.dsr-ws-icon { display:flex; align-items:center; justify-content:center; width:16px; height:16px;
-  color:var(--dsw-alias-text-tertiary, #94a3b8); flex:none; }
-.dsr-ws-title { flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.dsr-ws-count { font-size:11px; color:var(--dsw-alias-text-tertiary, #94a3b8); flex:none; }
-.dsr-session { display:block; width:100%; padding:4px 6px 4px 26px; border:none; background:transparent;
-  border-radius:var(--dsw-radius-sm, 6px); color:var(--dsw-alias-text-secondary, #475569);
-  font:inherit; font-size:12.5px; text-align:left; cursor:pointer;
-  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.dsr-session:hover { background:var(--dsw-alias-bg-secondary, rgba(120,130,150,.14));
-  color:var(--dsw-alias-text-primary, #0f172a); }
-.dsr-wide-foot { flex:none; border-top:1px solid var(--dsw-alias-border-subtle, rgba(120,130,150,.22));
-  padding-top:6px; margin-top:2px; }
-.dsr-foot-btn { display:flex; align-items:center; gap:8px; width:100%; height:32px; padding:0 8px;
-  border:none; background:transparent; border-radius:var(--dsw-radius-md, 8px);
-  color:var(--dsw-alias-text-primary, #0f172a); font:inherit; font-size:13px; text-align:left; cursor:pointer; }
-.dsr-foot-btn:hover { background:var(--dsw-alias-bg-secondary, rgba(120,130,150,.14)); }
-.dsr-fallback { padding:12px; font-size:12px; color:var(--dsw-alias-text-tertiary, #94a3b8); }
+.dsr-fallback { padding:12px; font-size:12px; color:var(--dsw-alias-label-tertiary); }
 `
 
     // ---------------------------------------------------------------- icons --
@@ -290,16 +253,6 @@ window.__ModuleLoader__.load({
       h('circle', { cx: 6, cy: 12, r: 1.5, fill: 'currentColor', stroke: 'none' }),
       h('circle', { cx: 12, cy: 12, r: 1.5, fill: 'currentColor', stroke: 'none' }),
       h('circle', { cx: 18, cy: 12, r: 1.5, fill: 'currentColor', stroke: 'none' }))
-    const IconPlus = (p) => h(Icon, p, h('path', { d: 'M12 5.5v13M5.5 12h13' }))
-    const IconGear = (p) => h(Icon, p,
-      h('circle', { cx: 12, cy: 12, r: 3.1 }),
-      h('path', { d: 'M12 3.6v2.2M12 18.2v2.2M4.9 7.8l1.9 1.1M17.2 15.1l1.9 1.1M4.9 16.2l1.9-1.1M17.2 8.9l1.9-1.1' }))
-    const IconDot = () => h('svg', { viewBox: '0 0 8 8', width: 8, height: 8, 'aria-hidden': true },
-      h('circle', { cx: 4, cy: 4, r: 3, fill: 'currentColor' }))
-    /** Collapse affordance for the expanded column. */
-    const IconPanelLeft = (p) => h(Icon, p,
-      h('rect', { x: 3.5, y: 4.5, width: 17, height: 15, rx: 2.5 }),
-      h('path', { d: 'M9.5 4.5v15' }))
     /** Small trailing pin used by workspace rows. */
     const IconPin = () => h('svg', {
       viewBox: '0 0 24 24', width: 13, height: 13, fill: 'none', stroke: 'currentColor',
@@ -329,6 +282,27 @@ window.__ModuleLoader__.load({
       }
       const n = Math.floor(delta / (24 * 60 * minute))
       return chinese ? `${n} 天前` : `${n} d ago`
+    }
+
+    /**
+     * Resolve the active locale id from a host locale snapshot.
+     *
+     * The shipped client publishes `LocaleSnapshot.active`. Reading `id` or
+     * `locale` instead (what this plugin did before the 2026-11-04 desktop
+     * validation) always fell back to English, which is how a Chinese UI ended
+     * up showing "min ago". Only a non-empty string is accepted so a malformed
+     * snapshot cannot blank the column's copy; `id`/`locale` stay as defensive
+     * fallbacks in case a synthetic snapshot ever carries them.
+     * @param snapshot - Host locale snapshot, or anything that arrived instead.
+     * @returns A locale id, defaulting to `'en'`.
+     */
+    function resolveLocaleId(snapshot) {
+      if (snapshot === null || typeof snapshot !== 'object') return 'en'
+      for (const key of ['active', 'id', 'locale']) {
+        const value = snapshot[key]
+        if (typeof value === 'string' && value !== '') return value
+      }
+      return 'en'
     }
 
     /**
@@ -460,30 +434,6 @@ window.__ModuleLoader__.load({
       return { pinnedRows, normalRows, recentRows: recentRows.slice(0, RECENT_LIMIT) }
     }
 
-    /**
-     * Resolve the sessions of one workspace, newest first, minus archived rows.
-     * @param workspace - One workspace row carrying its session ids.
-     * @param sessions - SessionListState.
-     * @param archivedIds - Archived session ids.
-     * @returns Session rows for the expanded list.
-     */
-    function workspaceSessions(workspace, sessions, archivedIds) {
-      const byId = sessions?.byId ?? {}
-      const archived = new Set(Array.isArray(archivedIds) ? archivedIds : [])
-      const rows = []
-      for (const id of workspace.sessionIds ?? []) {
-        const entry = byId[id]
-        if (entry == null || archived.has(id) || entry.blank === true) continue
-        if (entry.origin === 'subagent') continue
-        rows.push({
-          id,
-          title: entry.displayTitle ?? entry.title ?? String(id),
-          updatedAt: Number.isFinite(entry.updatedAt) ? entry.updatedAt : 0,
-        })
-      }
-      rows.sort((a, b) => b.updatedAt - a.updatedAt)
-      return rows
-    }
 
     /**
      * Normalize an unknown schedule catalog answer into active task rows.
@@ -540,16 +490,63 @@ window.__ModuleLoader__.load({
 
     // ------------------------------------------------------------------ root --
     /**
-     * The sidebar column: rail when collapsed, the expanded DSH-style column otherwise.
-     * @param props - Owner props, standard hooks, injected face and translator.
-     * @returns The sidebar element.
+     * Read whether the host's left column is currently folded.
+     *
+     * The rail is mounted from the frame-wide `shell.overlay` seat, whose entries
+     * receive no owner props, so the fold state comes from the attribute the host
+     * publishes on the frame element (`data-sidebar-collapsed`). The frame is
+     * reached through the overlay layer's stable `data-shell-overlay` marker
+     * rather than a hashed CSS-module class. Observation is attribute-scoped so a
+     * window resize or unrelated re-render cannot wake this component.
+     * @returns True while the host sidebar is collapsed.
      */
-    function SidebarRailRoot(props) {
+    function useHostCollapsed() {
+      const read = () => {
+        if (typeof document === 'undefined') return false
+        const frame = document.querySelector('[data-shell-overlay]')?.parentElement ?? null
+        return frame !== null && frame.hasAttribute('data-sidebar-collapsed')
+      }
+      const [collapsed, setCollapsed] = useState(read)
+      useEffect(() => {
+        const frame = document.querySelector('[data-shell-overlay]')?.parentElement ?? null
+        if (frame === null) return undefined
+        setCollapsed(frame.hasAttribute('data-sidebar-collapsed'))
+        const observer = new MutationObserver(() => setCollapsed(frame.hasAttribute('data-sidebar-collapsed')))
+        observer.observe(frame, { attributes: true, attributeFilter: ['data-sidebar-collapsed'] })
+        return () => { observer.disconnect() }
+      }, [])
+      return collapsed
+    }
+
+    /**
+     * Overlay entry: renders the rail only in the state that needs it.
+     *
+     * macOS Desktop folds the column to zero width and clips it
+     * (`AppFrame: collapsedWidth = darwin ? 0 : 56`), so the shipped build keeps
+     * no rail there. Web already renders the shipped 56px rail, so this entry
+     * stays empty on Web and never doubles it up.
+     * @param props - overlay-entry props forwarded to the rail.
+     * @returns The rail, or null outside the macOS collapsed state.
+     */
+    function RailOverlay(props) {
+      const collapsed = useHostCollapsed()
+      const platform = typeof document === 'undefined' ? '' : (document.documentElement.dataset.platform ?? '')
+      if (platform !== 'darwin' || !collapsed) return null
+      return h(RailColumn, props)
+    }
+
+    /**
+     * The collapsed navigation rail: four entries, an account seat, and one
+     * hover flyout at a time. Expanding hands the column back to the host, which
+     * owns the expanded sidebar (search, view options, settings).
+     * @param props - standard hooks, injected face and translator.
+     * @returns The portal-rendered rail element.
+     */
+    function RailColumn(props) {
       const {
-        collapsed, drawer, toggleSidebar, selectPanel, startSession,
+        toggleSidebar, selectPanel,
         panels, locale, openWorkspace, openSession, scheduleCatalog,
-        pluginInventory, openSettings, useSessions, useWorkspaces, usePanelInfo,
-        useShortcuts, renderSlot, fallbackText,
+        pluginInventory, useSessions, useWorkspaces, usePanelInfo, fallbackText,
       } = props
       /** Translator with a raw-key fallback when the locale face is absent. */
       const t = typeof props.t === 'function' ? props.t : (key) => String(key)
@@ -563,12 +560,8 @@ window.__ModuleLoader__.load({
       const workspaceItems = readWorkspaces((state) => state.items)
       const archivedIds = readWorkspaces((state) => state.archivedSessionIds)
       const activePanelId = readPanelInfo((info) => info?.activePanelId)
-      const readShortcuts = selectorHook(useShortcuts, [])
-      const settingsShortcut = readShortcuts((rows) => (Array.isArray(rows)
-        ? rows.find((row) => row?.id === 'settings.open')?.keys
-        : undefined))
       const panelEntries = useObservable(panels, identity)
-      const language = useObservable(locale, (snapshot) => snapshot?.id ?? 'en')
+      const language = useObservable(locale, (snapshot) => snapshot?.active ?? 'en')
 
       const [pins, setPins] = useState(() => {
         const stored = readStore().pinnedWorkspaceIds
@@ -580,21 +573,6 @@ window.__ModuleLoader__.load({
       const [plugins, setPlugins] = useState({ phase: 'idle', rows: [] })
       const openTimer = useRef(undefined)
       const closeTimer = useRef(undefined)
-      const restoredRef = useRef(false)
-
-      // Persist the fold state, and restore the stored one once after mount.
-      useEffect(() => {
-        if (!restoredRef.current) {
-          restoredRef.current = true
-          const stored = readStore().collapsed
-          if (typeof stored === 'boolean' && stored !== collapsed) {
-            toggleSidebar()
-            return
-          }
-        }
-        writeStore({ collapsed })
-      }, [collapsed, toggleSidebar])
-
       const sections = useMemo(
         () => deriveSections(workspaceItems, sessions, archivedIds, pins, language),
         [workspaceItems, sessions, archivedIds, pins, language],
@@ -779,17 +757,12 @@ window.__ModuleLoader__.load({
             h('div', { className: 'dsr-hint' }, t('account.hint')))
         }
         if (open === 'account') {
+          // Account and settings live in the host's expanded sidebar, so the
+          // only honest action here is to hand the column back to the host.
           return flyoutShell(t('rail.account'),
             h('div', null,
               h('div', { className: 'dsr-hint' }, t('account.hint')),
-              typeof openSettings === 'function'
-                ? h(ActionRow, {
-                  onClick: () => { setOpen(null); openSettings() },
-                }, t('action.settings'))
-                : h('div', { className: 'dsr-hint' },
-                  settingsShortcut === undefined || settingsShortcut === ''
-                    ? t('settings.unavailable')
-                    : t('settings.shortcutHint').replace('{keys}', String(settingsShortcut)))))
+              h(ActionRow, { onClick: () => { setOpen(null); toggleSidebar() } }, t('rail.expand'))))
         }
         return null
       }
@@ -814,133 +787,29 @@ window.__ModuleLoader__.load({
       }, icon))
 
       // ------------------------------------------------------------------ rail --
-      if (collapsed && drawer !== true) {
-        return h('div', { className: 'dsr-root' },
-          h('nav', { className: 'dsr-rail', 'aria-label': t('rail.label') },
-            h('div', { className: 'dsr-rail-top' },
-              railEntry('workspace', t('rail.workspace'), h(IconWorkspace, { size: 20 })),
-              railEntry('tasks', t('rail.tasks'), h(IconTasks, { size: 20 }), activePanelId === 'schedules'),
-              railEntry('plugins', t('rail.plugins'), h(IconPlugins, { size: 20 }), activePanelId === 'plugins'),
-              railEntry('more', t('rail.more'), h(IconMore, { size: 20 }))),
-            h('div', { className: 'dsr-rail-spacer' }),
-            h('div', {
-              onPointerEnter: (event) => scheduleOpen('account', event),
-              onPointerLeave: scheduleClose,
-            }, h('button', {
-              type: 'button',
-              className: 'dsr-rail-btn',
-              'aria-label': t('rail.account'),
-              'data-dsr-open': open === 'account' ? 'true' : undefined,
-              onFocus: (event) => scheduleOpen('account', event),
-              onClick: () => { setOpen(null); toggleSidebar() },
-            }, h('span', { className: 'dsr-avatar-dot', 'aria-hidden': true }, 'AI')))),
-          renderFlyout())
-      }
-
-      // ------------------------------------------------------------------ wide --
-      // Two expanded layouts share one branch point:
-      //   native  — ui-sidebar is disabled, so this registration owns the holes
-      //             and renders the shipped workspace browser unchanged.
-      //   managed — ui-sidebar still declares the holes, so the list is drawn
-      //             here with the pinned / project / recent grouping.
-      const nativeMode = typeof renderSlot === 'function'
-      /** Workspace rows with their own sessions directly beneath. */
-      const workspaceBlock = (rows, pinnedSection) => rows.map((row) => {
-        const sessionsOfRow = workspaceSessions(row, sessions, archivedIds)
-        return h('div', { key: `${pinnedSection === true ? 'p' : 'n'}-${row.id}` },
-          h('div', { className: 'dsr-row-wrap', 'data-pinned': pinnedSection === true ? 'true' : undefined },
-            h('button', {
-              type: 'button',
-              className: 'dsr-ws',
-              onClick: () => { Promise.resolve(openWorkspace(row.id)).catch(() => {}) },
-            },
-            h('span', { className: 'dsr-ws-icon' }, h(IconDot)),
-            h('span', { className: 'dsr-ws-title' }, row.title),
-            h('span', { className: 'dsr-ws-count' }, String(sessionsOfRow.length))),
-            h('button', {
-              type: 'button',
-              className: 'dsr-row-action',
-              'aria-label': pinnedSection === true ? t('pin.unpin') : t('pin.pin'),
-              title: pinnedSection === true ? t('pin.unpin') : t('pin.pin'),
-              onClick: () => togglePin(row.id),
-            }, h(IconPin))),
-          sessionsOfRow.length === 0
-            ? h('div', { className: 'dsr-session' }, t('workspace.noSessions'))
-            : sessionsOfRow.map((session) => h('button', {
-              key: `s-${session.id}`,
-              type: 'button',
-              className: 'dsr-session',
-              title: session.title,
-              onClick: () => openSessionFromRail(session.id),
-            }, session.title)))
-      })
-
-      const managedList = sections.pinnedRows.length === 0 && sections.normalRows.length === 0
-        ? h(Empty, null, t('empty.workspaces'))
-        : h('div', null,
-          sections.pinnedRows.length === 0 ? null : h(Section, { title: t('section.pinned') },
-            workspaceBlock(sections.pinnedRows, true)),
-          sections.normalRows.length === 0 ? null : h(Section, { title: t('section.workspaces') },
-            workspaceBlock(sections.normalRows, false)),
-          sections.recentRows.length === 0 ? null : h(Section, { title: t('section.recent') },
-            sections.recentRows.map((row) => h('button', {
-              key: `r-${row.id}`,
-              type: 'button',
-              className: 'dsr-session',
-              onClick: () => openSessionFromRail(row.id),
-            }, `${row.title} · ${row.meta}`))))
-
-      const listBody = nativeMode
-        ? renderSlot('sidebar.workspaces', {
-          wide: true,
-          expandSidebar: () => { if (collapsed) toggleSidebar() },
-        })
-        : managedList
-
-      const footBody = nativeMode
-        ? h('div', { className: 'dsr-wide-foot' },
-          renderSlot('sidebar.settings', { wide: true }),
-          renderSlot('sidebar.footer.action', { wide: true }))
-        : h('div', { className: 'dsr-wide-foot' },
-          typeof openSettings === 'function'
-            ? h('button', {
-              type: 'button',
-              className: 'dsr-foot-btn',
-              onClick: () => { openSettings() },
-            }, h(IconGear, { size: 16 }), t('action.settings'))
-            : h('div', { className: 'dsr-hint', title: t('settings.unavailable') },
-              settingsShortcut === undefined || settingsShortcut === ''
-                ? t('settings.unavailable')
-                : t('settings.shortcutHint').replace('{keys}', String(settingsShortcut))))
-
-      return h('div', { className: 'dsr-root' },
-        h('div', { className: 'dsr-wide' },
-          h('div', { className: 'dsr-wide-brand' },
-            h('span', { className: 'dsr-wide-brand-mark' },
-              nativeMode ? renderSlot('sidebar.brand.mark', { size: 20 }) : h(IconWorkspace, { size: 18 })),
-            h('span', { className: 'dsr-wide-name' },
-              nativeMode ? renderSlot('sidebar.brand.name', {}) : 'DeepSeek Harness'),
-            // The shipped shell owned the collapse control; this registration
-            // shadows it, so the rail needs its own way back to collapsed.
-            h('button', {
-              type: 'button',
-              className: 'dsr-wide-toggle',
-              'aria-label': t('rail.collapse'),
-              title: t('rail.collapse'),
-              onClick: () => { setOpen(null); toggleSidebar() },
-            }, h(IconPanelLeft, { size: 16 }))),
-          h('button', { type: 'button', className: 'dsr-wide-new', onClick: () => startSession() },
-            h(IconPlus, { size: 16 }), t('rail.newSession')),
-          panelEntries.length === 0 ? null : h('div', { className: 'dsr-wide-panels' },
-            panelEntries.map((panel) => h('button', {
-              key: panel.id,
-              type: 'button',
-              className: 'dsr-wide-panel',
-              'aria-current': activePanelId === panel.id ? 'page' : undefined,
-              onClick: () => selectPanel(panel.id),
-            }, h(IconTasks, { size: 16 }), panel.label))),
-          h('div', { className: 'dsr-wide-list' }, listBody),
-          footBody))
+      // A portal is the only surface the host's zero-width, overflow-hidden
+      // column cannot clip, and body children inherit the host's no-drag rule;
+      // the fixed layer itself starts below the 48px window-chrome strip that
+      // holds the traffic lights and the host's own reopen controls.
+      const railNav = h('nav', { className: 'dsr-rail', 'aria-label': t('rail.label') },
+        h('div', { className: 'dsr-rail-top' },
+          railEntry('workspace', t('rail.workspace'), h(IconWorkspace, { size: 20 })),
+          railEntry('tasks', t('rail.tasks'), h(IconTasks, { size: 20 }), activePanelId === 'schedules'),
+          railEntry('plugins', t('rail.plugins'), h(IconPlugins, { size: 20 }), activePanelId === 'plugins'),
+          railEntry('more', t('rail.more'), h(IconMore, { size: 20 }))),
+        h('div', { className: 'dsr-rail-spacer' }),
+        h('div', {
+          onPointerEnter: (event) => scheduleOpen('account', event),
+          onPointerLeave: scheduleClose,
+        }, h('button', {
+          type: 'button',
+          className: 'dsr-rail-btn',
+          'aria-label': t('rail.account'),
+          'data-dsr-open': open === 'account' ? 'true' : undefined,
+          onFocus: (event) => scheduleOpen('account', event),
+          onClick: () => { setOpen(null); toggleSidebar() },
+        }, h('span', { className: 'dsr-avatar-dot', 'aria-hidden': true }, 'AI'))))
+      return createPortal(h('div', { className: 'dsr-rail-float' }, railNav, renderFlyout()), document.body)
     }
 
     // ------------------------------------------------------------------ apply --
@@ -953,9 +822,9 @@ window.__ModuleLoader__.load({
        * @returns Nothing.
        */
       apply(ctx) {
-        // A Client plugin's apply runs during page boot. Any throw here can cost
-        // the user the whole navigation column, so every step is isolated: a
-        // failure is logged once and the shipped sidebar keeps rendering.
+        // A Client plugin's apply runs during page boot. Any throw here would
+        // cost the user the rail, so registration is caught and logged once; the
+        // shipped sidebar is untouched either way.
         try {
         ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-sidebar-rail: dictionaries')
         ctx.effect(() => {
@@ -967,7 +836,7 @@ window.__ModuleLoader__.load({
         }, 'dsh-sidebar-rail: styles')
 
         // Panel metadata: read the same ledger the shipped shell reads, so the
-        // expanded column and the More flyout list the real navigation entries.
+        // More flyout lists the real navigation entries.
         const panelSource = (() => {
           let snapshot = []
           const listeners = new Set()
@@ -999,10 +868,12 @@ window.__ModuleLoader__.load({
           }
         })()
 
+        // Mirrors the host `LocaleSnapshot` shape but carries only what the
+        // column needs: the active locale id, under the host's own field name.
         const localeSource = {
           getSnapshot: () => {
             const snapshot = ctx.locale.getSnapshot?.() ?? ctx.locale.getLocale?.() ?? null
-            return { id: snapshot?.id ?? snapshot?.locale ?? 'en' }
+            return { active: resolveLocaleId(snapshot) }
           },
           subscribe: (listener) => ctx.locale.subscribe(listener),
         }
@@ -1010,7 +881,6 @@ window.__ModuleLoader__.load({
         const injectProps = () => ({
           toggleSidebar: () => { ctx.layout.toggleSidebar() },
           selectPanel: (id) => { ctx.layout.selectPanel(id) },
-          startSession: (workspaceId) => { ctx.uiWorkspace.startSession(workspaceId) },
           openWorkspace: (workspaceId) => ctx.uiWorkspace.openWorkspace(workspaceId),
           openSession: (target) => { ctx.uiWorkspace.openSession(target) },
           panels: panelSource,
@@ -1023,68 +893,24 @@ window.__ModuleLoader__.load({
             const inventory = ctx.get('remote.pluginInventory')
             return inventory === undefined || typeof inventory.list !== 'function' ? null : inventory.list()
           },
-          // Only offered when a command runner really exists; otherwise the
-          // column shows the effective shortcut instead of a dead button.
-          openSettings: (() => {
-            const commands = ctx.get('commands')
-            if (commands === undefined || typeof commands.execute !== 'function') return undefined
-            return () => {
-              try { commands.execute('settings.open') } catch (error) {
-                console.warn('[dsh-sidebar-rail] open settings failed', error)
-              }
-            }
-          })(),
           fallbackText: 'Sidebar rail unavailable',
         })
 
-        // Two expanded layouts, chosen by an explicit opt-in flag rather than by
-        // probing the registry: registration order decides who declares a hole
-        // first, so a probe would race the shipped shell and could break it.
-        //
-        //   default (flag absent) — ui-sidebar still declares the seven holes,
-        //     so this registration declares nothing and draws its own list.
-        //   nativeExpanded: true  — valid only once ui-sidebar's row is
-        //     disabled; this registration then claims the holes and renders the
-        //     shipped workspace browser, brand mark and settings seat.
-        //
-        // A mis-set flag never breaks the column: the throw is caught and the
-        // managed registration retried without children.
-        const wantsNative = readStore().nativeExpanded === true
-        const nativeChildren = () => ({
-          'sidebar.brand.mark': { kind: 'single', scope: 'root' },
-          'sidebar.brand.name': { kind: 'single', scope: 'root' },
-          'sidebar.toggle.badge': { kind: 'single', scope: 'root' },
-          'sidebar.panellist.actions': { kind: 'list', scope: 'root' },
-          'sidebar.workspaces': {
-            kind: 'single',
-            scope: 'root',
-            inject: { hooks: { sectionScroller: (_standard, { useSectionScroller }) => useSectionScroller } },
-          },
-          'sidebar.settings': { kind: 'single', scope: 'root' },
-          'sidebar.footer.action': { kind: 'list', scope: 'root' },
-        })
+        // Additive only: the shipped sidebar is never replaced, so search, view
+        // options, the settings seat and the account menu stay exactly as
+        // shipped. The one state the host leaves empty is the macOS collapsed
+        // column (zero width, no rail), and that is the seat this plugin fills.
+        const registerOverlay = () => ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+          name: 'shell.overlay',
+          id: 'dsh-sidebar-rail.rail',
+          order: 10,
+          locale: NS,
+          inject: injectProps,
+        }, (props) => h(Boundary, { fallbackText: props.fallbackText }, h(RailOverlay, props))))
 
-        /**
-         * Register the column, claiming the sidebar holes only when the opt-in
-         * flag is set and the registration is legal.
-         * @returns The registration disposer.
-         */
-        const registerSidebar = () => {
-          const base = { name: 'sidebar', locale: NS, priority: -1, inject: injectProps }
-          const render = (props) => h(Boundary, { fallbackText: props.fallbackText }, h(SidebarRailRoot, props))
-          if (wantsNative) {
-            try {
-              return ctx.slots.register({ ...base, children: nativeChildren() }, render)
-            } catch (error) {
-              console.warn('[dsh-sidebar-rail] native layout unavailable, falling back', error)
-            }
-          }
-          return ctx.slots.register(base, render)
-        }
-
-        ctx.slots.inject('sidebar', () => registerSidebar())
+        ctx.effect(registerOverlay, 'dsh-sidebar-rail: rail overlay')
         } catch (error) {
-          console.error('[dsh-sidebar-rail] apply failed; leaving the shipped sidebar in place', error)
+          console.error('[dsh-sidebar-rail] apply failed; the shipped sidebar is unaffected', error)
         }
       },
     }

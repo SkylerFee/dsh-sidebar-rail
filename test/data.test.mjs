@@ -31,9 +31,9 @@ function region(name) {
 const helpers = new Function(`${region('pure-helpers')}
 ${region('pure-data')}
 return { EMPTY_SESSIONS, EMPTY_WORKSPACES, selectorHook, relativeTime, shortPath,
-  deriveSections, workspaceSessions, normalizeTasks, normalizePlugins }`)()
+  resolveLocaleId, deriveSections, normalizeTasks, normalizePlugins }`)()
 
-const { deriveSections, workspaceSessions, normalizeTasks, normalizePlugins, relativeTime, shortPath, selectorHook, EMPTY_SESSIONS } = helpers
+const { deriveSections, normalizeTasks, normalizePlugins, relativeTime, shortPath, selectorHook, resolveLocaleId, EMPTY_SESSIONS } = helpers
 
 /**
  * Build a SessionSummary-shaped row.
@@ -81,18 +81,6 @@ test('deriveSections: recent sessions are newest-first, archived/blank/subagent 
   for (const excluded of ['archived', 'blankOne', 'child']) {
     assert.ok(!ids.includes(excluded), `${excluded} must be excluded`)
   }
-})
-
-test('workspaceSessions: sorted by updatedAt, minus archived/blank/subagent', () => {
-  const workspace = { id: 'ws1', sessionIds: ['a', 'b', 'c', 'd'] }
-  const byId = {
-    a: session('a', { updatedAt: 10 }),
-    b: session('b', { updatedAt: 40 }),
-    c: session('c', { updatedAt: 20, blank: true }),
-    d: session('d', { updatedAt: 30 }),
-  }
-  const rows = workspaceSessions(workspace, { byId }, [])
-  assert.deepEqual(rows.map((r) => r.id), ['b', 'd', 'a'])
 })
 
 test('normalizeTasks: unwraps RemoteResult, keeps only active tasks, reads fallback fields', () => {
@@ -146,6 +134,20 @@ test('relativeTime: Chinese and English phrasing', () => {
   assert.equal(relativeTime(now - 5 * 60_000, 'en'), '5 min ago')
   assert.equal(relativeTime(now - 3 * 3600_000, 'zh'), '3 小时前')
   assert.equal(relativeTime(Number.NaN, 'zh'), '')
+})
+
+test('resolveLocaleId: reads the host `active` field, not a missing `id`', () => {
+  // 宿主的 LocaleSnapshot 用 active；写成 id 会静默退回英文（2026-11-04 桌面验收问题）。
+  assert.equal(resolveLocaleId({ active: 'zh' }), 'zh')
+  assert.equal(resolveLocaleId({ active: 'zh-CN', locales: [], revision: 3 }), 'zh-CN')
+  // 防御性兼容：合成快照可能只有 id / locale。
+  assert.equal(resolveLocaleId({ id: 'zh' }), 'zh')
+  assert.equal(resolveLocaleId({ locale: 'en' }), 'en')
+  // 空值、缺字段与非法输入必须回退到 en，而不是把空串当语言。
+  assert.equal(resolveLocaleId({ active: '' }), 'en')
+  assert.equal(resolveLocaleId({}), 'en')
+  assert.equal(resolveLocaleId(null), 'en')
+  assert.equal(resolveLocaleId('zh'), 'en')
 })
 
 test('shortPath: keeps two trailing segments', () => {

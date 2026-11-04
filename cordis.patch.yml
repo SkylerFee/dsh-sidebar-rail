@@ -1,5 +1,6 @@
 # dsh-sidebar-rail: Client-only bundle. The Host half is an empty `apply`;
-# the Client module (client.js) replaces the sidebar shell.
+# the Client module (client.js) adds a rail to the frame-wide `shell.overlay`
+# seat and never replaces the shipped sidebar.
 - insert:
     - id: dsh-sidebar-rail
       name: dsh-sidebar-rail
