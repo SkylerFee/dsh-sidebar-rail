@@ -31,9 +31,11 @@ function region(name) {
 const helpers = new Function(`${region('pure-helpers')}
 ${region('pure-data')}
 return { EMPTY_SESSIONS, EMPTY_WORKSPACES, selectorHook, relativeTime, shortPath,
-  resolveLocaleId, deriveSections, normalizeTasks, normalizePlugins }`)()
+  resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT,
+  deriveSections, normalizeTasks, normalizePlugins }`)()
 
-const { deriveSections, normalizeTasks, normalizePlugins, relativeTime, shortPath, selectorHook, resolveLocaleId, EMPTY_SESSIONS } = helpers
+const { deriveSections, normalizeTasks, normalizePlugins, relativeTime, shortPath, selectorHook,
+  resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT, EMPTY_SESSIONS } = helpers
 
 /**
  * Build a SessionSummary-shaped row.
@@ -148,6 +150,21 @@ test('resolveLocaleId: reads the host `active` field, not a missing `id`', () =>
   assert.equal(resolveLocaleId({}), 'en')
   assert.equal(resolveLocaleId(null), 'en')
   assert.equal(resolveLocaleId('zh'), 'en')
+})
+
+test('shouldRenderRail: macOS + collapsed + wide enough, nothing else', () => {
+  // 宽度边界：768 是「680 正文最小 + 56 轨 + 32 安全」推出的阈值。
+  assert.equal(shouldRenderRail('darwin', true, RAIL_MIN_VIEWPORT), true)
+  assert.equal(shouldRenderRail('darwin', true, RAIL_MIN_VIEWPORT + 400), true)
+  assert.equal(shouldRenderRail('darwin', true, RAIL_MIN_VIEWPORT - 1), false)
+  // 展开态交还宿主，浮轨不得出现。
+  assert.equal(shouldRenderRail('darwin', false, 1600), false)
+  // Web 宿主自带 56px 折叠轨；Windows 未验证——两者都不画，避免重复轨。
+  assert.equal(shouldRenderRail('web', true, 1600), false)
+  assert.equal(shouldRenderRail('win32', true, 1600), false)
+  // 宽度未知（NaN/undefined）时宁可不画，也不要画一条盖住正文的轨。
+  assert.equal(shouldRenderRail('darwin', true, Number.NaN), false)
+  assert.equal(shouldRenderRail('darwin', true, undefined), false)
 })
 
 test('shortPath: keeps two trailing segments', () => {

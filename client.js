@@ -76,6 +76,11 @@ window.__ModuleLoader__.load({
     const OPEN_DELAY_MS = 120
     /** Grace period before a flyout closes while the pointer crosses the gap. */
     const CLOSE_DELAY_MS = 200
+    /**
+     * Narrowest viewport that still fits the rail beside a readable column.
+     * 680 (host content floor) + 56 (rail) + 32 (breathing room both sides).
+     */
+    const RAIL_MIN_VIEWPORT = 768
     /** Give up on an optional remote call after this long; a hung Host call must
      * still end in the failure state instead of an endless "loading" line. */
     const REMOTE_TIMEOUT_MS = 5000
@@ -177,13 +182,9 @@ window.__ModuleLoader__.load({
   border-right:.5px solid var(--dsw-alias-border-l3);
   -webkit-app-region:no-drag; }
 .dsr-rail-float .dsr-rail { width:100%; }
-/* Narrow frames: a floating rail would sit on top of the conversation copy. The
-   host keeps its own reopen control in shell.leading, so hiding the rail here
-   costs no way back. */
-@media (max-width: 900px) { .dsr-rail-float { display:none; } }
 .dsr-rail-btn { display:flex; align-items:center; justify-content:center; width:36px; height:36px; padding:0;
   border:none; background:transparent; border-radius:var(--dsw-radius-sm, 8px);
-  color:var(--dsw-alias-label-tertiary); cursor:pointer;
+  color:var(--dsw-alias-label-primary); cursor:pointer;
   transition:background-color 120ms ease, color 120ms ease; }
 .dsr-rail-btn:hover, .dsr-rail-btn:focus-visible { background:var(--dsw-alias-interactive-bg-hover);
   color:var(--dsw-alias-label-primary); outline:none; }
@@ -207,7 +208,7 @@ window.__ModuleLoader__.load({
 .dsr-flyout-body { overflow-y:auto; padding:2px 6px 8px; min-height:0; }
 .dsr-flyout-foot { border-top:1px solid var(--dsw-alias-border-l1); padding:6px; }
 .dsr-section-title { padding:10px 6px 4px; font-size:11px; font-weight:600; letter-spacing:.04em;
-  text-transform:uppercase; color:var(--dsw-alias-label-secondary); }
+  text-transform:uppercase; color:var(--dsw-alias-label-primary); }
 .dsr-row { display:flex; align-items:center; gap:6px; width:100%; min-height:30px; padding:4px 6px;
   border:none; background:transparent; border-radius:var(--dsw-radius-sm, 8px); color:inherit;
   font:inherit; font-size:13px; text-align:left; cursor:pointer; }
@@ -217,20 +218,20 @@ window.__ModuleLoader__.load({
 .dsr-row-wrap:hover .dsr-row { background:transparent; }
 .dsr-row-main { display:flex; flex-direction:column; min-width:0; flex:1 1 auto; }
 .dsr-row-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.dsr-row-meta { font-size:11px; color:var(--dsw-alias-label-secondary);
+.dsr-row-meta { font-size:11px; font-weight:400; color:var(--dsw-alias-label-primary);
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dsr-row-action { display:flex; align-items:center; justify-content:center; width:22px; height:22px; flex:none;
   margin-right:4px; border:none; background:transparent; border-radius:var(--dsw-radius-sm, 8px);
-  cursor:pointer; color:var(--dsw-alias-label-tertiary); opacity:0; }
+  cursor:pointer; color:var(--dsw-alias-label-primary); opacity:0; }
 .dsr-row-wrap:hover .dsr-row-action, .dsr-row-action:focus-visible { opacity:1; }
 .dsr-row-action:hover { background:var(--dsw-alias-interactive-bg-active);
   color:var(--dsw-alias-label-primary); }
 .dsr-row-wrap[data-pinned="true"] .dsr-row-action { opacity:1; }
-.dsr-empty { padding:14px 8px; font-size:12px; color:var(--dsw-alias-label-secondary); text-align:center; }
+.dsr-empty { padding:14px 8px; font-size:12px; color:var(--dsw-alias-label-primary); text-align:center; }
 .dsr-hint { padding:4px 6px 8px; font-size:11px; line-height:1.5;
-  color:var(--dsw-alias-label-secondary); }
+  color:var(--dsw-alias-label-primary); }
 
-.dsr-fallback { padding:12px; font-size:12px; color:var(--dsw-alias-label-secondary); }
+.dsr-fallback { padding:12px; font-size:12px; color:var(--dsw-alias-label-primary); }
 `
 
     // ---------------------------------------------------------------- icons --
@@ -306,6 +307,24 @@ window.__ModuleLoader__.load({
         if (typeof value === 'string' && value !== '') return value
       }
       return 'en'
+    }
+
+    /**
+     * Decide whether the rail should be drawn for one state of the world.
+     *
+     * The rail floats over the main column, so it may only appear while the
+     * viewport can still fit a readable centre beside it (the host floors its
+     * conversation column at 680px). Narrower than that, the host's own reopen
+     * control in `shell.leading` stays available, so hiding the rail costs the
+     * user no way back.
+     * @param platform - `document.documentElement.dataset.platform`.
+     * @param collapsed - True while the host sidebar is folded.
+     * @param viewportWidth - Viewport width in CSS pixels.
+     * @returns True when the rail should be rendered.
+     */
+    function shouldRenderRail(platform, collapsed, viewportWidth) {
+      if (platform !== 'darwin' || collapsed !== true) return false
+      return Number.isFinite(viewportWidth) && viewportWidth >= RAIL_MIN_VIEWPORT
     }
 
     /**
@@ -522,6 +541,25 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Track the viewport width so the rail can drop out on narrow frames.
+     *
+     * A resize listener beats a ResizeObserver here: the decision depends on the
+     * window, not on any element the plugin owns, and the rail unmounts at the
+     * threshold so there is no box left to observe.
+     * @returns Current viewport width in CSS pixels.
+     */
+    function useViewportWidth() {
+      const [width, setWidth] = useState(() => (typeof window === 'undefined' ? 0 : window.innerWidth))
+      useEffect(() => {
+        const update = () => { setWidth(window.innerWidth) }
+        update()
+        window.addEventListener('resize', update)
+        return () => { window.removeEventListener('resize', update) }
+      }, [])
+      return width
+    }
+
+    /**
      * Overlay entry: renders the rail only in the state that needs it.
      *
      * macOS Desktop folds the column to zero width and clips it
@@ -533,8 +571,9 @@ window.__ModuleLoader__.load({
      */
     function RailOverlay(props) {
       const collapsed = useHostCollapsed()
+      const viewportWidth = useViewportWidth()
       const platform = typeof document === 'undefined' ? '' : (document.documentElement.dataset.platform ?? '')
-      if (platform !== 'darwin' || !collapsed) return null
+      if (!shouldRenderRail(platform, collapsed, viewportWidth)) return null
       return h(RailColumn, props)
     }
 

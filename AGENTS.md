@@ -6,7 +6,7 @@
 
 - `client.js` 是手写的客户端静态模块，通过 `window.__ModuleLoader__.load()` 注册，模块 ID 为 `dsh-sidebar-rail`；它不是生成文件。
 - `index.js` 是空 `apply()` 的 Host 入口；`cordis.patch.yml` 插入插件行。保持纯 Client 定位，新增服务端功能、RPC 或宿主修改前先明确任务范围。
-- `package.json` 声明 ESM、bundle patch、客户端注入与包导出；当前只有 `test` 脚本，没有构建步骤。入口、模块 ID 和清单变更必须保持一致。
+- `package.json` 声明 ESM、bundle patch、客户端注入与包导出；没有构建步骤，脚本只有 `test`（纯逻辑单测）、`check`（两个入口 `node --check` + 单测）与 `prepublishOnly`（= `check`）。入口、模块 ID 和清单变更必须保持一致。
 - 只修改本项目需要的文件。安装或启用插件、修改用户 profile，仅在任务授权包含这些操作时执行。
 
 ## 挂载与折叠检测
@@ -24,7 +24,7 @@
 
 - 轨本体用 `createPortal(document.body)` + `position: fixed`：`left: 0; top: var(--dsh-frame-top-clearance, 48px); bottom: 0; width: 56px; z-index: 60`，并显式 `-webkit-app-region: no-drag`。
 - 顶部 48px 是窗口 chrome 带（macOS 红绿灯约 x 16–68、宿主 `shell.leading` 重开控件 `left: 88px`）。调整起点、宽度或 z-index 时，必须重新验证这两处不被遮挡、点击不拖窗口。
-- 窄窗口 `max-width: 900px` 时浮轨 `display: none`，避免浮层压住正文；宿主在 `shell.leading` 保留重开入口，隐藏浮轨不得移除该兜底。
+- 是否渲染由纯函数 `shouldRenderRail(platform, collapsed, viewportWidth)` 决定（阈值 `RAIL_MIN_VIEWPORT = 768` = 680 正文最小宽 + 56 轨宽 + 32 安全），由 `window.innerWidth` + `resize` 监听驱动，不满足即不渲染组件；**不要改回 CSS 媒体查询**（阈值语义与轨的盒模型无关，且纯函数要能被单测覆盖）。宿主在 `shell.leading` 保留重开入口，窄窗不渲染不得移除该兜底。
 - **不得改宿主栅格列宽，不得用 `!important` 覆盖宿主布局或样式**：列宽由宿主按 `collapsedWidth` 与折叠动画计算，插件只做浮层。
 - 样式使用宿主主题 token：文字 `--dsw-alias-label-primary/secondary/tertiary`，悬停 `--dsw-alias-interactive-bg-hover/active`，浮层底 `--dsw-alias-bg-overlay`，边框 `--dsw-alias-border-l1/l3`，当前态 `--dsw-specific-sidebar-nav-item-active`，浮轨底色 `--dsw-specific-sidebar-fill`。圆角用 `--dsw-radius-sm/lg`、阴影用 `--dsw-shadow-lv3`（宿主 HoverCard 同款组合）；这些变量由 ui-theme 全局注入，但不在 Theme token 注册表里，所以 `cordis_inspect_query` 的 `Theme.listTokens` 查不到，不要据此判定「token 不存在」。
 - 保留 `.dsr-*` 作用域与 `<style data-dsh-sidebar-rail>` 标记，避免影响其他插件。

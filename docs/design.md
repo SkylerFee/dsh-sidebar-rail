@@ -68,7 +68,7 @@ background: var(--dsw-specific-sidebar-fill); border-right: .5px solid var(--dsw
   - 宿主自己挂在 `shell.leading` 的重开 / 新会话控件（`.leadingSeat { top: 11px; left: 88px; z-index: 15 }`，`leadingMounted = drawer || darwin && sidebarCollapsed`）。
   从 48px 起排就同时避开两者；`var(..., 48px)` 的 fallback 保证变量缺失时也不压 chrome。
 - **显式 `-webkit-app-region: no-drag`**：Electron 的 app-region 是**几何**而不是 stacking，浮轨盖住窗口拖拽带时必须自己 opt out（即便 body 级 portal 通常已继承 no-drag），否则点图标会拖窗口。
-- **窄窗口隐藏**：`@media (max-width: 900px) { .dsr-rail-float { display: none } }`。浮轨是浮层，窄窗口继续显示会压住正文；宿主在 `shell.leading` 保留了重开按钮，隐藏浮轨不损失回到侧栏的路径。（宿主 drawer 断点在 768px、自动折叠在 1024px，900 落在两者之间：drawer 档位生效时浮轨已经隐藏。）
+- **窄窗口不渲染**：判定不是 CSS 媒体查询，而是纯函数 `shouldRenderRail(platform, collapsed, viewportWidth)`（阈值 `RAIL_MIN_VIEWPORT = 768`），`RailOverlay` 用 `window.innerWidth` + `resize` 监听驱动；不满足即 `return null`，组件整体卸载。768 = 680（宿主正文最小宽）+ 56（轨宽）+ 32（两侧安全）。为什么不用 CSS：阈值语义是「正文是否还放得下」，与轨自身盒模型无关；做成纯函数还能被单测覆盖边界（`test/data.test.mjs`）。为什么不是 900：旧实现的 900 是拍的，与宿主 drawer 断点（768）无对应关系；按 680 正文可读宽推导更可解释。
 - **浮层位置**：`.dsr-flyout` 也是 `position: fixed`（portal 到 body），`width: 288px; max-height: calc(100vh - 32px)`，位置从触发按钮的 `getBoundingClientRect()` 取：`left = rect.right + 8`，`top` 夹在 `[12, innerHeight - 200]`，避免底部越界。
 
 ## 5. 为什么不改宿主列宽
@@ -98,7 +98,7 @@ background: var(--dsw-specific-sidebar-fill); border-right: .5px solid var(--dsw
 
 | 面 | z-index | 理由 |
 | --- | --- | --- |
-| 浮轨 `.dsr-rail-float` | 60 | 要盖住 overlay 层（20）与 leading seat（15）的视觉层，但不能压过 drawer 体系（70/71）——drawer 只在 <768px 生效，而浮轨 ≤900px 已 `display: none`，两者不共存 |
+| 浮轨 `.dsr-rail-float` | 60 | 要盖住 overlay 层（20）与 leading seat（15）的视觉层，但不能压过 drawer 体系（70/71）——drawer 只在 <768px 生效，而浮轨在同一阈值下已不渲染（`shouldRenderRail` 的 768），两者不共存 |
 | 浮层 `.dsr-flyout` | 2147483000（字面值） | 浮层是 body portal，要压过宿主任意表面；宿主没有提供「浮层层级」token，用极大字面值而不是 `!important` |
 
 浮轨只有 56px 宽，指针事件只落在自己的盒子里，不会挡住正文交互。
