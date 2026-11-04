@@ -1,5 +1,40 @@
 # 验证记录
 
+## 0.2.0 三项交互优化（2026-11-04，第 12 轮）
+
+需求来自用户对折叠态的反馈，逐项在真实 Desktop 复验。
+
+### 1 工作区浮层与会话跳转
+
+| 项 | 改前 | 改后 | 复验 |
+| --- | --- | --- | --- |
+| 工作区行 | 名称 + 路径副标题（两行） | 只显示名称，保留行尾置顶图钉 | ✅ 浮层内 9 个工作区均为单行名称 |
+| 点击最近会话 | 传 `{kind:'session', sessionId}` → 宿主按「无会话」处理，落到新建会话 | 传**裸 SessionId** | ✅ 点第 2 条后标题栏与正文都切到该会话 |
+| 会话选中态 | 无 | `aria-current="page"` + 宿主同款底色 | ⚠️ 见下方「未达成」 |
+
+**会话跳转根因**（源码核实）：`SessionTarget` 是 `SessionId | SubagentAddress`（`api/session-controller/.../contract/sessions.d.ts:20`），即裸字符串。旧代码传对象 → 宿主 `resolveTarget` 得到 `undefined` 且不抛错 → `selectPanel(null)` 释放原会话 → 主视图落回空态，表现为「点了变成新会话」。另修正：`openSession` 是**同步抛错**，已用 `try/catch` 而非 `.catch()`。
+
+**未达成：当前会话高亮不显示。** 判据用的是宿主自己的写法（`sessions.byId[*].retainedBy.mainView > 0`，见 `ui-workspace/tree.ts:38-41`、`ui-session/index.ts:463-469`），但在这个 Desktop `0.2.2-rc.1` 上：**宿主自己的侧栏在会话打开时同样不高亮**，且该计数读为 0。因此插件与宿主行为一致（都不高亮），属于数据源在该版本未维护，不是插件判断错误。代码里已注释记录该事实；待宿主恢复维护该计数时两侧会一起亮起。
+
+### 2 插件浮层只列用户自己的插件
+
+数据源从 `pluginInventory/list`（条目无 `official` 字段）改为 `pluginManager/listBundles`，过滤条件：`enabled === true && official !== true && installed !== false`。
+
+- ✅ 复验：浮层标题「我的插件」，列出 `@nonamelego/dsh-catppuccin`、`@skylerfee/dsh-llm-opencode-go-live`、`@skylerfee/dsh-sidebar-rail`、`dsh-better-sidebar`、`dsh-context`、`dsh-macos-restart`、`dsh-mcp-connector`、`dsh-notify-me`，**无任何 `@deepseek-ai/*` 宿主自带插件**。
+
+### 3 账号头像与浮层位置
+
+| 项 | 改前 | 改后 | 复验 |
+| --- | --- | --- | --- |
+| 头像 | 硬编码 `'AI'` 两字母 | `remote.account.getProfile` 取 `avatarUrl`；无图/失败用宿主同款人形占位 | ✅ 底部显示原生人形占位（当前未登录） |
+| 账号浮层位置 | 一律 top 对齐 + `clamp(innerHeight-200)`，头像在底部导致浮层飞到上方很远 | 账号浮层改为**底对齐**头像底边，水平间距仍 8px | ✅ 浮层紧贴头像上方展开 |
+
+账号调用按宿主 `accountClientMetadata` 同形构造 `{ version, locale, timezoneOffsetSeconds }`（`getTimezoneOffset` 符号翻转），缺 `DSH_CLIENT_VERSION` 时不发请求、直接降级占位。
+
+### 本轮验证方法
+
+`screencapture` + 像素定位图标坐标 + CGEvent 合成 `⌘B`/悬停/点击/`⌘R`；每次改动后 `npm run check`（19 项测试 + 4 条仓库规则）。
+
 ## 首发发布（2026-11-04，0.1.0）
 
 发布链路见 [ADR-0003](adr/0003-release-pipeline.md)。结论：`@skylerfee/dsh-sidebar-rail@0.1.0` 已上线为 `latest`，内容与仓库一致，tag 已推送。

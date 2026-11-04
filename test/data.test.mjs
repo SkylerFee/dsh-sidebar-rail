@@ -32,10 +32,11 @@ const helpers = new Function(`${region('pure-helpers')}
 ${region('pure-data')}
 return { EMPTY_SESSIONS, EMPTY_WORKSPACES, selectorHook, relativeTime, shortPath,
   resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT,
-  deriveSections, normalizeTasks, normalizePlugins }`)()
+  deriveSections, normalizeTasks, normalizePlugins, currentSessionId, profileAvatarUrl, accountClientMetadata }`)()
 
 const { deriveSections, normalizeTasks, normalizePlugins, relativeTime, shortPath, selectorHook,
-  resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT, EMPTY_SESSIONS } = helpers
+  resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT, currentSessionId, profileAvatarUrl,
+  accountClientMetadata, EMPTY_SESSIONS } = helpers
 
 /**
  * Build a SessionSummary-shaped row.
@@ -85,6 +86,39 @@ test('deriveSections: recent sessions are newest-first, archived/blank/subagent 
   }
 })
 
+test('currentSessionId: a covering panel clears the highlight', () => {
+  const sessions = { byId: { a: session('a', { retainedBy: { mainView: 1 } }) } }
+  // 宿主行为：非会话面板占据主区时，它自己也不高亮任何会话行。
+  assert.equal(currentSessionId(sessions, true), undefined)
+  assert.equal(currentSessionId(sessions, false), 'a')
+  // undefined（调用方没提供门控信息）时不应误清空。
+  assert.equal(currentSessionId(sessions, undefined), 'a')
+})
+
+test('deriveSections: recent rows mark the session the main view shows', () => {
+  const sessions = {
+    byId: {
+      s1: session('s1', { updatedAt: 200, retainedBy: {} }),
+      s2: session('s2', { updatedAt: 100, retainedBy: { mainView: 1 } }),
+    },
+  }
+  // 没有面板覆盖时，主视图保留的那个会话要高亮。
+  const shown = deriveSections(WORKSPACES, sessions, [], [], 'en', false)
+  assert.deepEqual(shown.recentRows.map((r) => [r.id, r.active]), [['s1', false], ['s2', true]])
+  // 有面板覆盖会话时，全部不高亮。
+  const covered = deriveSections(WORKSPACES, sessions, [], [], 'en', true)
+  assert.deepEqual(covered.recentRows.map((r) => r.active), [false, false])
+})
+
+test('deriveSections: workspace rows carry no path subtitle', () => {
+  const sections = deriveSections(WORKSPACES, { byId: {} }, [], [], 'en', undefined)
+  assert.ok(sections.normalRows.length > 0)
+  for (const row of sections.normalRows) {
+    // 路径副标题已移除，行数据里不应再有 meta。
+    assert.equal(row.meta, undefined)
+  }
+})
+
 test('normalizeTasks: unwraps RemoteResult, keeps only active tasks, reads fallback fields', () => {
   const answer = {
     ok: true,
@@ -107,25 +141,65 @@ test('normalizeTasks: tolerates bare arrays and junk in the list', () => {
   assert.deepEqual(normalizeTasks(null), [])
 })
 
-test('normalizePlugins: unwraps RemoteResult, keeps enabled rows, prefers moduleName', () => {
+test('normalizePlugins: keeps only enabled, installed, non-official bundles', () => {
+  // 数据源是 pluginManager.listBundles：official 区分宿主自带与用户安装，
+  // enabled 是用户是否启用，installed 是 profile 是否声明了它。
   const answer = {
     ok: true,
     value: {
-      managementAvailable: true,
-      entries: [
-        { entryId: 'e1', moduleName: '@scope/plugin-a', enabled: true, fiberPhase: 'active' },
-        { entryId: 'e2', moduleName: '@scope/plugin-b', enabled: false },
-        { entryId: 'e3', moduleName: '@scope/plugin-c', enabled: true, version: '1.2.3' },
+      bundles: [
+        { name: 'dsh-notify-me', official: false, enabled: true, installed: true, version: '1.17.0' },
+        { name: '@deepseek-ai/dsh-web-app', official: true, enabled: true, installed: true, version: '0.2.1-rc.5' },
+        { name: 'dsh-better-sidebar', official: false, enabled: false, installed: true },
+        { name: 'dsh-context', official: false, enabled: true, installed: false },
+        { name: 'dsh-mcp-connector', official: false, enabled: true, installed: true, version: '0.2.93' },
       ],
     },
   }
   const rows = normalizePlugins(answer)
-  assert.deepEqual(rows.map((r) => r.name), ['@scope/plugin-a', '@scope/plugin-c'])
-  assert.equal(rows[1].meta, 'v1.2.3')
+  assert.deepEqual(rows.map((r) => r.name), ['dsh-mcp-connector', 'dsh-notify-me'])
+  assert.equal(rows[0].meta, 'v0.2.93')
 })
 
 test('normalizePlugins: returns nothing for a null answer', () => {
   assert.deepEqual(normalizePlugins(null), [])
+})
+
+test('currentSessionId: the session the main view retains', () => {
+  // 与宿主 ui-workspace/tree.ts 同一判据：retainedBy.mainView > 0。
+  const sessions = {
+    byId: {
+      a: session('a', { retainedBy: {} }),
+      b: session('b', { retainedBy: { mainView: 1 } }),
+      c: session('c', { retainedBy: { mainView: 2 } }),
+    },
+  }
+  assert.equal(currentSessionId(sessions), 'b')
+  assert.equal(currentSessionId({ byId: { a: session('a') } }), undefined)
+  assert.equal(currentSessionId(null), undefined)
+  assert.equal(currentSessionId({}), undefined)
+})
+
+test('profileAvatarUrl: reads the ready profile avatar, nothing else', () => {
+  assert.equal(profileAvatarUrl({ ok: true, value: { status: 'ready', avatarUrl: 'https://x/a.png' } }),
+    'https://x/a.png')
+  // 未登录 / 未就绪 / 空 URL 都当作没有头像，交给原生占位。
+  assert.equal(profileAvatarUrl({ ok: true, value: { status: 'signed-out' } }), undefined)
+  assert.equal(profileAvatarUrl({ ok: true, value: { status: 'ready', avatarUrl: '' } }), undefined)
+  assert.equal(profileAvatarUrl({ ok: true, value: { status: 'ready', avatarUrl: '   ' } }), undefined)
+  assert.equal(profileAvatarUrl(null), undefined)
+  assert.equal(profileAvatarUrl({ ok: true, value: null }), undefined)
+})
+
+test('accountClientMetadata: host-shaped identity, null without a version', () => {
+  // 宿主 accountClientMetadata：version + locale + 时区秒（getTimezoneOffset 的符号要翻转）。
+  assert.deepEqual(accountClientMetadata('zh', '0.2.1-rc.5', -480),
+    { version: '0.2.1-rc.5', locale: 'zh', timezoneOffsetSeconds: 28800 })
+  // 缺版本就不能发请求（宿主同样 throw）。
+  assert.equal(accountClientMetadata('zh', undefined, 0), null)
+  assert.equal(accountClientMetadata('zh', '', 0), null)
+  // locale 缺失时退化为 en，而不是发空串。
+  assert.equal(accountClientMetadata('', '1.0.0', 0).locale, 'en')
 })
 
 test('relativeTime: Chinese and English phrasing', () => {

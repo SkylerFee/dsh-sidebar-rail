@@ -100,13 +100,13 @@ window.__ModuleLoader__.load({
       'section.workspaces': '项目',
       'section.recent': '最近会话',
       'section.tasks': '已创建的任务',
-      'section.plugins': '已启用插件',
+      'section.plugins': '我的插件',
       'section.panels': '其他面板',
       'pin.pin': '置顶项目',
       'pin.unpin': '取消置顶',
       'empty.workspaces': '还没有工作区',
       'empty.tasks': '还没有定时任务',
-      'empty.plugins': '没有已启用的插件',
+      'empty.plugins': '还没有安装自己的插件',
       'state.loading': '加载中…',
       'state.failed': '加载失败，可打开面板查看',
       'action.openPanel': '打开面板',
@@ -124,13 +124,13 @@ window.__ModuleLoader__.load({
       'section.workspaces': 'Projects',
       'section.recent': 'Recent sessions',
       'section.tasks': 'Scheduled tasks',
-      'section.plugins': 'Enabled plugins',
+      'section.plugins': 'My plugins',
       'section.panels': 'Other panels',
       'pin.pin': 'Pin project',
       'pin.unpin': 'Unpin project',
       'empty.workspaces': 'No workspaces yet',
       'empty.tasks': 'No scheduled tasks',
-      'empty.plugins': 'No enabled plugins',
+      'empty.plugins': 'No plugins of your own yet',
       'state.loading': 'Loading…',
       'state.failed': 'Could not load; open the panel instead',
       'action.openPanel': 'Open panel',
@@ -190,9 +190,10 @@ window.__ModuleLoader__.load({
   color:var(--dsw-alias-label-primary); outline:none; }
 .dsr-rail-btn[aria-current="page"], .dsr-rail-btn[data-dsr-open="true"] {
   background:var(--dsw-specific-sidebar-nav-item-active); color:var(--dsw-alias-label-primary); }
-.dsr-avatar-dot { display:flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:50%;
-  background:var(--dsw-alias-interactive-bg-active);
-  color:var(--dsw-alias-label-primary); font-size:11px; font-weight:600; }
+.dsr-avatar { display:flex; align-items:center; justify-content:center; width:26px; height:26px;
+  border-radius:50%; overflow:hidden;
+  background:var(--dsw-alias-interactive-bg-active); color:var(--dsw-alias-label-primary); }
+.dsr-avatar-img { width:100%; height:100%; object-fit:cover; display:block; }
 
 .dsr-flyout { position:fixed; z-index:2147483000; width:288px; max-height:calc(100vh - 32px);
   display:flex; flex-direction:column;
@@ -213,6 +214,11 @@ window.__ModuleLoader__.load({
   border:none; background:transparent; border-radius:var(--dsw-radius-sm, 8px); color:inherit;
   font:inherit; font-size:13px; text-align:left; cursor:pointer; }
 .dsr-row:hover, .dsr-row:focus-visible { background:var(--dsw-alias-interactive-bg-hover); outline:none; }
+/* The session the main view is showing. The host paints its own selected
+   session row with --dsw-alias-interactive-bg-hover (ui-workspace
+   Rows.module.css), so matching that token keeps both surfaces consistent;
+   --dsw-specific-sidebar-nav-item-active belongs to the settings nav. */
+.dsr-row[data-dsr-current="true"] { background:var(--dsw-alias-interactive-bg-hover); }
 .dsr-row-wrap { display:flex; align-items:center; border-radius:var(--dsw-radius-sm, 8px); }
 .dsr-row-wrap:hover { background:var(--dsw-alias-interactive-bg-hover); }
 .dsr-row-wrap:hover .dsr-row { background:transparent; }
@@ -257,6 +263,11 @@ window.__ModuleLoader__.load({
       h('circle', { cx: 6, cy: 12, r: 1.5, fill: 'currentColor', stroke: 'none' }),
       h('circle', { cx: 12, cy: 12, r: 1.5, fill: 'currentColor', stroke: 'none' }),
       h('circle', { cx: 18, cy: 12, r: 1.5, fill: 'currentColor', stroke: 'none' }))
+    /** Neutral user glyph for the account seat when no picture is available. */
+    const IconUser = (p) => h(Icon, p,
+      h('circle', { cx: 12, cy: 8.2, r: 3.4 }),
+      h('path', { d: 'M5 19.4c0-3 3.1-5 7-5s7 2 7 5' }))
+
     /** Small trailing pin used by workspace rows. */
     const IconPin = () => h('svg', {
       viewBox: '0 0 24 24', width: 13, height: 13, fill: 'none', stroke: 'currentColor',
@@ -369,14 +380,21 @@ window.__ModuleLoader__.load({
     // ------------------------------------------------------------ primitives --
     /**
      * One workspace/list row with an optional trailing pin action.
-     * @param props - Row content, click handler and pin affordance.
+     *
+     * `current` marks the row the main view is showing, painted with the same
+     * fill the host uses for its own selected session row. The host marks that
+     * row with `aria-selected` inside a treeitem; these rows are plain buttons,
+     * so `aria-current="page"` is the equivalent announcement here.
+     * @param props - Row content, click handler, pin affordance and current flag.
      * @returns The row element.
      */
-    function Row({ title, meta, onClick, onTogglePin, pinLabel, pinned }) {
+    function Row({ title, meta, onClick, onTogglePin, pinLabel, pinned, current }) {
       const main = h('button', {
         type: 'button',
         className: 'dsr-row',
         style: { flex: '1 1 auto', minWidth: 0, background: 'transparent' },
+        'aria-current': current === true ? 'page' : undefined,
+        'data-dsr-current': current === true ? 'true' : undefined,
         onClick,
       },
       h('span', { className: 'dsr-row-main' },
@@ -392,6 +410,30 @@ window.__ModuleLoader__.load({
           title: pinLabel,
           onClick: (event) => { event.stopPropagation(); onTogglePin() },
         }, h(IconPin)))
+    }
+
+    /**
+     * Account seat avatar.
+     *
+     * Signed in with a picture: the host's own avatar URL. Otherwise the host's
+     * fallback treatment — a neutral user glyph on the same field the shipped
+     * sidebar uses. An "AI" monogram lived here before, which read as if the
+     * plugin had its own identity rather than showing the signed-in account.
+     * @param props - Avatar URL from the account profile, when one is available.
+     * @returns The avatar element.
+     */
+    function AccountAvatar({ url }) {
+      const [broken, setBroken] = useState(false)
+      const usable = typeof url === 'string' && url !== '' && !broken
+      return h('span', { className: 'dsr-avatar', 'aria-hidden': true },
+        usable
+          ? h('img', {
+            className: 'dsr-avatar-img',
+            src: url,
+            alt: '',
+            onError: () => setBroken(true),
+          })
+          : h(IconUser, { size: 16 }))
     }
 
     /** Grouped heading inside a flyout body. */
@@ -413,15 +455,87 @@ window.__ModuleLoader__.load({
     // ---------------------------------------------------------- data adapters --
     // #region pure-data
     /**
+     * Which session is the one shown in the main view.
+     *
+     * The host answers this in `ui-workspace/tree.ts` and `ui-session`
+     * (`publishMain`) by scanning the session list for the entry the main view
+     * retains (`retainedBy.mainView > 0`), so reading the same flag keeps the
+     * rail and the shipped sidebar from disagreeing. There is no
+     * `activeSessionId` prop to read instead.
+     *
+     * Verified on Desktop 0.2.2-rc.1: while a session is open the host's own
+     * sidebar row is NOT highlighted and this flag reads 0, so the rail shows no
+     * highlight either — same source, same outcome. If a later host maintains
+     * the count again, both surfaces light up together with no change here.
+     * @param sessions - SessionListState from `useSessions`.
+     * @returns The current SessionId, or undefined when no session is shown.
+     */
+    function currentSessionId(sessions, panelCovering) {
+      // The host clears its own session highlight while another panel covers the
+      // conversation; matching that keeps the rail from claiming a session that
+      // nothing shows.
+      if (panelCovering === true) return undefined
+      const byId = sessions?.byId
+      if (byId === null || typeof byId !== 'object') return undefined
+      for (const entry of Object.values(byId)) {
+        if (entry == null || typeof entry !== 'object') continue
+        const retained = entry.retainedBy
+        const mainView = retained === null || typeof retained !== 'object' ? 0 : retained.mainView
+        if (Number.isFinite(mainView) && mainView > 0) return entry.id
+      }
+      return undefined
+    }
+
+    /**
+     * Build the identity every account call carries.
+     *
+     * The host's `accountClientMetadata` sends `{ version, locale,
+     * timezoneOffsetSeconds }`; the timezone is the rarer half — JS reports
+     * minutes west of UTC while the platform wants seconds east, hence the sign
+     * flip. Returning null when the build carries no version keeps us from
+     * calling an endpoint with a malformed identity.
+     * @param locale - Active locale id.
+     * @param version - `process.env.DSH_CLIENT_VERSION` of this client build.
+     * @param offsetMinutes - `Date#getTimezoneOffset()` for the current zone.
+     * @returns The metadata, or null when it cannot be built.
+     */
+    function accountClientMetadata(locale, version, offsetMinutes) {
+      if (typeof version !== 'string' || version === '') return null
+      return {
+        version,
+        locale: typeof locale === 'string' && locale !== '' ? locale : 'en',
+        timezoneOffsetSeconds: -Number(offsetMinutes ?? 0) * 60,
+      }
+    }
+
+    /**
+     * Pick the signed-in account's avatar URL out of a profile answer.
+     *
+     * `remote.account.getProfile` answers `RemoteResult<{ status, avatarUrl }>`;
+     * anything else means "no picture", which the rail renders as the host's
+     * own fallback rather than inventing an image.
+     * @param answer - Whatever the account remote returned.
+     * @returns An absolute image URL, or undefined when nothing is signed in.
+     */
+    function profileAvatarUrl(answer) {
+      const value = answer !== null && typeof answer === 'object' && 'value' in answer ? answer.value : answer
+      if (value === null || typeof value !== 'object') return undefined
+      if (value.status !== undefined && value.status !== 'ready') return undefined
+      const url = value.avatarUrl
+      return typeof url === 'string' && url.trim() !== '' ? url.trim() : undefined
+    }
+
+    /**
      * Split workspaces into pinned and normal rows and collect recent sessions.
      * @param items - WorkspaceView[].
      * @param sessions - SessionListState.
      * @param archivedIds - Archived session ids.
      * @param pinnedIds - Locally pinned workspace ids, most recent first.
      * @param language - Active locale id.
+     * @param panelCovering - True while a non-session panel covers the conversation.
      * @returns Pinned rows, normal rows and recent session rows.
      */
-    function deriveSections(items, sessions, archivedIds, pinnedIds, language) {
+    function deriveSections(items, sessions, archivedIds, pinnedIds, language, panelCovering) {
       const list = Array.isArray(items) ? items : []
       const pinnedRank = new Map((Array.isArray(pinnedIds) ? pinnedIds : []).map((id, index) => [id, index]))
       const archived = new Set(Array.isArray(archivedIds) ? archivedIds : [])
@@ -431,14 +545,16 @@ window.__ModuleLoader__.load({
         if (item == null) continue
         const row = {
           id: item.workspaceId,
+          // The flyout shows the workspace name only; the path subtitle made every
+          // row two lines tall and repeated information the name already carried.
           title: item.title ?? shortPath(item.path) ?? String(item.workspaceId),
-          meta: shortPath(item.path),
           sessionIds: Array.isArray(item.sessionIds) ? item.sessionIds : [],
         }
         if (pinnedRank.has(row.id)) pinnedRows.push(row)
         else normalRows.push(row)
       }
       pinnedRows.sort((a, b) => (pinnedRank.get(a.id) ?? 0) - (pinnedRank.get(b.id) ?? 0))
+      const shownSessionId = currentSessionId(sessions, panelCovering)
       const byId = sessions?.byId ?? {}
       const recentRows = []
       for (const entry of Object.values(byId)) {
@@ -450,6 +566,7 @@ window.__ModuleLoader__.load({
           title: entry.displayTitle ?? entry.title ?? String(entry.id),
           meta: relativeTime(entry.updatedAt, language),
           updatedAt: Number.isFinite(entry.updatedAt) ? entry.updatedAt : 0,
+          active: entry.id === shownSessionId,
         })
       }
       recentRows.sort((a, b) => b.updatedAt - a.updatedAt)
@@ -484,27 +601,35 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Normalize an unknown plugin inventory answer into enabled plugin rows.
-     * @param answer - Whatever the plugin inventory remote returned.
-     * @returns Enabled plugin rows.
+     * Normalize a bundle listing into the plugins the person actually added.
+     *
+     * A row survives only when the person switched it on, the profile really
+     * declares it, and the installation does not ship it (`official`). That last
+     * flag is the host's own Official/Installed split — it is why this reads
+     * `pluginManager.listBundles` instead of the Loader inventory, which has no
+     * such field. Bundles are the unit a person installs, so each row is one
+     * bundle name rather than the rows inside it.
+     * @param answer - Whatever the plugin-manager listing returned.
+     * @returns Rows for user-installed bundles that are currently enabled.
      */
     function normalizePlugins(answer) {
       const value = answer !== null && typeof answer === 'object' && 'value' in answer ? answer.value : answer
       const list = Array.isArray(value) ? value
         : Array.isArray(value?.entries) ? value.entries
           : Array.isArray(value?.items) ? value.items
-            : Array.isArray(value?.plugins) ? value.plugins
-              : Array.isArray(value?.bundles) ? value.bundles : []
+            : Array.isArray(value?.bundles) ? value.bundles : []
       const rows = []
-      for (const plugin of list) {
-        if (plugin == null) continue
-        if (plugin.enabled === false) continue
-        const name = plugin.moduleName ?? plugin.name ?? plugin.packageName ?? plugin.title ?? plugin.id ?? ''
+      for (const bundle of list) {
+        if (bundle == null || typeof bundle !== 'object') continue
+        if (bundle.enabled !== true) continue
+        if (bundle.official === true) continue
+        if (bundle.installed === false) continue
+        const name = bundle.name ?? bundle.moduleName ?? bundle.packageName ?? ''
         if (name === '') continue
-        const meta = typeof plugin.diagnostic === 'string' ? plugin.diagnostic
-          : plugin.version === undefined ? '' : `v${plugin.version}`
+        const meta = bundle.version === undefined ? '' : `v${bundle.version}`
         rows.push({ name: String(name), meta })
       }
+      rows.sort((a, b) => a.name.localeCompare(b.name))
       return rows
     }
 
@@ -588,7 +713,7 @@ window.__ModuleLoader__.load({
       const {
         toggleSidebar, selectPanel,
         panels, locale, openWorkspace, openSession, scheduleCatalog,
-        pluginInventory, useSessions, useWorkspaces, usePanelInfo, fallbackText,
+        pluginInventory, useSessions, useWorkspaces, usePanelInfo, fallbackText, accountAvatar,
       } = props
       /** Translator with a raw-key fallback when the locale face is absent. */
       const t = typeof props.t === 'function' ? props.t : (key) => String(key)
@@ -602,6 +727,14 @@ window.__ModuleLoader__.load({
       const workspaceItems = readWorkspaces((state) => state.items)
       const archivedIds = readWorkspaces((state) => state.archivedSessionIds)
       const activePanelId = readPanelInfo((info) => info?.activePanelId)
+      // A non-session panel (plugin page, schedules…) occupies the main area and
+      // covers the conversation; the host clears its own session highlight then.
+      // `conversation` is itself a registered main panel (ui-conversation applies
+      // `key: 'conversation'`), so a non-null activePanelId does NOT mean the
+      // conversation is covered — only some other panel id does. Comparing
+      // against null alone would hide the highlight while the session is visible.
+      const panelCovering = activePanelId !== null && activePanelId !== undefined
+        && activePanelId !== 'conversation'
       const panelEntries = useObservable(panels, identity)
       const language = useObservable(locale, (snapshot) => snapshot?.active ?? 'en')
 
@@ -610,14 +743,14 @@ window.__ModuleLoader__.load({
         return Array.isArray(stored) ? stored.map(String) : []
       })
       const [open, setOpen] = useState(null)
-      const [anchor, setAnchor] = useState({ top: 12, right: 56 })
+      const [anchor, setAnchor] = useState({ top: 12, bottom: 44, right: 56 })
       const [tasks, setTasks] = useState({ phase: 'idle', rows: [] })
       const [plugins, setPlugins] = useState({ phase: 'idle', rows: [] })
       const openTimer = useRef(undefined)
       const closeTimer = useRef(undefined)
       const sections = useMemo(
-        () => deriveSections(workspaceItems, sessions, archivedIds, pins, language),
-        [workspaceItems, sessions, archivedIds, pins, language],
+        () => deriveSections(workspaceItems, sessions, archivedIds, pins, language, panelCovering),
+        [workspaceItems, sessions, archivedIds, pins, language, panelCovering],
       )
 
       // Lazy remote data, loaded once per flyout opening. Two rules keep it
@@ -629,6 +762,21 @@ window.__ModuleLoader__.load({
       //   - The loaders are read through a ref: injected props are a fresh object
       //     per render, so a function identity in the deps would re-run the same
       //     effect on every render and reintroduce the bug above.
+      // The account picture is read once per mount; an absent or failed read
+      // simply leaves the neutral fallback glyph in place.
+      const [avatarUrl, setAvatarUrl] = useState(undefined)
+      const avatarAsked = useRef(false)
+      useEffect(() => {
+        if (avatarAsked.current) return undefined
+        avatarAsked.current = true
+        let live = true
+        Promise.resolve()
+          .then(() => (typeof accountAvatar === 'function' ? accountAvatar() : undefined))
+          .then((url) => { if (live && typeof url === 'string' && url !== '') setAvatarUrl(url) })
+          .catch(() => { /* fallback glyph is the failure state */ })
+        return () => { live = false }
+      }, [accountAvatar])
+
       const loaders = useRef({ scheduleCatalog, pluginInventory })
       loaders.current = { scheduleCatalog, pluginInventory }
       const started = useRef({ tasks: false, plugins: false })
@@ -696,7 +844,7 @@ window.__ModuleLoader__.load({
         const rect = event?.currentTarget?.getBoundingClientRect?.()
         clearTimers()
         openTimer.current = window.setTimeout(() => {
-          if (rect !== undefined) setAnchor({ top: rect.top, right: rect.right })
+          if (rect !== undefined) setAnchor({ top: rect.top, bottom: rect.bottom, right: rect.right })
           setOpen(kind)
         }, OPEN_DELAY_MS)
       }, [clearTimers])
@@ -729,10 +877,23 @@ window.__ModuleLoader__.load({
         Promise.resolve(openWorkspace(workspaceId)).catch(() => {})
       }, [openWorkspace])
 
-      /** Open one session and dismiss the flyout. */
+      /**
+       * Reveal one existing session and dismiss the flyout.
+       *
+       * `SessionTarget` is `SessionId | SubagentAddress` — a bare id, not the
+       * `{ kind, sessionId }` object this used to pass. The host read that object
+       * as "no session named" and fell back to opening a fresh conversation,
+       * which is why clicking a recent session started a new one.
+       */
       const openSessionFromRail = useCallback((sessionId) => {
         setOpen(null)
-        Promise.resolve(openSession({ kind: 'session', sessionId })).catch(() => {})
+        try {
+          // Synchronous: the host throws on an unknown id before returning, so a
+          // promise-level catch would never see it.
+          openSession(sessionId)
+        } catch (error) {
+          console.warn('[dsh-sidebar-rail] open session failed', error)
+        }
       }, [openSession])
 
       /**
@@ -742,14 +903,19 @@ window.__ModuleLoader__.load({
        * @param foot - Optional pinned foot.
        * @returns The flyout element.
        */
-      const flyoutShell = (title, body, foot) => createPortal(h('div', {
+      const flyoutShell = (title, body, foot, bottomAligned) => createPortal(h('div', {
         className: 'dsr-flyout',
         role: 'dialog',
         'aria-label': title,
-        style: {
-          top: `${Math.max(12, Math.min(anchor.top, Math.max(12, window.innerHeight - 200)))}px`,
-          left: `${anchor.right + 8}px`,
-        },
+        style: bottomAligned === true
+          // The account seat sits at the foot of the rail, so a top-aligned panel
+          // drifted far above it. Anchoring the panel's bottom edge to the seat
+          // keeps the pair together whatever the window height is.
+          ? { bottom: `${Math.max(12, window.innerHeight - anchor.bottom)}px`, left: `${anchor.right + 8}px` }
+          : {
+            top: `${Math.max(12, Math.min(anchor.top, Math.max(12, window.innerHeight - 200)))}px`,
+            left: `${anchor.right + 8}px`,
+          },
         onPointerEnter: cancelClose,
         onPointerLeave: scheduleClose,
       },
@@ -787,6 +953,7 @@ window.__ModuleLoader__.load({
               key: `recent-${row.id}`,
               title: row.title,
               meta: row.meta,
+              current: row.active === true,
               onClick: () => openSessionFromRail(row.id),
             })))
           return flyoutShell(t('rail.workspace'), body, foot)
@@ -840,7 +1007,8 @@ window.__ModuleLoader__.load({
           return flyoutShell(t('rail.account'),
             h('div', null,
               h('div', { className: 'dsr-hint' }, t('account.hint')),
-              h(ActionRow, { onClick: () => { setOpen(null); toggleSidebar() } }, t('rail.expand'))))
+              h(ActionRow, { onClick: () => { setOpen(null); toggleSidebar() } }, t('rail.expand'))),
+            undefined, true)
         }
         return null
       }
@@ -886,7 +1054,7 @@ window.__ModuleLoader__.load({
           'data-dsr-open': open === 'account' ? 'true' : undefined,
           onFocus: (event) => scheduleOpen('account', event),
           onClick: () => { setOpen(null); toggleSidebar() },
-        }, h('span', { className: 'dsr-avatar-dot', 'aria-hidden': true }, 'AI'))))
+        }, h(AccountAvatar, { url: avatarUrl }))))
       return createPortal(h('div', { className: 'dsr-rail-float' }, railNav, renderFlyout()), document.body)
     }
 
@@ -967,9 +1135,31 @@ window.__ModuleLoader__.load({
             const remote = ctx.get('remote.schedule')
             return remote === undefined || typeof remote.catalog !== 'function' ? null : remote.catalog()
           },
+          // The rail lists what the person installed and switched on, so it reads
+          // the bundle listing rather than the Loader inventory: only a bundle
+          // carries `official`, which is what separates the host's own plugins
+          // from the user's (the inventory exposes just moduleName/enabled).
           pluginInventory: async () => {
-            const inventory = ctx.get('remote.pluginInventory')
-            return inventory === undefined || typeof inventory.list !== 'function' ? null : inventory.list()
+            const manager = ctx.get('remote.pluginManager')
+            return manager === undefined || typeof manager.listBundles !== 'function' ? null : manager.listBundles()
+          },
+          // The account seat shows the host's own avatar, so read the profile the
+          // host's sidebar reads. Failures degrade to the neutral fallback glyph.
+          accountAvatar: async () => {
+            const account = ctx.get('remote.account')
+            if (account === undefined || typeof account.getProfile !== 'function') return undefined
+            const metadata = accountClientMetadata(
+              resolveLocaleId(ctx.locale.getSnapshot?.() ?? null),
+              typeof process === 'undefined' ? undefined : process.env?.DSH_CLIENT_VERSION,
+              new Date().getTimezoneOffset(),
+            )
+            if (metadata === null) return undefined
+            try {
+              return profileAvatarUrl(await account.getProfile(metadata))
+            } catch (error) {
+              console.warn('[dsh-sidebar-rail] account profile unavailable', error)
+              return undefined
+            }
           },
           fallbackText: 'Sidebar rail unavailable',
         })

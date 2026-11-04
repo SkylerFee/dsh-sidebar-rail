@@ -26,3 +26,15 @@
 `shell.overlay` 槽——ui-layout 声明的 frame 级 `list` 槽，宿主用来放全局浮动表面（toast、菜单、本插件的轨）。条目自带 `id`、`order`，彼此并列而非替换。
 
 关键含义：注册进这个座位是**增量**的，不需要声明 `children`，也不会抢占宿主已有的 UI。轨就挂在这里（`id: 'dsh-sidebar-rail.rail'`）。
+
+## 我的插件 my plugins
+
+插件浮层里列出的条目：**用户自己安装并启用**的 bundle。判据是宿主 bundle 列表里的 `official !== true && enabled && installed`，与包名 scope 无关——官方发布的可选 bundle 也算「不是我的」。
+
+数据源必须是 `pluginManager/listBundles`（只有它带 `official`）；`pluginInventory/list` 是 Loader 条目视图，没有这个字段。
+
+## 当前会话 current session
+
+主视图正在显示的那个会话。宿主在 `ui-session` 与 `ui-workspace` 里都用 `retainedBy.mainView > 0` 判定，插件跟随同一判据，避免两个界面各说各话。
+
+注意：这个计数由宿主维护，插件不自己 `retain(source:'mainView')` 造选中态。Desktop `0.2.2-rc.1` 上实测该计数在读时为 0（宿主侧栏同样不高亮），此时插件也不高亮——**两边一起不亮**是正确的一致行为。
