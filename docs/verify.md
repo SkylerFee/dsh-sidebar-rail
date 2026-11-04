@@ -52,6 +52,19 @@
 
 遗留：profile 里仍保留旧的 `dsh-sidebar-rail` 依赖键（与 scoped 键指向同一目录）。它已不被任何 bundle 引用，若需清理可执行 `plugin_manager action: remove_bundle target: dsh-sidebar-rail`（或手改 profile 的 `dependencies` 后重装依赖）；本轮未动，避免误伤正在使用的 scoped 安装。
 
+### 干净重装（2026-11-04，用户先移除旧安装）
+
+用户把原插件从 Desktop profile 移走（依赖键与 bundles 均已清空），随后按本地路径重新安装：
+
+| 项 | 结果 |
+| --- | --- |
+| `plugin_manager install_bundle target=<本仓库绝对路径>` | ✅ `application: applied`、`bundle: @skylerfee/dsh-sidebar-rail`、`version: 0.1.0`、`warnings: []` |
+| profile 依赖 | ✅ 只有 `@skylerfee/dsh-sidebar-rail => link:<本仓库>`，无旧键 |
+| `dsh.profile.bundles` | ✅ `['@skylerfee/dsh-sidebar-rail']`（启用） |
+| 宿主行解析 | ✅ `host/Config.listConfigs name=@skylerfee/dsh-sidebar-rail` → `include:dsh-sidebar-rail` |
+| 客户端注册 | ⏳ 安装后未重载页面，`shell.overlay` 占用者中尚无 `dsh-sidebar-rail.rail`；需重载渲染进程才会加载 client bundle |
+| 残留 | `node_modules/dsh-sidebar-rail` 仍有一个孤立符号链接（无依赖记录引用它），不影响 scoped 解析 |
+
 ### 待界面复验
 
 第 9 轮报告的详情页元数据错误按前述根因已修（声明 `icon` + 命名对齐两条都到位），但**本会话未在真实界面复验**；需在 Desktop 插件详情页确认错误消失、浮轨仍正常。
