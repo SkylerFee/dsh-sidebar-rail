@@ -31,11 +31,30 @@
 
 `npm run check` 通过（仓库规则 + 两入口语法 + 12 项单测）。
 
-### 仍未处理（需授权）
+### 命名对齐（已执行，2026-11-04）
 
-`cordis.patch.yml` 的行 `name` 仍是 `dsh-sidebar-rail`，而 scoped 插件的惯例是写完整包名（对照 `@nonamelego/dsh-catppuccin`、`@skylerfee/dsh-llm-opencode-go-live`）。改成 scoped 名后，**当前 profile 的旧安装键会解析不到**，必须同时按新名字重装，否则插件加载失败。这属于修改用户 profile，未在本轮执行。
+对齐到 scoped 包名，三处一起改：
 
-在本轮修复后，详情页的元数据错误应当消失（仍待在真实界面复验一次）。
+| 位置 | 改前 | 改后 |
+| --- | --- | --- |
+| `package.json` `name` | `dsh-sidebar-rail` | `@skylerfee/dsh-sidebar-rail`（第 8 轮已改） |
+| `cordis.patch.yml` 行 `name` | `dsh-sidebar-rail` | `@skylerfee/dsh-sidebar-rail`（本轮） |
+| Desktop profile 安装键 | `dsh-sidebar-rail`（`link:`） | `@skylerfee/dsh-sidebar-rail`（`link:`，本轮重装） |
+
+按 scoped 插件惯例写作完整包名（对照 `@nonamelego/dsh-catppuccin`、`@skylerfee/dsh-llm-opencode-go-live`）。
+
+重装结果：
+
+- `plugin_manager install_bundle` 返回 `application: applied`、`bundle: @skylerfee/dsh-sidebar-rail`、`version: 0.1.0`、`warnings: []`。
+- profile 的 `dsh.profile.bundles` 现为 `['@skylerfee/dsh-sidebar-rail']`；`node_modules/@skylerfee/dsh-sidebar-rail` 为指向本仓库的符号链接。
+- 宿主侧确认行已生效：`host/Config.listConfigs name=@skylerfee/dsh-sidebar-rail` 返回 `include:dsh-sidebar-rail`（`status: absent`，本插件无配置项，属正常）。
+- pnpm 对 `link:` 安装提示「peerDependencies 不会从目标 node_modules 解析」——本插件的 peer 只用于宿主的兼容性声明，运行时能力全部由宿主注入，因此不影响加载。
+
+遗留：profile 里仍保留旧的 `dsh-sidebar-rail` 依赖键（与 scoped 键指向同一目录）。它已不被任何 bundle 引用，若需清理可执行 `plugin_manager action: remove_bundle target: dsh-sidebar-rail`（或手改 profile 的 `dependencies` 后重装依赖）；本轮未动，避免误伤正在使用的 scoped 安装。
+
+### 待界面复验
+
+第 9 轮报告的详情页元数据错误按前述根因已修（声明 `icon` + 命名对齐两条都到位），但**本会话未在真实界面复验**；需在 Desktop 插件详情页确认错误消失、浮轨仍正常。
 
 ## 独立 Desktop 复验（2026-11-04，第 9 轮）
 

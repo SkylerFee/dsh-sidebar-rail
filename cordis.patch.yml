@@ -3,4 +3,4 @@
 # seat and never replaces the shipped sidebar.
 - insert:
     - id: dsh-sidebar-rail
-      name: dsh-sidebar-rail
+      name: '@skylerfee/dsh-sidebar-rail'
