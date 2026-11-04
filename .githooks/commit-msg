@@ -1,0 +1,24 @@
+#!/bin/sh
+# 校验 conventional commits：feat|fix|docs|chore|refactor|test|perf|build|ci|style|revert
+# 允许可选 scope，如 fix(rail): ...；merge 提交放行。
+set -e
+file=$1
+subject=$(head -n 1 "$file")
+
+case "$subject" in
+  Merge\ *|Revert\ *) exit 0 ;;
+esac
+
+pattern='^(feat|fix|docs|chore|refactor|test|perf|build|ci|style|revert)(\([a-z0-9-]+\))?!?: .+'
+if printf '%s' "$subject" | grep -Eq "$pattern"; then
+  exit 0
+fi
+
+cat >&2 <<MSG
+提交信息不符合 conventional commits：
+  $subject
+
+可用前缀：feat fix docs chore refactor test perf build ci style revert
+示例：feat: gate the rail on viewport width / fix(rail): keep flyout open
+MSG
+exit 1

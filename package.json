@@ -70,7 +70,8 @@
   },
   "scripts": {
     "test": "node --test test/data.test.mjs",
-    "check": "node --check client.js && node --check index.js && npm test",
-    "prepublishOnly": "npm run check"
+    "check": "node scripts/check.mjs && node --check client.js && node --check index.js && npm test",
+    "prepublishOnly": "npm run check",
+    "hooks:install": "git config core.hooksPath .githooks && echo 'git hooks enabled (core.hooksPath=.githooks)'"
   }
 }
