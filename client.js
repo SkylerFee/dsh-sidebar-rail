@@ -541,7 +541,7 @@ window.__ModuleLoader__.load({
         collapsed, drawer, toggleSidebar, selectPanel, startSession,
         panels, locale, openWorkspace, openSession, scheduleCatalog,
         pluginInventory, openSettings, useSessions, useWorkspaces, usePanelInfo,
-        fallbackText,
+        renderSlot, fallbackText,
       } = props
       /** Translator with a raw-key fallback when the locale face is absent. */
       const t = typeof props.t === 'function' ? props.t : (key) => String(key)
