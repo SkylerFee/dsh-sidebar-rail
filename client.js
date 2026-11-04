@@ -101,6 +101,7 @@ window.__ModuleLoader__.load({
       'action.openPanel': '打开面板',
       'action.settings': '设置',
       'settings.unavailable': '请展开侧栏后从底部进入设置',
+      'settings.shortcutHint': '设置：按 {keys} 打开',
       'account.hint': '账号信息与用量由设置中的账号页提供。',
       'workspace.noSessions': '暂无会话',
     }
@@ -131,6 +132,7 @@ window.__ModuleLoader__.load({
       'action.openPanel': 'Open panel',
       'action.settings': 'Settings',
       'settings.unavailable': 'Expand the sidebar to reach Settings at its foot',
+      'settings.shortcutHint': 'Settings: press {keys}',
       'account.hint': 'Account and usage details live in the Settings account page.',
       'workspace.noSessions': 'No sessions',
     }
@@ -541,7 +543,7 @@ window.__ModuleLoader__.load({
         collapsed, drawer, toggleSidebar, selectPanel, startSession,
         panels, locale, openWorkspace, openSession, scheduleCatalog,
         pluginInventory, openSettings, useSessions, useWorkspaces, usePanelInfo,
-        renderSlot, fallbackText,
+        useShortcuts, renderSlot, fallbackText,
       } = props
       /** Translator with a raw-key fallback when the locale face is absent. */
       const t = typeof props.t === 'function' ? props.t : (key) => String(key)
@@ -555,6 +557,10 @@ window.__ModuleLoader__.load({
       const workspaceItems = readWorkspaces((state) => state.items)
       const archivedIds = readWorkspaces((state) => state.archivedSessionIds)
       const activePanelId = readPanelInfo((info) => info?.activePanelId)
+      const readShortcuts = selectorHook(useShortcuts, [])
+      const settingsShortcut = readShortcuts((rows) => (Array.isArray(rows)
+        ? rows.find((row) => row?.id === 'settings.open')?.keys
+        : undefined))
       const panelEntries = useObservable(panels, identity)
       const language = useObservable(locale, (snapshot) => snapshot?.id ?? 'en')
 
@@ -770,9 +776,14 @@ window.__ModuleLoader__.load({
           return flyoutShell(t('rail.account'),
             h('div', null,
               h('div', { className: 'dsr-hint' }, t('account.hint')),
-              h(ActionRow, {
-                onClick: () => { setOpen(null); if (!openSettings()) window.alert(t('settings.unavailable')) },
-              }, t('action.settings'))))
+              typeof openSettings === 'function'
+                ? h(ActionRow, {
+                  onClick: () => { setOpen(null); openSettings() },
+                }, t('action.settings'))
+                : h('div', { className: 'dsr-hint' },
+                  settingsShortcut === undefined || settingsShortcut === ''
+                    ? t('settings.unavailable')
+                    : t('settings.shortcutHint').replace('{keys}', String(settingsShortcut)))))
         }
         return null
       }
@@ -885,11 +896,16 @@ window.__ModuleLoader__.load({
           renderSlot('sidebar.settings', { wide: true }),
           renderSlot('sidebar.footer.action', { wide: true }))
         : h('div', { className: 'dsr-wide-foot' },
-          h('button', {
-            type: 'button',
-            className: 'dsr-foot-btn',
-            onClick: () => { if (!openSettings()) window.alert(t('settings.unavailable')) },
-          }, h(IconGear, { size: 16 }), t('action.settings')))
+          typeof openSettings === 'function'
+            ? h('button', {
+              type: 'button',
+              className: 'dsr-foot-btn',
+              onClick: () => { openSettings() },
+            }, h(IconGear, { size: 16 }), t('action.settings'))
+            : h('div', { className: 'dsr-hint', title: t('settings.unavailable') },
+              settingsShortcut === undefined || settingsShortcut === ''
+                ? t('settings.unavailable')
+                : t('settings.shortcutHint').replace('{keys}', String(settingsShortcut))))
 
       return h('div', { className: 'dsr-root' },
         h('div', { className: 'dsr-wide' },
@@ -997,13 +1013,17 @@ window.__ModuleLoader__.load({
             const inventory = ctx.get('remote.pluginInventory')
             return inventory === undefined || typeof inventory.list !== 'function' ? null : inventory.list()
           },
-          openSettings: () => {
+          // Only offered when a command runner really exists; otherwise the
+          // column shows the effective shortcut instead of a dead button.
+          openSettings: (() => {
             const commands = ctx.get('commands')
-            if (commands !== undefined && typeof commands.execute === 'function') {
-              try { commands.execute('settings.open'); return true } catch { return false }
+            if (commands === undefined || typeof commands.execute !== 'function') return undefined
+            return () => {
+              try { commands.execute('settings.open') } catch (error) {
+                console.warn('[dsh-sidebar-rail] open settings failed', error)
+              }
             }
-            return false
-          },
+          })(),
           fallbackText: 'Sidebar rail unavailable',
         })
 
