@@ -151,7 +151,7 @@ test('resolveLocaleId: reads the host `active` field, not a missing `id`', () =>
 })
 
 test('shortPath: keeps two trailing segments', () => {
-  assert.equal(shortPath('/Users/liufei/Projects/repo'), '…/Projects/repo')
+  assert.equal(shortPath('/Users/example/Projects/repo'), '…/Projects/repo')
   assert.equal(shortPath('/repo'), '/repo')
   assert.equal(shortPath(''), '')
 })

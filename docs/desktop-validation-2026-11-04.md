@@ -6,7 +6,7 @@
 
 - 平台：macOS，已安装的 `/Applications/DeepSeek Harness.app`，版本和构建号均为 `0.2.1-rc.5`。
 - 页面：Desktop 原生窗口内的 `dsh-app://app/`，通过原生界面操作、截图和可访问性树检查，未使用单独启动的 Web 页面替代 Desktop。
-- 插件：`dsh-sidebar-rail@0.1.0`，源码提交 `3997c98`；来源为 `link:/Users/liufei/Projects/deepseek-harness-plugins/dsh-sidebar-rail`，已列入 Desktop profile 的 bundle 清单。
+- 插件：`dsh-sidebar-rail@0.1.0`，源码提交 `3997c98`；来源为本地 `link:` 目录安装，已列入 Desktop profile 的 bundle 清单。
 - 初始状态：插件已安装但关闭；宿主侧栏展开，界面使用中文，当前为深色外观，`@nonamelego/dsh-catppuccin` 已启用。
 - 用户授权临时启用并在验收后恢复关闭。本次只切换插件、侧栏和测试置顶，未切换 native 模式或更换主题。
 

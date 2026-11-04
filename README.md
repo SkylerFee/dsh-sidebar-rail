@@ -25,7 +25,7 @@
 
 ```
 plugin_manager  action: install_bundle
-                target: /Users/liufei/Projects/deepseek-harness-plugins/dsh-sidebar-rail
+                target: <本仓库的绝对路径>
 ```
 
 安装后**刷新页面**加载 Client 模块。卸载用 `plugin_manager action: remove_bundle`，或 `set_bundle enabled: false`。

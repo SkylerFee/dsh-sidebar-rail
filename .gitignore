@@ -1,0 +1,6 @@
+# 依赖与临时产物
+node_modules/
+tmp/
+
+# macOS
+.DS_Store
