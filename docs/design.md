@@ -96,4 +96,6 @@ SidebarRailRoot  (注册进 sidebar，priority: -1，不声明 children)
 
 由于不能声明子槽（约束 1），展开态**无法复用宿主的工作区浏览器**，改由本插件自绘列表。因此展开态保留了 DSH 的信息架构（品牌→新建→面板→列表→设置）与分组能力，但少了宿主浏览器的若干交互：搜索、Show more 折叠、拖拽排序、行内重命名/Fork/归档菜单。
 
-**升级路径**（若要完全还原）：把 `ui-sidebar` 这一行在 profile patch 里 `disabled: true`，使它的声明消失，本插件即可声明并渲染 `sidebar.workspaces`，直接复用宿主浏览器。代价是需要同时接管 `shell.leading` 等座位，风险更高，故 v1 不做。
+**升级路径已实现为可选项**：把 `ui-sidebar` 这一行在 profile patch 里 `disabled: true`，并在 `localStorage` 打开 `nativeExpanded`，本插件即声明并渲染 `sidebar.workspaces`，直接复用宿主浏览器。开关未开或声明冲突时自动退回 managed 布局（catch 兜底）。操作步骤与取舍见 `docs/native-mode.md`。
+
+为什么不用自动探测：注册顺序决定谁先声明子槽，探测 `sidebar.workspaces` 是否已声明会与宿主外壳竞态——若本插件先注册就会抢先声明、反而把原装侧栏撞挂。故采用显式开关。

@@ -82,6 +82,7 @@ window.__ModuleLoader__.load({
       'rail.more': '更多',
       'rail.account': '账号与设置',
       'rail.expand': '展开侧栏',
+      'rail.collapse': '收起侧栏',
       'rail.newSession': '新会话',
       'section.pinned': '置顶项目',
       'section.workspaces': '项目',
@@ -111,6 +112,7 @@ window.__ModuleLoader__.load({
       'rail.more': 'More',
       'rail.account': 'Account and settings',
       'rail.expand': 'Expand sidebar',
+      'rail.collapse': 'Collapse sidebar',
       'rail.newSession': 'New session',
       'section.pinned': 'Pinned projects',
       'section.workspaces': 'Projects',
@@ -222,6 +224,11 @@ window.__ModuleLoader__.load({
   font-size:14px; font-weight:600; overflow:hidden; }
 .dsr-wide-brand-mark { display:flex; align-items:center; justify-content:center; width:24px; height:24px; flex:none; }
 .dsr-wide-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dsr-wide-toggle { display:flex; align-items:center; justify-content:center; width:26px; height:26px; flex:none;
+  margin-left:auto; padding:0; border:none; background:transparent;
+  border-radius:var(--dsw-radius-sm, 6px); color:var(--dsw-alias-text-tertiary, #94a3b8); cursor:pointer; }
+.dsr-wide-toggle:hover { background:var(--dsw-alias-bg-secondary, rgba(120,130,150,.14));
+  color:var(--dsw-alias-text-primary, #0f172a); }
 .dsr-wide-new { display:flex; align-items:center; gap:8px; width:100%; height:34px; margin:4px 0 6px;
   padding:0 8px; border:1px solid var(--dsw-alias-border-subtle, rgba(120,130,150,.22));
   background:transparent; border-radius:var(--dsw-radius-md, 8px);
@@ -286,6 +293,10 @@ window.__ModuleLoader__.load({
       h('path', { d: 'M12 3.6v2.2M12 18.2v2.2M4.9 7.8l1.9 1.1M17.2 15.1l1.9 1.1M4.9 16.2l1.9-1.1M17.2 8.9l1.9-1.1' }))
     const IconDot = () => h('svg', { viewBox: '0 0 8 8', width: 8, height: 8, 'aria-hidden': true },
       h('circle', { cx: 4, cy: 4, r: 3, fill: 'currentColor' }))
+    /** Collapse affordance for the expanded column. */
+    const IconPanelLeft = (p) => h(Icon, p,
+      h('rect', { x: 3.5, y: 4.5, width: 17, height: 15, rx: 2.5 }),
+      h('path', { d: 'M9.5 4.5v15' }))
     /** Small trailing pin used by workspace rows. */
     const IconPin = () => h('svg', {
       viewBox: '0 0 24 24', width: 13, height: 13, fill: 'none', stroke: 'currentColor',
@@ -810,6 +821,12 @@ window.__ModuleLoader__.load({
       }
 
       // ------------------------------------------------------------------ wide --
+      // Two expanded layouts share one branch point:
+      //   native  — ui-sidebar is disabled, so this registration owns the holes
+      //             and renders the shipped workspace browser unchanged.
+      //   managed — ui-sidebar still declares the holes, so the list is drawn
+      //             here with the pinned / project / recent grouping.
+      const nativeMode = typeof renderSlot === 'function'
       /** Workspace rows with their own sessions directly beneath. */
       const workspaceBlock = (rows, pinnedSection) => rows.map((row) => {
         const sessionsOfRow = workspaceSessions(row, sessions, archivedIds)
@@ -841,11 +858,55 @@ window.__ModuleLoader__.load({
             }, session.title)))
       })
 
+      const managedList = sections.pinnedRows.length === 0 && sections.normalRows.length === 0
+        ? h(Empty, null, t('empty.workspaces'))
+        : h('div', null,
+          sections.pinnedRows.length === 0 ? null : h(Section, { title: t('section.pinned') },
+            workspaceBlock(sections.pinnedRows, true)),
+          sections.normalRows.length === 0 ? null : h(Section, { title: t('section.workspaces') },
+            workspaceBlock(sections.normalRows, false)),
+          sections.recentRows.length === 0 ? null : h(Section, { title: t('section.recent') },
+            sections.recentRows.map((row) => h('button', {
+              key: `r-${row.id}`,
+              type: 'button',
+              className: 'dsr-session',
+              onClick: () => openSessionFromRail(row.id),
+            }, `${row.title} · ${row.meta}`))))
+
+      const listBody = nativeMode
+        ? renderSlot('sidebar.workspaces', {
+          wide: true,
+          expandSidebar: () => { if (collapsed) toggleSidebar() },
+        })
+        : managedList
+
+      const footBody = nativeMode
+        ? h('div', { className: 'dsr-wide-foot' },
+          renderSlot('sidebar.settings', { wide: true }),
+          renderSlot('sidebar.footer.action', { wide: true }))
+        : h('div', { className: 'dsr-wide-foot' },
+          h('button', {
+            type: 'button',
+            className: 'dsr-foot-btn',
+            onClick: () => { if (!openSettings()) window.alert(t('settings.unavailable')) },
+          }, h(IconGear, { size: 16 }), t('action.settings')))
+
       return h('div', { className: 'dsr-root' },
         h('div', { className: 'dsr-wide' },
           h('div', { className: 'dsr-wide-brand' },
-            h('span', { className: 'dsr-wide-brand-mark' }, h(IconWorkspace, { size: 18 })),
-            h('span', { className: 'dsr-wide-name' }, 'DeepSeek Harness')),
+            h('span', { className: 'dsr-wide-brand-mark' },
+              nativeMode ? renderSlot('sidebar.brand.mark', { size: 20 }) : h(IconWorkspace, { size: 18 })),
+            h('span', { className: 'dsr-wide-name' },
+              nativeMode ? renderSlot('sidebar.brand.name', {}) : 'DeepSeek Harness'),
+            // The shipped shell owned the collapse control; this registration
+            // shadows it, so the rail needs its own way back to collapsed.
+            h('button', {
+              type: 'button',
+              className: 'dsr-wide-toggle',
+              'aria-label': t('rail.collapse'),
+              title: t('rail.collapse'),
+              onClick: () => { setOpen(null); toggleSidebar() },
+            }, h(IconPanelLeft, { size: 16 }))),
           h('button', { type: 'button', className: 'dsr-wide-new', onClick: () => startSession() },
             h(IconPlus, { size: 16 }), t('rail.newSession')),
           panelEntries.length === 0 ? null : h('div', { className: 'dsr-wide-panels' },
@@ -856,27 +917,8 @@ window.__ModuleLoader__.load({
               'aria-current': activePanelId === panel.id ? 'page' : undefined,
               onClick: () => selectPanel(panel.id),
             }, h(IconTasks, { size: 16 }), panel.label))),
-          h('div', { className: 'dsr-wide-list' },
-            sections.pinnedRows.length === 0 && sections.normalRows.length === 0
-              ? h(Empty, null, t('empty.workspaces'))
-              : h('div', null,
-                sections.pinnedRows.length === 0 ? null : h(Section, { title: t('section.pinned') },
-                  workspaceBlock(sections.pinnedRows, true)),
-                sections.normalRows.length === 0 ? null : h(Section, { title: t('section.workspaces') },
-                  workspaceBlock(sections.normalRows, false)),
-                sections.recentRows.length === 0 ? null : h(Section, { title: t('section.recent') },
-                  sections.recentRows.map((row) => h('button', {
-                    key: `r-${row.id}`,
-                    type: 'button',
-                    className: 'dsr-session',
-                    onClick: () => openSessionFromRail(row.id),
-                  }, `${row.title} · ${row.meta}`))))),
-          h('div', { className: 'dsr-wide-foot' },
-            h('button', {
-              type: 'button',
-              className: 'dsr-foot-btn',
-              onClick: () => { if (!openSettings()) window.alert(t('settings.unavailable')) },
-            }, h(IconGear, { size: 16 }), t('action.settings')))))
+          h('div', { className: 'dsr-wide-list' }, listBody),
+          footBody))
     }
 
     // ------------------------------------------------------------------ apply --
@@ -965,14 +1007,52 @@ window.__ModuleLoader__.load({
           fallbackText: 'Sidebar rail unavailable',
         })
 
-        // `children` is deliberately omitted: ui-sidebar already declared those
-        // holes, and re-declaring one throws. `priority: -1` wins the single slot.
-        ctx.slots.inject('sidebar', () => ctx.slots.register({
-          name: 'sidebar',
-          locale: NS,
-          priority: -1,
-          inject: injectProps,
-        }, (props) => h(Boundary, { fallbackText: props.fallbackText }, h(SidebarRailRoot, props))))
+        // Two expanded layouts, chosen by an explicit opt-in flag rather than by
+        // probing the registry: registration order decides who declares a hole
+        // first, so a probe would race the shipped shell and could break it.
+        //
+        //   default (flag absent) — ui-sidebar still declares the seven holes,
+        //     so this registration declares nothing and draws its own list.
+        //   nativeExpanded: true  — valid only once ui-sidebar's row is
+        //     disabled; this registration then claims the holes and renders the
+        //     shipped workspace browser, brand mark and settings seat.
+        //
+        // A mis-set flag never breaks the column: the throw is caught and the
+        // managed registration retried without children.
+        const wantsNative = readStore().nativeExpanded === true
+        const nativeChildren = () => ({
+          'sidebar.brand.mark': { kind: 'single', scope: 'root' },
+          'sidebar.brand.name': { kind: 'single', scope: 'root' },
+          'sidebar.toggle.badge': { kind: 'single', scope: 'root' },
+          'sidebar.panellist.actions': { kind: 'list', scope: 'root' },
+          'sidebar.workspaces': {
+            kind: 'single',
+            scope: 'root',
+            inject: { hooks: { sectionScroller: (_standard, { useSectionScroller }) => useSectionScroller } },
+          },
+          'sidebar.settings': { kind: 'single', scope: 'root' },
+          'sidebar.footer.action': { kind: 'list', scope: 'root' },
+        })
+
+        /**
+         * Register the column, claiming the sidebar holes only when the opt-in
+         * flag is set and the registration is legal.
+         * @returns The registration disposer.
+         */
+        const registerSidebar = () => {
+          const base = { name: 'sidebar', locale: NS, priority: -1, inject: injectProps }
+          const render = (props) => h(Boundary, { fallbackText: props.fallbackText }, h(SidebarRailRoot, props))
+          if (wantsNative) {
+            try {
+              return ctx.slots.register({ ...base, children: nativeChildren() }, render)
+            } catch (error) {
+              console.warn('[dsh-sidebar-rail] native layout unavailable, falling back', error)
+            }
+          }
+          return ctx.slots.register(base, render)
+        }
+
+        ctx.slots.inject('sidebar', () => registerSidebar())
       },
     }
   },

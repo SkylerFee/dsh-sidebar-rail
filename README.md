@@ -50,7 +50,7 @@ dsh-sidebar-rail/
 
 ## 已知限制
 
-1. **展开态列表由本插件自绘**。`sidebar` 槽的子槽已被 `ui-sidebar` 声明，重复声明会抛错，因此无法 `renderSlot('sidebar.workspaces')` 复用宿主浏览器——搜索、Show more、拖拽排序、行内菜单不在本版范围内。详见 `docs/design.md` §10。
+1. **展开态列表默认由本插件自绘**。`sidebar` 槽的子槽已被 `ui-sidebar` 声明，重复声明会抛错，因此默认不能 `renderSlot('sidebar.workspaces')`。若需要宿主原生的浏览器（搜索、Show more、拖拽排序、行内菜单），按 `docs/native-mode.md` 做两步可选开启。
 2. **macOS/Windows 桌面端折叠时列宽为 0**（宿主行为），图标轨不可见；这是 Web 端插件，桌面端需宿主层配合。
 3. **账号信息**在 Web 端本身不存在（宿主 `ui-settings-account` 明确 Web 无账号登录），浮层只给设置入口与说明。
 4. 定时任务 / 插件列表依赖对应 remote 服务；服务缺失或未授权时浮层降级为空态 + 打开面板。
@@ -60,3 +60,4 @@ dsh-sidebar-rail/
 - 需求与验收：`docs/PRD.md`
 - 设计与约束：`docs/design.md`
 - 验证记录：`docs/verify.md`
+- 原生展开态（可选）：`docs/native-mode.md`
