@@ -45,7 +45,8 @@ dsh-sidebar-rail/
 └─ docs/
    ├─ PRD.md            # 需求、交互规格、验收清单
    ├─ design.md         # 架构、约束、数据来源、已知偏差
-   └─ verify.md         # 验证记录（含未验证项）
+   ├─ verify.md         # 验证记录（含未验证项与单测结果）
+   └─ native-mode.md    # 可选：原生展开态开启步骤
 ```
 
 ## 已知限制
@@ -54,6 +55,14 @@ dsh-sidebar-rail/
 2. **macOS/Windows 桌面端折叠时列宽为 0**（宿主行为），图标轨不可见；这是 Web 端插件，桌面端需宿主层配合。
 3. **账号信息**在 Web 端本身不存在（宿主 `ui-settings-account` 明确 Web 无账号登录），浮层只给设置入口与说明。
 4. 定时任务 / 插件列表依赖对应 remote 服务；服务缺失或未授权时浮层降级为空态 + 打开面板。
+
+## 测试
+
+```bash
+npm test        # node --test test/data.test.mjs —— 11 个纯逻辑用例
+```
+
+覆盖分组/置顶/最近 10 条/数据归一/时间文案等纯函数行为，不涉及渲染。
 
 ## 文档
 

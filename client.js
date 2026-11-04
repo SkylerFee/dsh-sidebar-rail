@@ -46,6 +46,7 @@ window.__ModuleLoader__.load({
     /** Identity selector for whole-snapshot subscriptions. */
     const identity = (value) => value
 
+    // #region pure-helpers
     /** Fallback list state, so a missing standard hook degrades instead of throwing. */
     const EMPTY_SESSIONS = { ids: [], byId: {}, phase: 'empty', projectionsBySession: {} }
     /** Fallback workspace state for the same reason. */
@@ -341,6 +342,8 @@ window.__ModuleLoader__.load({
       return parts.length <= 2 ? path : `…/${parts.slice(-2).join('/')}`
     }
 
+    // #endregion pure-helpers
+
     // ------------------------------------------------------------ error gate --
     /**
      * Keeps one failing rail from abdicating the slot (which would silently
@@ -412,6 +415,7 @@ window.__ModuleLoader__.load({
     }
 
     // ---------------------------------------------------------- data adapters --
+    // #region pure-data
     /**
      * Split workspaces into pinned and normal rows and collect recent sessions.
      * @param items - WorkspaceView[].
@@ -531,6 +535,8 @@ window.__ModuleLoader__.load({
       }
       return rows
     }
+
+    // #endregion pure-data
 
     // ------------------------------------------------------------------ root --
     /**

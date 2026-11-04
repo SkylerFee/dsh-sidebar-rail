@@ -37,6 +37,24 @@
 
 自查方式：`node --check` + 解构/分支/重复定义的静态核对 + i18n 键集合比对（正则排除 `ctx.get(` 之类误报）。
 
+## 纯逻辑单测（第 4 轮，可复跑）
+
+`npm test`（即 `node --test test/data.test.mjs`）——**11/11 通过**。测的是 `client.js` 内用 `#region` 标记的两段纯函数，不涉及 React / DOM / 渲染，属于逻辑校验而非视觉校验。
+
+| 用例 | 覆盖的需求 |
+| --- | --- |
+| pinned workspaces lead, in pin order | 需求 c：置顶项目段在普通项目之前、按置顶顺序 |
+| normal rows keep host order | 需求 c：普通项目保持宿主顺序 |
+| recent newest-first, dropped archived/blank/subagent, capped at 10 | 需求 c：最近会话仅 10 条、按时间倒序、过滤归档/空白/子代理 |
+| workspaceSessions sorted & filtered | 展开态每个项目下挂会话的排序与过滤 |
+| normalizeTasks unwraps RemoteResult / tolerates junk | 定时任务浮层的数据归一（含 `{ok,value}` 包裹与脏数据） |
+| normalizePlugins keeps only enabled / prefers moduleName | 插件浮层"仅已启用"语义 |
+| relativeTime zh/en buckets | 中英文相对时间文案 |
+| shortPath two segments | 路径省略显示 |
+| selectorHook falls back to constant reader | 标准 props 缺失时的降级不抛错 |
+
+跑法：`cd dsh-sidebar-rail && npm test`
+
 ## 未验证（原因）
 
 | 项 | 原因 |
