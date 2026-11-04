@@ -83,11 +83,14 @@ dsh-sidebar-rail/
 ## Development
 
 ```bash
-npm test        # node --test test/data.test.mjs — 12 pure-logic cases
-npm run check   # node --check on both entries + the test run (what CI does)
+npm test               # node --test test/data.test.mjs — 12 pure-logic cases
+npm run check          # scripts/check.mjs (repo rules) + node --check on both entries + tests
+npm run hooks:install  # enable .githooks: pre-commit runs check, commit-msg enforces conventional commits
 ```
 
 The tests slice pure helpers out of `client.js` between `#region` markers, so they cover grouping, pinning order, the recent-session cap, data normalisation, relative-time wording, locale resolution and the rail's render predicate — not rendering or slot registration.
+
+`scripts/check.mjs` carries the rules a linter would own here (region markers, manifest consistency, banned patterns, i18n key parity); [CODING_STANDARDS.md](CODING_STANDARDS.md) carries the judgement calls a script cannot express, and is what a reviewer reads.
 
 ## Docs
 

@@ -85,11 +85,14 @@ dsh-sidebar-rail/
 ## 开发与测试
 
 ```bash
-npm test        # node --test test/data.test.mjs —— 12 个纯逻辑用例
-npm run check   # node --check 两个入口 + 跑测试（CI 用的就是它）
+npm test               # node --test test/data.test.mjs —— 12 个纯逻辑用例
+npm run check          # scripts/check.mjs（仓库规则）+ 两个入口 node --check + 单测
+npm run hooks:install  # 启用 .githooks：pre-commit 跑 check，commit-msg 校验 conventional commits
 ```
 
 测试从 `client.js` 的 `#region` 标记区切片，覆盖分组 / 置顶顺序 / 最近 10 条 / 数据归一 / 时间文案 / 语言解析 / 浮轨渲染判定，不涉及渲染与槽注册。
+
+能被脚本判定的规则都在 `scripts/check.mjs`（标记区、清单一致性、禁用模式、i18n 对齐）；判断类规则在 [CODING_STANDARDS.md](CODING_STANDARDS.md)，由 review 时阅读。
 
 ## 文档
 
