@@ -1,6 +1,6 @@
 # 0003 发布走 GitHub Release → OIDC trusted publishing
 
-- 状态：已采纳（2026-11-04，**尚未执行首发**）
+- 状态：已采纳（2026-11-04）；**首发 0.1.0 已人工执行**（经 npm staged publishing 批准上线），Trusted Publisher 待配置，Release 自动发布从下一个版本开始
 - 相关：`.github/workflows/publish.yml`、`package.json` `publishConfig`
 
 ## 背景
@@ -19,6 +19,15 @@
 - 版本号与 tag 不一致、或从非 main 提交发布，CI 会直接失败，发布路径只有一条。
 - **首发必须人工执行一次 `npm publish`**：npm 只能为「已存在的包」绑定 Trusted Publisher；绑定后 Release 触发才生效。
 - 本机 npm 凭据过期（`npm whoami` 401）时发布会失败，需要先 `npm login`。
+
+## 首发实录（2026-11-04）
+
+- 本机 npm CLI 为 11.12.1，`npm publish` 触发 `EOTP`（账号开启 2FA，非交互环境无法完成浏览器授权）。
+- 随后由维护者在 npm 侧以 **staged publishing** 方式提交，registry 先出现占位版 `0.0.0-stage`（描述为 "Temporary package placeholder for staged publishing"，内容仅 README + package.json）；批准后 `0.1.0` 上线，`dist-tags.latest` 指向 `0.1.0`。
+- 发布内容校验：`dist.shasum = 35db0dc628f759417886ff5fd494a0a639a72bb2`，与本地构建的 tarball 一致；解包后 10 个文件与仓库源码逐字节相同。
+- git tag `v0.1.0`（附注 tag）已推送；**未创建 GitHub Release**，避免 `publish.yml` 在「版本已存在」处失败。
+
+待办（人工，只有维护者能做）：在 npm 包设置里配置 **Trusted Publisher**（仓库 `SkylerFee/dsh-sidebar-rail` + 工作流 `publish.yml`）。配好之后，`0.2.0` 起可走 Release → OIDC 发布，无需 2FA 与 token。
 
 ## 不要做什么
 

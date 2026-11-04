@@ -1,5 +1,21 @@
 # 验证记录
 
+## 首发发布（2026-11-04，0.1.0）
+
+发布链路见 [ADR-0003](adr/0003-release-pipeline.md)。结论：`@skylerfee/dsh-sidebar-rail@0.1.0` 已上线为 `latest`，内容与仓库一致，tag 已推送。
+
+| 步骤 | 结果 |
+| --- | --- |
+| 本会话 `npm publish` | ❌ `EOTP`：账号开启 2FA，非交互执行无法完成浏览器授权 |
+| 维护者以 staged publishing 提交 | ✅ registry 先出现占位版 `0.0.0-stage`（"Temporary package placeholder for staged publishing"） |
+| 网页端批准 | ✅ `0.1.0` 上线，`dist-tags = {"latest":"0.1.0"}` |
+| 发布内容一致性 | ✅ `dist.shasum 35db0dc6…` 与本地构建一致；解包 10 个文件与仓库源码逐字节相同（LICENSE、两份 README、client.js、cordis.patch.yml、icon.svg、index.js、两份 locale、package.json） |
+| 包元数据 | ✅ `license: MIT`、`peerDependencies` 6 项、`dependencies` 0 项、`fileCount: 10`、`unpackedSize: 65964` |
+| tag | ✅ `v0.1.0` 附注 tag 已推送；未建 GitHub Release（避免 CI 重复发布） |
+| 敏感信息 | ✅ 打包内容扫描无 token/手机号/本机绝对路径 |
+
+仍需人工完成：npm 包设置里的 **Trusted Publisher**（仓库 + `publish.yml`）。配置后 `0.2.0` 起可走 Release → OIDC，无需 2FA。
+
 ## 作用域包名启动失败修复（2026-11-04，第 11 轮）
 
 结论：修正客户端工厂 ID 后，Desktop `0.2.1-rc.5` 的渲染进程启动恢复正常；插件详情显示完整包名 `@skylerfee/dsh-sidebar-rail`、组件“运行中”，且无此前的图标元数据错误。折叠轨、工作区浮层和中文相对时间均已在真实窗口复验。

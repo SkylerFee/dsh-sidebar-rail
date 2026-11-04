@@ -1,6 +1,6 @@
 # dsh-sidebar-rail
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![npm](https://img.shields.io/npm/v/%40skylerfee%2Fdsh-sidebar-rail.svg)](https://www.npmjs.com/package/@skylerfee/dsh-sidebar-rail) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 An **additive** icon rail for the [DeepSeek Harness](https://github.com/SkylerFee/deepseek-harness) sidebar on **macOS Desktop**.
 

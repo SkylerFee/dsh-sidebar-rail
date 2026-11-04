@@ -1,6 +1,6 @@
 # dsh-sidebar-rail
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![npm](https://img.shields.io/npm/v/%40skylerfee%2Fdsh-sidebar-rail.svg)](https://www.npmjs.com/package/@skylerfee/dsh-sidebar-rail) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 给 DeepSeek Harness **macOS Desktop 折叠侧栏**补一条图标轨的**增量插件**。
 
