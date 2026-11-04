@@ -14,7 +14,21 @@
 | tag | ✅ `v0.1.0` 附注 tag 已推送；未建 GitHub Release（避免 CI 重复发布） |
 | 敏感信息 | ✅ 打包内容扫描无 token/手机号/本机绝对路径 |
 
-仍需人工完成：npm 包设置里的 **Trusted Publisher**（仓库 + `publish.yml`）。配置后 `0.2.0` 起可走 Release → OIDC，无需 2FA。
+### 发布链路验证（Trusted Publisher）
+
+维护者配置 Trusted Publisher 后，用**受控重发**验证链路（不改动 npm 内容）：
+
+| 项 | 结果 |
+| --- | --- |
+| 手段 | 对已存在的 `v0.1.0` 建 GitHub Release，触发 `publish.yml`（运行 `41844630538`），预期在最后一步被 npm 的版本护栏拒绝 |
+| 通过的前置步骤 | ✅ tag 与 `package.json` 版本一致、✅ 被发布提交是 `origin/main` 祖先、✅ `npm run check`、✅ dist-tag 推导 |
+| `Publish` 步骤输出 | `npm error You cannot publish over the previously published versions: 0.1.0.` |
+| 结论 | ✅ 该错误在**认证之后**才出现，说明 OIDC 信任发布已生效；npm 未被改动 |
+| 清理 | ✅ 验证用 Release 与那次失败运行均已删除，`v0.1.0` tag 保留 |
+
+此后发布新版本的流程：改 `package.json` 版本 → 提交推送 → 建 `v<version>` Release → CI 校验后自动 OIDC 发布（无需 2FA、无需 token）。
+
+
 
 ## 作用域包名启动失败修复（2026-11-04，第 11 轮）
 

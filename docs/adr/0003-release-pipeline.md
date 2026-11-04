@@ -27,7 +27,13 @@
 - 发布内容校验：`dist.shasum = 35db0dc628f759417886ff5fd494a0a639a72bb2`，与本地构建的 tarball 一致；解包后 10 个文件与仓库源码逐字节相同。
 - git tag `v0.1.0`（附注 tag）已推送；**未创建 GitHub Release**，避免 `publish.yml` 在「版本已存在」处失败。
 
-待办（人工，只有维护者能做）：在 npm 包设置里配置 **Trusted Publisher**（仓库 `SkylerFee/dsh-sidebar-rail` + 工作流 `publish.yml`）。配好之后，`0.2.0` 起可走 Release → OIDC 发布，无需 2FA 与 token。
+Trusted Publisher 已由维护者配置，并用一次受控重发验证过：对已有 `v0.1.0` 建 Release 触发 `publish.yml`，tag 校验、main 祖先校验、`npm run check`、dist-tag 推导全部通过，最后 `npm publish` 返回
+
+```
+npm error You cannot publish over the previously published versions: 0.1.0.
+```
+
+该错误只在**认证成功之后**由 npm 的版本护栏抛出，因此可判定 OIDC 认证链路已生效；验证用的 Release 与那次失败运行均已删除，tag 保留。`0.2.0` 起可直接走 Release → OIDC 发布，无需 2FA 与 token。
 
 ## 不要做什么
 

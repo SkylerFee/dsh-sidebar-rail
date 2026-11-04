@@ -91,6 +91,8 @@ npm run hooks:install  # enable .githooks: pre-commit runs check, commit-msg enf
 
 The logic tests slice pure helpers out of `client.js` between `#region` markers to cover grouping, pinning order, the recent-session cap, data normalisation, relative-time wording, locale resolution and the rail's render predicate. A separate registration test executes the complete static script against the host loader facade and requires its factory ID to match the complete package name, including the scope. Rendering and slot registration still require Desktop validation.
 
+Releasing: bump `version`, push, then create a GitHub Release tagged `v<version>` — `publish.yml` verifies the tag, the branch and the checks, then publishes over npm OIDC trusted publishing (no token, no 2FA).
+
 `scripts/check.mjs` carries the rules a linter would own here (region markers, manifest consistency, banned patterns, i18n key parity); [CODING_STANDARDS.md](CODING_STANDARDS.md) carries the judgement calls a script cannot express, and is what a reviewer reads.
 
 ## Docs
