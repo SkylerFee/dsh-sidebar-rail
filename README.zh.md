@@ -45,7 +45,29 @@
 <a id="install"></a>
 ## 安装与启停
 
-在 DSH 对话中让助手安装 `@skylerfee/dsh-sidebar-rail`。启用插件管理工具的 profile 可调用 `plugin_manager`，参数如下；这是工具参数，不是终端命令：
+需要 DSH 的 **Desktop 或 Web 客户端**，以及可用的 profile。安装只影响当前 profile，不改动 DSH 本身。
+
+### 方式一：插件管理页（推荐）
+
+在 DSH 侧栏进入 **插件** 页，点右上角 **添加插件**，在「包名或地址」里填入后按 **安装**：
+
+```
+@skylerfee/dsh-sidebar-rail
+```
+
+该输入框接受 npm 包名、Git 仓库地址和本地目录，本插件用 npm 包名即可。安装完成后按提示重启或刷新 DSH，再确认「侧栏图标轨」处于启用状态。
+
+### 方式二：命令行
+
+```sh
+dsh plugin --profile desktop add @skylerfee/dsh-sidebar-rail
+```
+
+`dsh plugin` 会把参数转交给 profile 目录里的 pnpm；把 `desktop` 换成你实际使用的 profile 名，首次使用会自动初始化。也可以直接进 profile 目录执行 `pnpm add`。装完重启 DSH 生效。
+
+### 方式三：在对话里让助手安装
+
+启用插件管理工具的 profile 可以让助手代为安装（这是工具参数，不是终端命令）：
 
 ```json
 {
@@ -54,15 +76,19 @@
 }
 ```
 
-本地开发时，将 `target` 换成本仓库的绝对路径。安装影响当前 profile；按工具结果中的 `nextStep` 完成刷新或重启，再在插件管理页确认「侧栏图标轨」已启用、组件运行正常。
+本地开发时把 `target` 换成本仓库的绝对目录，即安装一条 `link:` 依赖，改完代码重启即可看到效果。
 
-| 操作 | `plugin_manager` 参数 |
+### 启停与卸载
+
+启停是 profile 配置层的开关，用插件管理页；命令行只能装卸包。
+
+| 操作 | 做法 |
 | --- | --- |
-| 停用 | `action: "set_bundle"`、`target: "@skylerfee/dsh-sidebar-rail"`、`enabled: false` |
-| 重新启用 | 同上，改为 `enabled: true` |
-| 卸载 | `action: "remove_bundle"`、`target: "@skylerfee/dsh-sidebar-rail"` |
+| 停用 | 插件管理页关掉「侧栏图标轨」开关（保留已装依赖，随时可再打开） |
+| 重新启用 | 打开同一个开关 |
+| 卸载 | 插件管理页进入详情页点 **卸载**，或执行 `dsh plugin --profile desktop remove @skylerfee/dsh-sidebar-rail` |
 
-也可通过宿主插件管理页的开关启停。停用或卸载后，本地偏好仍保留。
+也可以让助手调用 `plugin_manager` 的 `set_bundle`（启停）或 `remove_bundle`（卸载）。停用或卸载后，`localStorage` 里的本地偏好（置顶项目、最近会话条数）仍保留。
 
 <a id="usage"></a>
 ## 使用方法

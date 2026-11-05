@@ -45,7 +45,29 @@ Recorded Desktop checks used macOS Desktop `0.2.2-rc.1`. See `peerDependencies` 
 <a id="install"></a>
 ## Install and manage
 
-Ask the assistant in DSH to install `@skylerfee/dsh-sidebar-rail`. A profile with plugin management enabled can call `plugin_manager` with these arguments; this is a tool request, not a terminal command:
+Requires the DSH **Desktop or Web client** and a profile. Installation only affects that profile; it never modifies DSH itself.
+
+### Option 1: Plugins page (recommended)
+
+Open the **Plugins** page from the DSH sidebar, choose **Add plugin** in the top right, enter the package name in the field and press **Install**:
+
+```
+@skylerfee/dsh-sidebar-rail
+```
+
+That field accepts an npm package name, a Git repository address or a local directory; this plugin needs only the npm name. Restart or reload DSH when prompted, then confirm Sidebar rail is enabled.
+
+### Option 2: Command line
+
+```sh
+dsh plugin --profile desktop add @skylerfee/dsh-sidebar-rail
+```
+
+`dsh plugin` forwards its arguments to pnpm inside the profile directory. Replace `desktop` with the profile you actually use; a first run initializes it. You can also run `pnpm add` directly in the profile directory. Restart DSH afterwards.
+
+### Option 3: Ask the assistant
+
+A profile with plugin management enabled can install it for you (this is a tool request, not a terminal command):
 
 ```json
 {
@@ -54,15 +76,19 @@ Ask the assistant in DSH to install `@skylerfee/dsh-sidebar-rail`. A profile wit
 }
 ```
 
-For local development, replace `target` with this repository's absolute path. Installation affects the current profile. Follow the result's `nextStep` for a refresh or restart, then confirm that Sidebar rail is enabled and its component is running in the plugin manager.
+For local development, replace `target` with this repository's absolute path — that installs a `link:` dependency, so code changes appear after a restart.
 
-| Operation | `plugin_manager` arguments |
+### Disable and uninstall
+
+Enabling is a profile configuration switch and belongs to the Plugins page; the command line only installs and removes packages.
+
+| Operation | How |
 | --- | --- |
-| Disable | `action: "set_bundle"`, `target: "@skylerfee/dsh-sidebar-rail"`, `enabled: false` |
-| Enable again | Same request with `enabled: true` |
-| Uninstall | `action: "remove_bundle"`, `target: "@skylerfee/dsh-sidebar-rail"` |
+| Disable | Turn off the Sidebar rail switch on the Plugins page (the dependency stays installed, so re-enabling is instant) |
+| Enable again | Turn the same switch on |
+| Uninstall | Choose **Uninstall** on the detail page, or run `dsh plugin --profile desktop remove @skylerfee/dsh-sidebar-rail` |
 
-The host plugin manager also provides an enable switch. Local preferences remain after disabling or uninstalling the plugin.
+The assistant can also call `plugin_manager` with `set_bundle` (enable/disable) or `remove_bundle` (uninstall). Local preferences in `localStorage` (pinned projects, recent count) survive disabling or uninstalling.
 
 <a id="usage"></a>
 ## Usage
