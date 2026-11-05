@@ -6,6 +6,7 @@
 [![npm 版本](https://img.shields.io/npm/v/%40skylerfee%2Fdsh-sidebar-rail?style=flat-square&logo=npm)](https://www.npmjs.com/package/@skylerfee/dsh-sidebar-rail)
 [![macOS Desktop](https://img.shields.io/badge/platform-macOS_Desktop-000000?style=flat-square&logo=apple&logoColor=white)](#support)
 [![MIT 许可证](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
 
 给 DeepSeek Harness 的 macOS Desktop 折叠侧栏补充工作区、最近会话、定时任务、插件和账号入口。
 
