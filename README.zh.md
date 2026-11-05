@@ -1,109 +1,145 @@
+[English](README.md) | **[简体中文](README.zh.md)**
+
 # dsh-sidebar-rail
 
-[![npm](https://img.shields.io/npm/v/%40skylerfee%2Fdsh-sidebar-rail.svg)](https://www.npmjs.com/package/@skylerfee/dsh-sidebar-rail) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/SkylerFee/dsh-sidebar-rail/ci.yml?branch=main&style=flat-square&label=CI&logo=githubactions&logoColor=white)](https://github.com/SkylerFee/dsh-sidebar-rail/actions/workflows/ci.yml)
+[![npm 版本](https://img.shields.io/npm/v/%40skylerfee%2Fdsh-sidebar-rail?style=flat-square&logo=npm)](https://www.npmjs.com/package/@skylerfee/dsh-sidebar-rail)
+[![macOS Desktop](https://img.shields.io/badge/platform-macOS_Desktop-000000?style=flat-square&logo=apple&logoColor=white)](#support)
+[![MIT 许可证](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 
-给 DeepSeek Harness **macOS Desktop 折叠侧栏**补一条图标轨的**增量插件**。
+给 DeepSeek Harness 的 macOS Desktop 折叠侧栏补充工作区、最近会话、定时任务、插件和账号入口。
 
-宿主在 macOS 桌面端把侧栏折到 0 宽时不留任何轨道（`AppFrame: collapsedWidth = darwin ? 0 : 56`，列上还有 `overflow: hidden`）。本插件只在这一种状态下，在窗口左侧渲染一条 56px 图标轨（默认收起，指针靠近窗口左缘才滑出）：工作区 / 定时任务 / 插件 / 更多 四个图标 + 底部账号座位；悬停 120ms 打开浮层，离开 200ms 关闭，`Escape` 关闭。
+图标轨默认隐藏。收起宿主侧栏后，将指针移到窗口左缘的 12px 热区，就会滑出一条 56px 图标轨；悬停图标可查看浮层，点击条目即可导航。展开侧栏时，搜索、工作区树、账号菜单和设置继续使用宿主原生界面。
 
-- **增量**：不替换宿主 `sidebar` 槽、不改宿主栅格列宽、不覆盖宿主样式
-- **其他所有状态都不渲染**：展开态与 Web 端完全交给宿主
-- 工作区置顶保存在浏览器 `localStorage`；折叠状态归宿主，插件只读不写
+<a id="screenshots"></a>
+## 界面预览
 
-英文说明见 [README.md](README.md)。
+以下为 macOS Desktop 中文界面、深色外观与 Catppuccin 皮肤下的真实局部截图。工作区名称和会话标题已模糊处理；图中最近会话条数为 9，默认值仍为 5。
 
+<table>
+  <tr><th>工作区、置顶与最近会话</th><th>我的插件</th></tr>
+  <tr>
+    <td valign="top"><img src="docs/images/workspace-flyout.png" alt="折叠图标轨的工作区浮层，含置顶项目、最近会话状态和条数设置" width="330"></td>
+    <td valign="top"><img src="docs/images/plugins-flyout.png" alt="图标轨的我的插件浮层，展示用户启用的插件与版本" width="330"></td>
+  </tr>
+</table>
+
+## 导航
+
+[界面预览](#screenshots) · [安装与启停](#install) · [使用方法](#usage) · [设置与本地数据](#preferences) · [常见问题](#troubleshooting) · [开发与贡献](#development) · [详细文档](#docs)
+
+<a id="support"></a>
 ## 支持范围
 
 | 环境 / 状态 | 行为 |
 | --- | --- |
-| macOS Desktop，侧栏折叠，视口 ≥ 768px | 渲染 56px 浮轨（本插件唯一的渲染分支） |
-| macOS Desktop，侧栏折叠，视口 < 768px | 不渲染。宿主在 `shell.leading` 保留自己的重开控件，不会失去回头路 |
-| macOS Desktop，侧栏展开 | 不渲染。搜索、视图选项、添加工作区、设置座位、账号菜单全部保留为宿主原生行为 |
-| Web（任意平台） | 不渲染。宿主 Web 本来就有自己的 56px 折叠轨，插件不重复绘制 |
-| Windows / Linux | 未验证，不渲染 |
+| macOS Desktop，侧栏折叠，视口宽度 ≥ 768px | 默认隐藏图标轨，由左缘热区或键盘焦点唤出 |
+| macOS Desktop，侧栏折叠，视口宽度 < 768px | 不渲染图标轨；仍可用宿主按钮展开侧栏 |
+| macOS Desktop，侧栏展开 | 不渲染图标轨，保留原生侧栏 |
+| Web（任意平台） | 不渲染图标轨，保留宿主已有的折叠轨 |
+| Windows / Linux Desktop | 不渲染图标轨，未验证支持 |
 
-判定是一个纯函数（`test/data.test.mjs` 有边界用例）：
+已记录的真机环境为 macOS Desktop `0.2.2-rc.1`；其他宿主版本的兼容范围见 [package.json](package.json) 的 `peerDependencies`。部分新设置与余额显示尚有未验证项，见[验证记录](docs/verify.md)。源码开发与检查需要 Node.js ≥ 22.19.0，无需安装项目依赖或构建。
 
-```
-platform === 'darwin'  &&  宿主侧栏已折叠  &&  视口宽度 >= 768
-```
+<a id="install"></a>
+## 安装与启停
 
-768 = 680（宿主正文最小宽）+ 56（轨宽）+ 32（两侧安全）。
+在 DSH 对话中让助手安装 `@skylerfee/dsh-sidebar-rail`。启用插件管理工具的 profile 可调用 `plugin_manager`，参数如下；这是工具参数，不是终端命令：
 
-## 安装
-
-安装方式是 bundle patch + 客户端注入（`package.json` 的 `dsh.bundle` 与 `dsh.client`）：
-
-```
-plugin_manager  action: install_bundle
-                target: @skylerfee/dsh-sidebar-rail      # 已发布的包名
-                # 或：target: <本仓库的绝对路径>
+```json
+{
+  "action": "install_bundle",
+  "target": "@skylerfee/dsh-sidebar-rail"
+}
 ```
 
-安装后**刷新页面**加载 Client 模块。卸载用 `plugin_manager action: remove_bundle`，或 `set_bundle enabled: false`。
+本地开发时，将 `target` 换成本仓库的绝对路径。安装影响当前 profile；按工具结果中的 `nextStep` 完成刷新或重启，再在插件管理页确认「侧栏图标轨」已启用、组件运行正常。
 
-## 功能对照
-
-| 入口 | 行为 |
+| 操作 | `plugin_manager` 参数 |
 | --- | --- |
-| 工作区 | 36×36 按钮、20px 图标、均有 `aria-label`；浮层分「置顶项目 / 项目」两段，底部附最近会话 |
-| 定时任务 | `remote.schedule.catalog()`，只列未结束/未暂停的任务；失败或空态给「打开面板」 |
-| 插件 | `remote.pluginInventory.list()`，跳过显式 `enabled: false` 的条目；失败或空态给「打开面板」 |
-| 更多 | 「展开侧栏」+ 宿主 `sidebar.panellist` 的其余条目（只读订阅） |
-| 账号 | 浮层给账号说明与「展开侧栏」；账号信息与设置入口由宿主展开态侧栏提供 |
-| 置顶 | 行内图钉按钮，置顶项排前，写入 `localStorage['dsh.sidebar-rail.v1'].pinnedWorkspaceIds` |
-| 最近会话 | `updatedAt` 倒序，排除归档/空白/子代理，上限 10 条；浮层底部渲染前 5 条 |
+| 停用 | `action: "set_bundle"`、`target: "@skylerfee/dsh-sidebar-rail"`、`enabled: false` |
+| 重新启用 | 同上，改为 `enabled: true` |
+| 卸载 | `action: "remove_bundle"`、`target: "@skylerfee/dsh-sidebar-rail"` |
 
-## 目录
+也可通过宿主插件管理页的开关启停。停用或卸载后，本地偏好仍保留。
 
-```
-dsh-sidebar-rail/
-├─ client.js            # 全部 UI 逻辑（__ModuleLoader__ 静态模块）
-├─ index.js             # Host 半边（空 apply，仅供安装与展示）
-├─ cordis.patch.yml     # bundle patch，插入一行
-├─ package.json         # dsh.bundle + dsh.client 声明
-├─ locale/{en,zh}.json  # 插件管理页展示用元数据
-├─ icon.svg             # 插件图标（原创）
-├─ test/data.test.mjs   # 纯逻辑测试（从 client.js 切片）
-├─ test/client-registration.test.mjs # 静态脚本按完整包名注册的回归测试
-└─ docs/
-   ├─ PRD.md            # 需求、交互规格、验收清单
-   ├─ design.md         # 架构、约束、数据来源、已知偏差
-   ├─ verify.md         # 验证记录（含未验证项与单测结果）
-   └─ desktop-validation-2026-11-04.md
-```
+<a id="usage"></a>
+## 使用方法
 
-## 已知限制
+1. 用宿主按钮收起侧栏，将指针移到窗口左缘、顶部窗口控件下方，唤出图标轨。
+2. 在图标上停留约 120ms 打开浮层；移出后约 200ms 关闭浮层。在轨内切换图标只切换浮层。
+3. 点击条目完成导航，图标轨随导航收起；需要原生搜索、设置或工作区管理时，展开宿主侧栏。
 
-1. **轨默认隐藏，靠近才出现**。它平时滑出窗口之外，由 12px 的左边条热区或键盘焦点唤出。常驻显示会盖住会话页的首个「对话」标签——宿主折叠时不给标签行留左侧避让，只能靠不覆盖解决。原「浮轨浮在主内容之上」：宿主折叠列宽为 0 且 `overflow: hidden`，轨道只能以 `createPortal(document.body)` + `position: fixed` 浮在主内容上，无法嵌回宿主栅格。视口窄于 768px 时完全不渲染，因此不会压住正文。
-2. **顶部 48px 不渲染图标**：macOS 红绿灯（约 x 16–68）与宿主挂在 `shell.leading` 的重开 / 新会话控件（`left: 88px`）占着 `--dsh-frame-top-clearance` 那条窗口 chrome 带，浮轨从 48px 起排。
-3. **Windows / Linux 未验证**：不渲染，也不宣称支持。
-4. **置顶是插件本地概念**：宿主没有对应字段，换浏览器或清空 `localStorage` 会丢。
-5. **定时任务 / 插件列表依赖可选 remote 服务**：服务缺失、未授权或 5s 内不返回，浮层显示失败行 + 「打开面板」。
-6. **不复制账号数据**：账号信息与用量由宿主设置页提供，插件只给说明与回到宿主侧栏的动作。
-7. **不提供展开态自绘列**：替换宿主侧栏会让宿主的设置壳（`SettingsRoot`）不再挂载，导致设置整体不可达（连快捷键也打不开）。
+| 入口 | 可执行的操作 |
+| --- | --- |
+| 工作区 | 按「置顶项目 / 项目」查看工作区，行内只显示名称；点击名称切换工作区，点击图钉置顶或取消置顶 |
+| 最近会话 | 在工作区浮层底部独立滚动，按更新时间倒序显示，排除归档、空白与子代理会话；点击打开已有会话，显示相对时间及宿主提供的会话状态标识 |
+| 定时任务 | 查看未结束、未暂停的任务；点击条目或「打开面板」进入任务面板 |
+| 我的插件 | 查看自己安装并启用的插件组合包，过滤宿主内置包；点击进入插件管理面板 |
+| 更多 | 查看宿主其他面板入口，或展开原生侧栏 |
+| 账号与设置 | 显示宿主账号头像，以及可用的余额、赠金、「查询用量」「充值」链接；未登录时显示提示；并给出「展开侧栏后点左下角设置」的路径说明；登录、退出和付款由宿主或目标网页处理 |
 
-## 开发与测试
+键盘操作：用 `Tab` 聚焦图标，轨会随焦点出现。聚焦顶部功能图标后，按 `↓` 或 `→` 进入对应浮层，再用 `Tab` 遍历列表；在浮层内按 `Escape` 关闭并返回触发按钮。`Enter` 激活聚焦按钮，与点击语义相同；在图标上激活会直接导航，不等同于进入浮层列表。
+
+<a id="preferences"></a>
+## 设置与本地数据
+
+「最近会话条数」默认 **5**，可设置为 **1–20**。工作区浮层底部提供加减按钮，插件详情页也提供同一设置；超出可视高度的最近会话可独立滚动。
+
+![插件详情页的最近会话条数设置，示例值为 9，可用加减按钮调整](docs/images/plugin-settings.png)
+
+偏好保存在当前客户端的 `localStorage['dsh.sidebar-rail.v1']`：
+
+| 字段 | 用途 |
+| --- | --- |
+| `pinnedWorkspaceIds` | 已置顶工作区的 ID，最近置顶的排在前面 |
+| `recentCount` | 最近会话显示条数，规范化为 1–20 的整数，无法解析时使用默认值 |
+
+折叠状态由宿主持有，插件只读；账号与余额通过宿主服务读取，不写入这份偏好。清除客户端存储会丢失这些本地设置。两个设置入口共享该偏好，跨入口即时同步的真机验收情况见[验证记录](docs/verify.md)。
+
+<a id="troubleshooting"></a>
+## 常见问题与限制
+
+| 现象 | 检查或处理 |
+| --- | --- |
+| 安装后看不到图标轨 | 确认使用 macOS Desktop、插件已启用、侧栏已折叠、视口宽度 ≥ 768px；轨默认隐藏，需要将指针移到左缘热区 |
+| 看不到最近的某个会话 | 检查条数设置；归档、空白和子代理会话不会进入列表 |
+| 任务或插件加载失败 | 服务缺失、结构化失败或请求超过 5s 会进入失败态；用「打开面板」查看宿主页面，或关闭后重开浮层重试 |
+| 账号没有头像或余额 | 无头像时使用占位图标；余额不可用时显示提示。账号数据在组件挂载时读取，不保证实时刷新，完整信息以宿主账号页为准 |
+| 图标轨展开时覆盖页面左侧 | 它是浮在正文上的临时层，不占宿主栅格宽度；默认隐藏用于保留会话页「对话」标签的入口，可移开指针让轨收起 |
+| 出现 `Sidebar rail unavailable` 或启动导入错误 | 保留界面错误与宿主诊断日志，通过原生侧栏进入插件管理停用，并在本仓库反馈宿主版本、插件版本和复现步骤；不要附凭据或会话正文 |
+
+插件不接管展开态侧栏，不修改宿主列宽。顶部 48px 留给 macOS 窗口控件；支持减少动态效果的系统偏好。浅色主题、其他平台、真实 remote 故障、插件详情页设置交互和有余额账号的主余额行，以[验证记录](docs/verify.md)中的实际结果与未验证项为准。
+
+<a id="development"></a>
+## 开发与贡献
 
 ```bash
-npm test               # node --test test/*.test.mjs —— 13 个用例
-npm run check          # scripts/check.mjs（仓库规则）+ 两个入口 node --check + 单测
-npm run hooks:install  # 启用 .githooks：pre-commit 跑 check，commit-msg 校验 conventional commits
+npm test               # 纯逻辑与客户端工厂注册测试
+npm run check          # 仓库规则、两个入口的语法检查与测试
+npm run hooks:install  # 可选：启用本仓库的提交钩子
 ```
 
-逻辑测试从 `client.js` 的 `#region` 标记区切片，覆盖分组、置顶顺序、最近 10 条、数据归一、时间文案、语言解析与浮轨渲染判定。独立注册测试使用宿主加载接口执行完整静态脚本，要求工厂 ID 与包含作用域的完整包名一致。渲染与槽注册仍需 Desktop 实测。
+客户端是手写静态模块，没有依赖安装和构建步骤。测试从 `client.js` 的 `#region` 区域提取纯函数，注册测试检查工厂 ID 与完整作用域包名一致；这些检查不能替代 Desktop 真实界面验收。
 
-发布流程：改 `version` → 提交推送 → 建 `v<version>` 的 GitHub Release；`publish.yml` 会校验 tag、分支与检查后，通过 npm OIDC 信任发布（无需 token、无需 2FA）。
+PR 标题遵循 Conventional Commits，摘要、说明与验证结果使用简体中文，代码标识符和原始诊断保留英文。按 [PR 模板](.github/pull_request_template.md)填写问题、改动、验证与未验证项；中英文 README 的行为描述同步维护。UI、加载或注册变更需在 [docs/verify.md](docs/verify.md) 记录真实环境与操作结果。详细约束见 [AGENTS.md](AGENTS.md) 和 [CODING_STANDARDS.md](CODING_STANDARDS.md)。
 
-能被脚本判定的规则都在 `scripts/check.mjs`（标记区、清单一致性、禁用模式、i18n 对齐）；判断类规则在 [CODING_STANDARDS.md](CODING_STANDARDS.md)，由 review 时阅读。
+发布按 [ADR-0003](docs/adr/0003-release-pipeline.md)：更新版本并推送后，创建 `v<version>` 的 GitHub Release，由 `publish.yml` 校验并使用 npm OIDC 信任发布；npm 端需配置允许直接发布的 Trusted Publisher。
 
-## 文档
+<a id="docs"></a>
+## 详细文档
 
-- 需求与验收：[docs/PRD.md](docs/PRD.md)
-- 设计与约束：[docs/design.md](docs/design.md)
-- 验证记录：[docs/verify.md](docs/verify.md)
-- English: [README.md](README.md)
+| 文档 | 内容 |
+| --- | --- |
+| [产品需求](docs/PRD.md) | 使用场景、交互规格与验收清单 |
+| [设计说明](docs/design.md) | 增量挂载、布局、数据来源、清理与本地存储 |
+| [验证记录](docs/verify.md) | 各轮真实结果、历史缺陷与未验证项 |
+| [0.2.0 审查报告](docs/desktop-audit-0.2.0-2026-11-04.md) | 当时发现的问题与复现证据，修复进展见后续验证记录 |
+| [术语表](GLOSSARY.md) | 轨、侧栏、浮层、当前会话等统一用词 |
+| [架构决策](docs/adr/) | 窄窗判定、零依赖与发布流程 |
 
-## License
+## 许可证
 
-MIT © 2026 SkylerFee — 见 [LICENSE](LICENSE)。
+MIT © 2026 SkylerFee，见 [LICENSE](LICENSE)。
+
+[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)

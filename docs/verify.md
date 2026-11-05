@@ -124,6 +124,168 @@
 - 问题 4 的键盘路径按实现核对，**未做完整 Tab/Escape 焦点遍历审计**。
 - 滑出动画的 160ms 手感、以及滑出状态与浮层交互（指针离开轨但浮层仍开）未逐帧验证。
 
+## 账号浮层的设置入口（2026-11-05，第 19 轮）
+
+用户要求：头像浮层现在只有账号信息，需要一个设置入口。
+
+### 为什么不是按钮，而是一行路径说明
+
+先按「新行为优先使用宿主公开扩展点」核对了三条可能路径，**都不成立**：
+
+| 设想的做法 | 结论 |
+| --- | --- |
+| `ctx.layout.selectPanel('settings')` | ❌ 设置不是 main panel。`MainPanelId` 只含已注册的中央面板（`layout.selectPanel` 会 `throw` 未注册 id），设置是 `sidebar.settings` 里的一个 dialog，不进 `main` 槽 |
+| `ctx.shortcuts` 派发 `settings.open` | ❌ `Shortcuts` 接口只暴露 `register` / `registerFixed` / `describeBinding` / `edit` 等，**没有 dispatch/invoke**；命令的 `run` 闭包在宿主 `ui-settings-general` 内部 |
+| 复用 `settings.launcher` 的 `openSettings` | ❌ 该槽是 **single** 且已被宿主账号插件 `ui-settings-account` 独占（`ctx.remoteAccess.whenAccess('account/watch', …)` 注册 `AccountMenu`）；注册会顶替宿主条目。其 `openSettings` 只作为 owner prop 下发给那一个占位者 |
+
+（`sidebar.settings` 内部 store 的 `actions.open()` 与 `entriesOfSlot(...).inject()` 属契约外，未采用。）
+
+因此按用户选定的方案 C 实现：**不新增按钮，只把路径说明写清楚**。
+
+### 改动
+
+- 新增 i18n key `account.settingsPath`（zh/en）：`设置：展开侧栏后点左下角「设置」。` / `Settings: expand the sidebar, then choose Settings at its foot.`
+- 账号浮层在原有 `account.hint` 之下渲染该行；紧接着仍是既有的「展开侧栏」动作（复用已验收的 `toggleSidebar()`，未改动其行为）。
+
+### 真机验证（macOS Desktop 0.2.2-rc.1，折叠态，中文界面）
+
+账号浮层实际渲染，自上而下：
+
+```
+账号与设置
+余额  ¥0.00
+赠金  ¥0.00
+查询用量  充值
+账号信息与用量由设置中的账号页提供。
+设置：展开侧栏后点左下角「设置」。        ← 本轮新增
+展开侧栏
+```
+
+- ✅ 新增行文案完整、未截断（像素核对：物理 y≈1790 行内文字清晰）。
+- ✅ `npm run check` 通过，i18n 从 35 key 增至 **36 key**，zh/en 对齐。
+- ✅ 宿主入口位置核实：侧栏展开后左下角确有「设置」按钮，宿主自身绑定 `⌘,`（`ui-settings-general` 的 `settings.open`，`desktop:macos` 默认 `Comma + primary`）。
+
+### 未验证
+
+- 本轮未能逐帧确认「展开侧栏」点击后的展开结果：合成鼠标在这台机器上多次落到被前台遮挡的其他窗口，窗口层序不稳定。该动作调用的是「更多」浮层里**同一个** `toggleSidebar()`，那条路径已在第 16 轮验收过，本次未改其代码。
+- 英文界面下该行的实际渲染未截图核对（仅确认字典两侧对齐、`check.mjs` 通过）。
+
+## 0.3.1 三项优化的验收修复（2026-11-05，第 18 轮）
+
+第 17 轮的三项功能经真机 + 代码链路复核后，发现并修复 4 个缺陷。**上一轮「真机验证」表里的两项结论不成立，已在本轮更正**，详见文末。
+
+### 修复 1（P0）：会话状态标识完全没有接线
+
+`sessionStatusOf` 定义完整、单测 4 条全绿，但**全仓库零调用点**；`deriveSections` 加了 `statuses` 形参却在函数体内一次都没用；行对象没有 `status` 字段，`row.status` 恒 `undefined`，`StateMark` 永不渲染。即：**功能完全不存在，测试却全绿**。
+
+- `deriveSections` 现在逐行写 `status: sessionStatusOf(entry, statusOf(entry.id))`（`client.js`，`recentRows.push` 处）。
+- `statuses` 按宿主真实契约读取：`ReadonlyMap<SessionId, SessionStatus>`；普通对象形状也容忍，缺失时退化为「无状态事实」而非崩溃。
+- `sessionStatusOf` 同步修正两个与宿主的偏差：
+  - 只把 `approval` / `plan-review` / `question` 视为 visible pending（对齐 `tree.ts#visiblePendingKind`），其他 kind 不再误染 warning；
+  - 去掉 `summary.completed` 分支 —— 宿主 `SessionSummary` 没有该字段，是永不成立的条件。
+- 新增回归锁：`deriveSections: recent rows carry the host status mark` 直接断言生产路径输出的 `status` 值，不再只测纯函数。
+
+### 修复 2（P1）：`recentCount` 跨入口状态陈旧且会丢数据
+
+两个入口各自 `useState` + 仅在挂载时读一次，无 `storage` 监听。真机复现：详情页设 8 → 浮层仍显示 6 → 在浮层按 `+` 后，**localStorage 里的 8 被覆盖成 7**（实测序列 `…6,7,8,7`）。
+
+- 改为模块级共享存储（`subscribeRecentCount` / `getRecentCountSnapshot` / `setRecentCount`），两个入口都用 `useSyncExternalStore` 订阅同一值；写入前重新夹取，不再回写内存里的陈旧值。
+- 真机复验：详情页 7 → `+` 变 8 → 折叠后打开浮层**立即显示 8**、列表渲染 8 条；在浮层点 `+` 变 9 后，**同一屏右侧详情页同步为 9**；leveldb 持久值 9，序列末端无回退。
+
+### 修复 3（P1）：负数余额进位溢出到分位以上
+
+`String(Number(truncated)+1).padStart(2,'0')` 在 `truncated === '99'` 时产出三位小数。对照从 asar 取出的宿主 `formatBalance`（用 `Big`）实测：插件 `-0.999 → -¥0.100`、`-99.999 → -¥99.100`，宿主应为 `-¥1.00` / `-¥100.00`。
+
+- 负数分支改为「绝对值进位 + 整元进位」：`bumped === 100` 时整数位 +1、分位置 `00`；新增 `incrementDecimalDigits` 做纯字符串进位（不经过 `Number`，大额不丢精度）。
+- 回归对照 28 条（含 `-0.995`、`-999.994`、`-1234.566`、指数记法）与宿主 Big 语义**逐条一致**。
+- 注意：用 `Math.abs(x).toFixed(2)` 做对照会因二进制浮点把 `-0.995` 算成 `0.99`，那是错基准；宿主是精确十进制 half-up。
+
+### 修复 4（P1）：未登录账号浮层丢失用量/充值链接；账号读取无超时
+
+`client.js` 的 `accountSeat` 在 `!signedIn`、无 `getProfile`、`metadata === null` 三条早退分支直接 `return accountSeatState(...)`，从未调用 `accountLinks`，而宿主 `getState` 无论登录态都返回 `links` → 未登录用户永远看不到那两个入口。另外整段读取没有超时，违反 AGENTS.md 硬约束 8。
+
+- 新增 `withAccountExtras(seat, viewAnswer, balanceAnswer)`，所有返回路径统一经过它，`balances` / `links` 恒存在。
+- 整段读取与 `REMOTE_TIMEOUT_MS` 赛跑，超时落到明确的失败态并打 `[dsh-sidebar-rail] account read timed out` 日志。
+- 新增回归锁：`withAccountExtras: every account path keeps the usage and top-up links`。
+
+### 真机复验（macOS Desktop 0.2.2-rc.1，折叠态，判据为像素/文案）
+
+| 项 | 结果 |
+| --- | --- |
+| 状态标识接线 | ✅ 最近会话首行右侧出现 `ongoing` 14px 圆环（轨道 + 弧线）；此前同一位置完全空白 |
+| 跨入口同步（详情→浮层） | ✅ 详情页 8 → 浮层立即显示 8 且列表 8 条 |
+| 跨入口同步（浮层→详情） | ✅ 浮层 9 → 同屏详情页同步 9；leveldb 末值 9，无回退 |
+| 账号浮层 | ✅ 余额 `¥0.00`、赠金 `¥0.00`、「查询用量」「充值」、真实头像 |
+| `npm run check` | ✅ 仓库规则 4 条 + 两入口语法 + **33 项测试**全过 |
+
+### 未验证
+
+- 未逐帧核对 `ongoing` 旋转动画的观感（只确认形态为圆环）。
+- 未在**真实有余额**的账号上验证主余额行与进位分支（当前账号主钱包为空）。
+- 未验证登录态在插件已挂载期间切换时的刷新时机（本次只修了早退丢链接与超时，未做 `account/watch` 订阅）。
+- 状态标识未覆盖 `runningSubagentCount > 0` 的子代理场景：需要 `projectionsBySession.subagentCatalog`，当前行投影不携带。
+
+### 对第 17 轮记录的两处更正
+
+- 第 17 轮「会话状态标识 ✅ 运行中的会话行出现 `ongoing` 圆环」：**当时不可能成立**（该功能零调用、组件永不渲染）。当时看到的大概率是宿主展开侧栏自己的 `StateDot`。本轮修复后才真正出现。
+- 第 17 轮「两处写同一个键，不会互相矛盾」：只在持久层成立，UI 层当时会互相陈旧并互相覆盖。本轮已改为共享存储。
+
+## 0.3.1 三项优化（2026-11-05，第 17 轮）
+
+### 1 最近会话条数设置 + 独立滚动
+
+- 新增偏好 `recentCount`（范围 1–20，默认 5），存在插件自己的 `localStorage['dsh.sidebar-rail.v1']`，保持纯 Client、不引入 host 半边。
+- **两个入口**：插件详情页（注册到 `plugins.bundle.config`，`key` 为包名，与宿主 cot-translation / voice-input 同槽）+ 工作区浮层底部的步进器。两处写同一个键，不会互相矛盾。
+- 最近会话改为**独立滚动容器**（`max-height:38vh`），工作区列表再长也不会把它挤没。
+- 修掉一处历史不一致：`RECENT_LIMIT` 曾固定 10，而浮层又 `slice(0,5)` 只渲染 5 条。
+
+### 2 会话状态标识（复用宿主样式）
+
+按宿主 `ui-workspace/Rows.tsx` 的 `sessionStatuses` 同优先级实现 `sessionStatusOf`：
+
+```
+pendingInteraction（approval / plan-review / question） → warning
+running                                               → ongoing
+completionUnread                                      → done
+否则                                                   → idle
+```
+
+视觉逐项对齐宿主 `StateDot`：`ongoing` 是 14px 旋转环（`--dsw-alias-label-tertiary`），其余是 10px 容器内的 6px 实心点（`--dsw-alias-state-success/warn/idle-primary`）。图标是**重绘**而非引入组件——静态模块只能 require react/react-dom。真机已见 `ongoing` 圆环出现在运行中的会话行上。
+
+### 3 账号浮层：宿主原有项 + 余额
+
+只读展示 + 跳转（不做退出登录/付款）。余额实现按调研报告修正了 **5 个真实缺陷**：
+
+| # | 缺陷 | 后果 | 修法 |
+| --- | --- | --- | --- |
+| 1 | `balanceRows` 把 `answer.value` 当数组 | **真机恒为空**（真实契约是 `{status, value, bonusWallets}`），而按数组写的 mock 让单测通过 | 按三层契约解析 |
+| 2 | 负数也截断 | `-12.345` 显示 `-¥12.34`，宿主是 `-¥12.35` | 负数 half-up 四舍五入，正数仍截断 |
+| 3 | 不支持指数记法 | `0E-16` / `1e+3` 整行丢弃 | 先展开指数再定点运算 |
+| 4 | 零余额被过滤 | 与宿主「渲染收到的全部钱包」不一致 | 保留 `¥0.00` |
+| 5 | 未用 `bonusWallets` / `links` | 赠金、查询用量、充值入口缺失 | 都接上；链接只接受绝对 http(s) |
+
+余额格式化与宿主 `formatBalance.ts` 的**官方 fixture 逐条对齐**（含 `0E-16`、`-12.345`、`1e+3`）。
+
+### 一个必须记录的教训
+
+本轮出现了两次「多处脚本改同一文件互相覆盖」，导致 `deriveSections` 的调用与签名不一致、`recentCount` 声明在 `useMemo` 之后（TDZ 崩溃，界面显示 `Sidebar rail unavailable`）。定位方式是**让 Boundary 把真实错误信息渲染出来**（`Cannot access 'recentCount' before initialization`），一步命中。该诊断能力已保留在 `Boundary` 里。
+
+### 真机验证
+
+| 项 | 结果 |
+| --- | --- |
+| 崩溃修复 | ✅ 无 `Sidebar rail unavailable`，界面正常 |
+| 会话状态标识 | ✅ 运行中的会话行出现 `ongoing` 圆环 |
+| 账号浮层赠金行 | ✅ 显示「赠金 ¥0.00」+ 真实头像 |
+| 设置页（插件详情） | ⏳ 未真机打开核对（需进入插件管理页→详情） |
+| 余额主行 | ⏳ 本轮窗口为展开态，未在折叠浮层上核对最终样子 |
+
+### 未验证
+
+- 插件详情页设置面板的**视觉与交互**未真机核对（仅确认注册未引发崩溃）。
+- `recentCount` 改动后需要重新挂载浮层才生效（值在组件挂载时读取），跨入口即时同步未验证。
+- 真实有余额的账号下的主余额行未验证（当前账号主钱包为空）。
+
 ## 0.3.0 发布（2026-11-05）
 
 | 项 | 结果 |

@@ -6,7 +6,7 @@
 
 ## 1. 定位：增量插件，只补一个状态
 
-宿主只有一种状态是「空」的：**macOS Desktop + 侧栏折叠**。此时 `AppFrame` 把左侧列折到 0 宽（`const collapsedWidth = drawer || darwin || windowsTitlebar ? 0 : SIDEBAR_COLLAPSED`，`SIDEBAR_COLLAPSED = 56`），列上还有 `overflow: hidden`，样式的注释直接写着「The darwin closed sidebar has no rail」。本插件只往这个空位补一条 56px 图标轨。
+宿主在 **macOS Desktop + 侧栏折叠** 时没有折叠图标轨。此时 `AppFrame` 把左侧列折到 0 宽（`const collapsedWidth = drawer || darwin || windowsTitlebar ? 0 : SIDEBAR_COLLAPSED`，`SIDEBAR_COLLAPSED = 56`），列上还有 `overflow: hidden`。本插件添加默认隐藏、按需唤出的 56px 图标轨，不为轨道占用宿主布局空间。
 
 其余状态一律不渲染：
 
@@ -17,7 +17,7 @@
 | Web 展开态 | 完整原生侧栏 | 不渲染 |
 | Windows / Linux | 未验证 | 不渲染 |
 
-判据是 `document.documentElement.dataset.platform === 'darwin'` 且宿主 frame 带 `data-sidebar-collapsed`，两者任一不成立就 `return null`。
+判据是 `document.documentElement.dataset.platform === 'darwin'`、宿主 frame 带 `data-sidebar-collapsed` 且视口宽度 ≥ 768px，任一不成立就 `return null`。插件详情页的设置块独立注册到 `plugins.bundle.config`，不受轨道显隐控制。
 
 ## 2. 挂载点：`shell.overlay` list 槽
 
@@ -62,8 +62,10 @@ return () => { observer.disconnect() }
 position: fixed; left: 0; top: var(--dsh-frame-top-clearance, 48px); bottom: 0;
 width: 56px; z-index: 60; -webkit-app-region: no-drag;
 background: var(--dsw-specific-sidebar-fill); border-right: .5px solid var(--dsw-alias-border-l3);
+transform: translateX(-100%);
 ```
 
+- **默认隐藏**：左缘保留 12px 热区，进入热区或聚焦轨内控件时唤出轨道。宿主折叠态正文抵达窗口左缘，标签行没有为浮轨留位置，因此轨道可见期间仍是临时覆盖层；隐藏后恢复正文入口。热区只负责唤出，指针位置及导航动作决定收起，避免热区被轨盖住时反复触发显隐。
 - **为什么必须 portal**：折叠列宽为 0 且 `.sidebarCol { overflow: hidden }`，任何挂在列内的元素都会被裁没。portal 到 `body` 是唯一不被裁剪的面。
 - **为什么 top 从 48px 起**：`--dsh-frame-top-clearance` 是宿主声明在**根元素**上的窗口 chrome 带高度（注释明确写了「Declared on the root element rather than the frame so overlays portalled to document.body inherit it too」，macOS 桌面端 48px）。这条带里有：
   - macOS 红绿灯（traffic lights 到 x 68）；
@@ -71,7 +73,7 @@ background: var(--dsw-specific-sidebar-fill); border-right: .5px solid var(--dsw
   从 48px 起排就同时避开两者；`var(..., 48px)` 的 fallback 保证变量缺失时也不压 chrome。
 - **显式 `-webkit-app-region: no-drag`**：Electron 的 app-region 是**几何**而不是 stacking，浮轨盖住窗口拖拽带时必须自己 opt out（即便 body 级 portal 通常已继承 no-drag），否则点图标会拖窗口。
 - **窄窗口不渲染**：判定不是 CSS 媒体查询，而是纯函数 `shouldRenderRail(platform, collapsed, viewportWidth)`（阈值 `RAIL_MIN_VIEWPORT = 768`），`RailOverlay` 用 `window.innerWidth` + `resize` 监听驱动；不满足即 `return null`，组件整体卸载。768 = 680（宿主正文最小宽）+ 56（轨宽）+ 32（两侧安全）。为什么不用 CSS：阈值语义是「正文是否还放得下」，与轨自身盒模型无关；做成纯函数还能被单测覆盖边界（`test/data.test.mjs`）。为什么不是 900：旧实现的 900 是拍的，与宿主 drawer 断点（768）无对应关系；按 680 正文可读宽推导更可解释。
-- **浮层位置**：`.dsr-flyout` 也是 `position: fixed`（portal 到 body），`width: 288px; max-height: calc(100vh - 32px)`，位置从触发按钮的 `getBoundingClientRect()` 取：`left = rect.right + 8`，`top` 夹在 `[12, innerHeight - 200]`，避免底部越界。
+- **浮层位置**：`.dsr-flyout` 也是 `position: fixed`（portal 到 body），宽 288px，`left = rect.right + 8`。`flyoutPlacement` 根据触发按钮与视口计算顶部或底部距离，并以内联 `maxHeight` 限制剩余可视高度；账号浮层从头像底边向上展开。工作区列表和最近会话分别滚动，最近会话区域上限为 `38vh`。
 
 ## 5. 为什么不改宿主列宽
 
@@ -103,7 +105,7 @@ background: var(--dsw-specific-sidebar-fill); border-right: .5px solid var(--dsw
 | 浮轨 `.dsr-rail-float` | 60 | 要盖住 overlay 层（20）与 leading seat（15）的视觉层，但不能压过 drawer 体系（70/71）——drawer 只在 <768px 生效，而浮轨在同一阈值下已不渲染（`shouldRenderRail` 的 768），两者不共存 |
 | 浮层 `.dsr-flyout` | 2147483000（字面值） | 浮层是 body portal，要压过宿主任意表面；宿主没有提供「浮层层级」token，用极大字面值而不是 `!important` |
 
-浮轨只有 56px 宽，指针事件只落在自己的盒子里，不会挡住正文交互。
+热区的 z-index 为 59，轨道为 60；轨道出现时会覆盖左侧 56px 正文及其点击区域，因此默认隐藏，不能据轨宽较小推断「不会挡住正文交互」。
 
 ## 8. 事件、计时与清理
 
@@ -111,15 +113,18 @@ background: var(--dsw-specific-sidebar-fill); border-right: .5px solid var(--dsw
 | --- | --- | --- |
 | 悬停打开 | `pointerenter` 后 120ms（`OPEN_DELAY_MS`）定时器 | `clearTimers()` 卸下两个定时器 |
 | 移出关闭 | `pointerleave` 后 200ms（`CLOSE_DELAY_MS`）；浮层 `onPointerEnter: cancelClose`，跨间隙不闪断 | 同上 |
+| 轨道显隐 | 12px 热区或轨内焦点唤出；在图标间移动只关闭或切换浮层，导航动作同时收起轨道 | 收起定时器及窗口 `pointermove` 监听随组件清理 |
 | Escape | `open !== null` 时挂 `window` keydown，关闭浮层 | effect cleanup 摘除监听 |
-| 定时任务 / 插件数据 | 浮层首次打开才拉取（`idle → loading → ready/failed`） | `live` 标记，清理后不回写 state |
+| 键盘进入 | 顶部功能图标上按 `↓` / `→`，打开浮层并聚焦首个按钮；浮层内 Escape 关闭并返回触发图标 | 焦点只移到当前浮层节点 |
+| 定时任务 / 插件数据 | 每次打开拉取（`idle → loading → ready/failed`），5s 超时或服务不可用进入失败态；Promise resolve 后仍判断 `RemoteResult.ok` | `live` 标记隔离过期结果，清理超时并重置请求标记，切回入口可重试 |
+| 账号数据 | 组件挂载后读取登录态；登录时并行读取 profile 与余额，各自保留失败占位，不保证实时更新 | 清理后忽略晚到结果 |
 | 槽注册与订阅 | `ctx.effect(...)` 包裹 overlay 注册、locale 字典、panel 条目订阅、locale 订阅 | effect dispose 自动回收 |
 | 样式 | `<style data-dsh-sidebar-rail>` 注入 `head` | 卸载时 `style.remove()` |
 | 折叠订阅 | 属性限定 MutationObserver | `observer.disconnect()` |
 
 ## 9. 卸载恢复
 
-插件卸载 / 禁用后：overlay 条目被注销 → `RailColumn` 卸载 → 上述 effect 全部执行清理 → keydown 监听、定时器、MutationObserver、样式节点、portal 出来的 DOM 一起消失。宿主侧栏与正文**从未被修改**，所以不存在「恢复宿主原状」的额外步骤；`localStorage['dsh.sidebar-rail.v1']` 里的置顶偏好保留（重装即读回），不写宿主存储。
+插件卸载 / 禁用后，overlay 与设置块的注册释放，组件 effect 清理 keydown、pointermove、定时器和 MutationObserver，样式节点与 portal DOM 随之移除。宿主侧栏与正文结构不由插件修改；`localStorage['dsh.sidebar-rail.v1']` 中的置顶及条数偏好保留，不写宿主存储。实际卸载验收范围见 [verify.md](verify.md)。
 
 ## 10. 数据来源（全部只读）
 
@@ -132,6 +137,9 @@ background: var(--dsw-specific-sidebar-fill); border-right: .5px solid var(--dsw
 | 其他面板条目 | `ctx.slots.entriesOfSlot('sidebar.panellist')` + `ctx.slots.subscribe`（只读别人声明的槽，不注册、不声明） |
 | 定时任务 | `ctx.get('remote.schedule')?.catalog()`（可选，失败降级） |
 | 插件 | `ctx.get('remote.pluginManager')?.listBundles()`（可选）。用 bundle 列表而非 `pluginInventory/list`：只有它带 `official` 与 `availability`，这是宿主区分「自带 / 用户安装」的结构化依据 |
+| 账号头像与余额 | `remote.account.getState()` 判登录态；登录后用 `getProfile(metadata)` 与 `getBalance(metadata)` 读取头像、主钱包和赠金钱包；元数据版本取自 `__DSH_BOOT__.release.version` |
+| 账号链接 | 宿主账号状态提供的用量及充值地址，只接受绝对 http(s) 链接，使用新窗口打开 |
+| 会话状态标识 | 标准 prop `useSessionStatus` 提供会话状态，缺失时仅使用 summary 中可用的运行信息 |
 | 语言 | `ctx.locale.subscribe` 包装成可订阅快照，驱动相对时间文案 |
 
 **已知细节**：`SessionSummary` 没有 `workspaceId`，也没有归档 / 置顶字段。归属工作区靠 `WorkspaceView.sessionIds` 反查；归档靠 `archivedSessionIds` 过滤；置顶是**工作区级**的插件本地概念，宿主无对应字段。
@@ -144,9 +152,10 @@ background: var(--dsw-specific-sidebar-fill); border-right: .5px solid var(--dsw
 | --- | --- | --- |
 | 置顶项目 | 命中 `pinnedWorkspaceIds` 的工作区 | 置顶顺序（最近置顶在前） |
 | 项目 | 其余工作区 | 宿主返回顺序 |
-| 最近会话 | 未归档、非空白、非子代理的会话 | `updatedAt` 倒序，`deriveSections` 上限 10 条；浮层底部当前渲染前 5 条 |
+| 最近会话 | 未归档、非空白、非子代理的会话 | `updatedAt` 倒序，按 `recentCount` 截取；默认 5，范围 1–20 |
 
 - 置顶持久化：`localStorage['dsh.sidebar-rail.v1'] = { pinnedWorkspaceIds: string[] }`，行内图钉按钮切换，写入用合并语义（`{ ...readStore(), ...patch }`）。
+- 最近条数同存在该键的 `recentCount`，工作区浮层底部与插件详情页均可修改；两处通过 `useSyncExternalStore` 订阅共享快照，修改后发布新值并持久化。该同步路径的真机结果与未验证项见 [verify.md](verify.md)。
 - 折叠状态**不再**由插件持久化：宿主自己持有并持久化，插件只读 `data-sidebar-collapsed`。
 
 ## 12. 重构中删除的能力
@@ -164,8 +173,9 @@ background: var(--dsw-specific-sidebar-fill); border-right: .5px solid var(--dsw
 | 场景 | 行为 |
 | --- | --- |
 | 组件渲染抛错 | 自有 `Boundary` 拦截并渲染 `.dsr-fallback` 占位；overlay 条目不会把宿主侧栏或正文拖崩 |
-| `remote.schedule` 缺失 / 失败 | 任务浮层显示空态或失败文案 + 「打开面板」 |
-| `remote.pluginInventory` 缺失 / 失败 | 插件浮层同上 |
+| `remote.schedule` 缺失 / 失败 | 任务浮层显示失败文案 + 「打开面板」，成功空列表另显示空态 |
+| `remote.pluginManager` 缺失 / 失败 | 插件浮层同上 |
+| 头像或余额不可用 | 头像使用占位；主钱包不可用显示「余额暂不可用」；账号完整信息留给宿主账号页 |
 | 标准 hooks 缺失 | `selectorHook` 回退到常量读取器，不会白屏 |
 | `localStorage` 不可用 / 内容损坏 | 置顶不持久但界面可用 |
 | `apply` 整体异常 | `try/catch` 包住注册，只 `console.error` 一次，宿主侧栏不受影响 |
@@ -183,5 +193,5 @@ background: var(--dsw-specific-sidebar-fill); border-right: .5px solid var(--dsw
 - 文字：`--dsw-alias-label-primary / secondary / tertiary`；悬停：`--dsw-alias-interactive-bg-hover / active`；浮层底：`--dsw-alias-bg-overlay`；边框：`--dsw-alias-border-l1`（浮层内）/ `--dsw-alias-border-l3`（浮轨右边框）；当前态与展开按钮：`--dsw-specific-sidebar-nav-item-active`；浮轨底色：`--dsw-specific-sidebar-fill`。
 - 圆角用 `--dsw-radius-sm`（按钮、行）与 `--dsw-radius-lg`（浮层），阴影用 `--dsw-shadow-lv3`，与宿主 `HoverCard` 的组合一致。这些变量由 `ui-theme`（`styles/base.css`、`styles/gradient-shadow-text.css`，经 `styles.ts` 内联注入）全局提供，但**不在 Theme token 注册表**里，因此 `Theme.listTokens` 查不到它们——不能据此判断变量不存在。仅当变量缺失时才落到括号里的 fallback。
 - 几何：浮轨 56px、按钮 36×36、图标 20px、头像 26px、浮层 288px。
-- 可访问性：每个图标按钮有 `aria-label`；当前面板用 `aria-current="page"`；浮层 `role="dialog"` + `aria-label`；`Escape` 关闭；`prefers-reduced-motion: reduce` 关闭浮层入场动画。
+- 可访问性：每个图标按钮有 `aria-label`；当前面板用 `aria-current="page"`；浮层 `role="dialog"` + `aria-label`；顶部功能图标支持方向键进入浮层，浮层内 Escape 返回触发按钮；`prefers-reduced-motion: reduce` 关闭浮层入场与轨道滑动动画。实现支持不等于完整键盘路径已验收，具体结果见 [verify.md](verify.md)。
 - 样式作用域统一 `.dsr-*` 前缀，样式节点带 `data-dsh-sidebar-rail` 标记，避免影响其他插件。

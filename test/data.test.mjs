@@ -32,13 +32,14 @@ const helpers = new Function(`${region('pure-helpers')}
 ${region('pure-data')}
 return { EMPTY_SESSIONS, EMPTY_WORKSPACES, selectorHook, relativeTime, shortPath,
   resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT,
-  deriveSections, normalizeTasks, normalizePlugins, currentSessionId, accountSeatState, accountClientMetadata, clientBuildVersion,
-  remoteOutcome, flyoutPlacement, keepsRailRevealed, RAIL_REVEAL_WIDTH }`)()
+  deriveSections, normalizeTasks, normalizePlugins, currentSessionId, accountSeatState, accountClientMetadata, clientBuildVersion, readRecentCount,
+  remoteOutcome, flyoutPlacement, keepsRailRevealed, RAIL_REVEAL_WIDTH, readRecentCount, sessionStatusOf, formatWalletBalance, balanceRows, accountLinks, withAccountExtras }`)()
 
 const { deriveSections, normalizeTasks, normalizePlugins, relativeTime, shortPath, selectorHook,
   resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT, currentSessionId, accountSeatState,
-  accountClientMetadata, clientBuildVersion, remoteOutcome, flyoutPlacement, keepsRailRevealed, RAIL_REVEAL_WIDTH,
-  EMPTY_SESSIONS } = helpers
+  accountClientMetadata, clientBuildVersion, readRecentCount, sessionStatusOf,
+  formatWalletBalance, balanceRows, accountLinks, remoteOutcome, flyoutPlacement,
+  keepsRailRevealed, RAIL_REVEAL_WIDTH, EMPTY_SESSIONS, withAccountExtras } = helpers
 
 /**
  * Build a SessionSummary-shaped row.
@@ -71,21 +72,45 @@ test('deriveSections: normal rows keep host order when nothing is pinned', () =>
   assert.deepEqual(sections.normalRows.map((r) => r.id), ['ws1', 'ws2', 'ws3'])
 })
 
-test('deriveSections: recent sessions are newest-first, archived/blank/subagent dropped, capped at 10', () => {
+test('deriveSections: recent sessions are newest-first, filtered, and honour the count', () => {
   const byId = {}
-  for (let index = 0; index < 14; index += 1) {
-    byId[`r${index}`] = session(`r${index}`, { updatedAt: index })
-  }
-  byId.archived = session('archived', { updatedAt: 99 })
-  byId.blankOne = session('blankOne', { updatedAt: 98, blank: true })
-  byId.child = session('child', { updatedAt: 97, origin: 'subagent' })
-  const sections = deriveSections(WORKSPACES, { byId }, ['archived'], [], 'zh')
-  assert.equal(sections.recentRows.length, 10)
-  assert.deepEqual(sections.recentRows.map((r) => r.id).slice(0, 3), ['r13', 'r12', 'r11'])
-  const ids = sections.recentRows.map((r) => r.id)
-  for (const excluded of ['archived', 'blankOne', 'child']) {
-    assert.ok(!ids.includes(excluded), `${excluded} must be excluded`)
-  }
+  for (let i = 0; i < 14; i += 1) byId[`s${i}`] = session(`s${i}`, { updatedAt: i * 10 })
+  byId.archived = session('archived', { updatedAt: 999 })
+  byId.blank = session('blank', { updatedAt: 998, blank: true })
+  byId.sub = session('sub', { updatedAt: 997, origin: 'subagent' })
+
+  // 默认（未传设置）→ DEFAULT_RECENT_COUNT，而不是旧实现的硬编码 10。
+  const byDefault = deriveSections(WORKSPACES, { byId }, ['archived'], [], 'en', false, undefined)
+  assert.equal(byDefault.recentRows.length, 5)
+  // 过滤仍然生效：归档/空白/子代理都不出现。
+  const ids = byDefault.recentRows.map((row) => row.id)
+  assert.ok(!ids.includes('archived') && !ids.includes('blank') && !ids.includes('sub'))
+  // 倒序：最新在前。
+  assert.deepEqual(ids, ['s13', 's12', 's11', 's10', 's9'])
+
+  // 用户把数量调到上限 → 返回上限条数，且不超过硬上限 RECENT_LIMIT。
+  const many = deriveSections(WORKSPACES, { byId }, ['archived'], [], 'en', false, 20)
+  assert.equal(many.recentRows.length, 14)   // 只有 14 条可用
+  const huge = deriveSections(WORKSPACES, { byId }, ['archived'], [], 'en', false, 200)
+  assert.equal(huge.recentRows.length, 14)   // 仍受可用条数限制
+  // 超出硬上限的请求被夹到 RECENT_LIMIT 之内。
+  assert.ok(huge.recentRows.length <= 20)
+})
+
+test('readRecentCount: clamps whatever storage held back into range', () => {
+  // 缺失/脏值 → 默认值，绝不渲染意外条数。
+  assert.equal(readRecentCount(undefined), 5)
+  assert.equal(readRecentCount(null), 5)
+  assert.equal(readRecentCount(''), 5)
+  assert.equal(readRecentCount(Number.NaN), 5)
+  assert.equal(readRecentCount('abc'), 5)
+  // 越界夹取。
+  assert.equal(readRecentCount(0), 1)
+  assert.equal(readRecentCount(-3), 1)
+  assert.equal(readRecentCount(999), 20)
+  // 字符串（手改 localStorage）与小数。
+  assert.equal(readRecentCount('7'), 7)
+  assert.equal(readRecentCount(7.6), 8)
 })
 
 test('currentSessionId: a covering panel clears the highlight', () => {
@@ -95,6 +120,40 @@ test('currentSessionId: a covering panel clears the highlight', () => {
   assert.equal(currentSessionId(sessions, false), 'a')
   // undefined（调用方没提供门控信息）时不应误清空。
   assert.equal(currentSessionId(sessions, undefined), 'a')
+})
+
+test('deriveSections: recent rows carry the host status mark for the renderer', () => {
+  // 回归锁：sessionStatusOf 曾经是「定义完整、单测通过、但没有任何调用点」的死函数，
+  // 因为 deriveSections 加了 statuses 形参却没在循环里用它，行对象没有 status 字段。
+  // 这条断言直接盯住生产路径的输出，而不是再测一次纯函数。
+  const sessions = {
+    byId: {
+      run: session('run', { updatedAt: 500, running: true }),
+      wait: session('wait', { updatedAt: 400, running: false }),
+      unread: session('unread', { updatedAt: 300, running: false }),
+      plain: session('plain', { updatedAt: 200, running: false }),
+    },
+  }
+  const statuses = new Map([
+    ['run', { running: true, pendingInteraction: undefined, completionUnread: false }],
+    ['wait', { running: false, pendingInteraction: { key: 'k', kind: 'approval', sessionId: 'wait' }, completionUnread: false }],
+    ['unread', { running: false, pendingInteraction: undefined, completionUnread: true }],
+    ['plain', { running: false, pendingInteraction: undefined, completionUnread: false }],
+  ])
+  const sections = deriveSections(WORKSPACES, sessions, [], [], 'en', false, 10, statuses)
+  assert.deepEqual(
+    sections.recentRows.map((r) => [r.id, r.status]),
+    [['run', 'ongoing'], ['wait', 'warning'], ['unread', 'done'], ['plain', 'idle']],
+  )
+})
+
+test('deriveSections: a missing or object-shaped status snapshot degrades to no marks', () => {
+  const sessions = { byId: { s1: session('s1', { running: true }) } }
+  // 宿主未注入 useSessionStatus 时 statuses 为 undefined，不能抛错。
+  assert.equal(deriveSections(WORKSPACES, sessions, [], [], 'en', false, 5, undefined).recentRows[0].status, 'ongoing')
+  // 普通对象（非 Map）也要能读，形状变化时退化为「无状态事实」而不是崩溃。
+  const asObject = deriveSections(WORKSPACES, sessions, [], [], 'en', false, 5, { s1: { running: false } })
+  assert.equal(asObject.recentRows[0].status, 'idle')
 })
 
 test('deriveSections: recent rows mark the session the main view shows', () => {
@@ -271,6 +330,151 @@ test('keepsRailRevealed: position decides, so an overlaid strip cannot oscillate
   // 宽度未知时退回默认 56，不因为脏参数崩溃。
   assert.equal(keepsRailRevealed(30, Number.NaN), true)
   assert.equal(keepsRailRevealed(Number.NaN, RAIL_REVEAL_WIDTH), false)
+})
+
+test('sessionStatusOf: pending interaction outranks activity, which outranks unread', () => {
+  // 与宿主 ui-workspace sessionStatuses 同优先级。pendingInteraction 的真实形状是
+  // `{ key, kind, sessionId }`，只看 `kind`，所以 fixture 必须带 kind。
+  const pending = (kind) => ({ key: `k-${kind}`, kind, sessionId: 'sX' })
+  assert.equal(sessionStatusOf({ running: true }, { pendingInteraction: pending('approval'), running: true, completionUnread: true }), 'warning')
+  assert.equal(sessionStatusOf({ running: true }, { pendingInteraction: pending('question'), running: false }), 'warning')
+  assert.equal(sessionStatusOf({ running: false }, { pendingInteraction: pending('plan-review'), running: false }), 'warning')
+  // 宿主 visiblePendingKind 只认这三种；其他 kind 不得把行画成 warning。
+  assert.equal(sessionStatusOf({ running: true }, { pendingInteraction: pending('mcp-elicitation'), running: true }), 'ongoing')
+  assert.equal(sessionStatusOf({ running: false }, { pendingInteraction: pending('other'), running: false }), 'idle')
+  assert.equal(sessionStatusOf({ running: true }, { running: true, completionUnread: false }), 'ongoing')
+  // status 缺失时退回 SessionSummary.running。
+  assert.equal(sessionStatusOf({ running: true }, undefined), 'ongoing')
+  assert.equal(sessionStatusOf({ running: false }, undefined), 'idle')
+  // status.running 显式为 false 时压过 summary.running（宿主 `status?.running ?? s.running`）。
+  assert.equal(sessionStatusOf({ running: true }, { running: false }), 'idle')
+  // 完成未读。
+  assert.equal(sessionStatusOf({ running: false }, { running: false, completionUnread: true }), 'done')
+  // SessionSummary 没有 completed 字段，宿主只看 completionUnread。
+  assert.equal(sessionStatusOf({ running: false, completed: true }, undefined), 'idle')
+  // 都没有 → idle。
+  assert.equal(sessionStatusOf({ running: false }, { running: false, completionUnread: false }), 'idle')
+  assert.equal(sessionStatusOf(undefined, undefined), 'idle')
+})
+
+test('formatWalletBalance: truncates positives, rounds negatives, like the host', () => {
+  // 宿主 formatBalance：正数 roundDown 截断，负数 toFixed 四舍五入。
+  assert.equal(formatWalletBalance('0', '¥'), '¥0.00')
+  assert.equal(formatWalletBalance('0.00', '¥'), '¥0.00')
+  assert.equal(formatWalletBalance('12.345', '¥'), '¥12.34')
+  assert.equal(formatWalletBalance('1234.5678', '¥'), '¥1,234.56')
+  assert.equal(formatWalletBalance('0.001', '¥'), '<¥0.01')
+  assert.equal(formatWalletBalance('0.5', '¥'), '¥0.50')
+  // 负数四舍五入，因此 12.345 视为 12.35（正数则截断成 12.34）。
+  assert.equal(formatWalletBalance('-12.345', '¥'), '-¥12.35')
+  assert.equal(formatWalletBalance('-0.001', '¥'), '-¥0.01')
+  // 非法输入返回空串，由调用方决定不渲染。
+  assert.equal(formatWalletBalance('', '¥'), '')
+  assert.equal(formatWalletBalance('abc', '¥'), '')
+  assert.equal(formatWalletBalance(null, '¥'), '')
+})
+
+test('balanceRows: reads the real three-layer balance contract', () => {
+  // 真实形状：RemoteResult{ value: { status:'ready', value: wallets, bonusWallets } }。
+  // 早期实现把 answer.value 当数组，于是真实 Host 恒为空、而按数组写的假数据却通过。
+  const answer = { ok: true, value: {
+    status: 'ready',
+    value: [
+      { currency: 'CNY', balance: '12.34' },
+      { currency: 'CNY', balance: '0' },        // 零余额保留：宿主渲染收到的全部钱包
+      { currency: 'USD', balance: '5.678' },
+      { currency: 'EUR', balance: '9' },        // 未知币种跳过
+      null,
+    ],
+    bonusWallets: [{ currency: 'CNY', balance: '3.5' }],
+  } }
+  assert.deepEqual(balanceRows(answer), {
+    wallets: [
+      { currency: 'CNY', text: '¥12.34' },
+      { currency: 'CNY', text: '¥0.00' },
+      { currency: 'USD', text: '$5.67' },
+    ],
+    bonusWallets: [{ currency: 'CNY', text: '¥3.50' }],
+  })
+  // 失败 / null / 缺失 一律返回两个空数组，交给浮层显示「余额暂不可用」。
+  const empty = { wallets: [], bonusWallets: [] }
+  assert.deepEqual(balanceRows({ ok: true, value: null }), empty)
+  assert.deepEqual(balanceRows({ ok: true, value: { status: 'failed' } }), empty)
+  assert.deepEqual(balanceRows({ ok: false, error: {} }), empty)
+  assert.deepEqual(balanceRows(null), empty)
+})
+
+test('formatWalletBalance: matches the host on its own fixture set', () => {
+  // 逐条对齐宿主 ui-settings-account/tests/formatBalance.client.spec.ts，
+  // 含指数记法（Platform wire schema 允许 0E-16 / 1e+3）。
+  assert.equal(formatWalletBalance('0.000000', '¥'), '¥0.00')
+  assert.equal(formatWalletBalance('12.34000000', '¥'), '¥12.34')
+  assert.equal(formatWalletBalance('1234.56999', '¥'), '¥1,234.56')
+  assert.equal(formatWalletBalance('0.00000001', '¥'), '<¥0.01')
+  assert.equal(formatWalletBalance('0.01', '¥'), '¥0.01')
+  assert.equal(formatWalletBalance('-0.000001', '¥'), '-¥0.01')
+  assert.equal(formatWalletBalance('-12.345', '¥'), '-¥12.35')
+  assert.equal(formatWalletBalance('-0.0000', '¥'), '¥0.00')
+  assert.equal(formatWalletBalance('0E-16', '¥'), '¥0.00')
+  assert.equal(formatWalletBalance('1E-8', '¥'), '<¥0.01')
+  assert.equal(formatWalletBalance('5.0000000000000000', '¥'), '¥5.00')
+  assert.equal(formatWalletBalance('5e0', '¥'), '¥5.00')
+  assert.equal(formatWalletBalance('1e+3', '¥'), '¥1,000.00')
+})
+
+test('formatWalletBalance: a negative carry crosses into the whole units', () => {
+  // 宿主负数分支是 `-${addCommas(value.abs().toFixed(2))}`：四舍五入的是绝对值，
+  // 所以进位可以越过元位。只给分位 padStart 会得到 `-¥0.100`（三位小数）。
+  assert.equal(formatWalletBalance('-0.999', '¥'), '-¥1.00')
+  assert.equal(formatWalletBalance('-1.999', '¥'), '-¥2.00')
+  assert.equal(formatWalletBalance('-99.999', '¥'), '-¥100.00')
+  assert.equal(formatWalletBalance('-0.995', '¥'), '-¥1.00')
+  // 不进位时仍是普通两位；整数部分跨千位分组。
+  assert.equal(formatWalletBalance('-999.994', '¥'), '-¥999.99')
+  assert.equal(formatWalletBalance('-1234.566', '¥'), '-¥1,234.57')
+  // 正数不四舍五入，因此不会进位。
+  assert.equal(formatWalletBalance('0.999', '¥'), '¥0.99')
+  assert.equal(formatWalletBalance('99.999', '¥'), '¥99.99')
+})
+
+test('accountLinks: keeps only absolute http(s) destinations', () => {
+  // getState 无论是否登录都返回 links（宿主按 platform origin 构造）。
+  assert.deepEqual(accountLinks({ ok: true, value: {
+    status: 'credential-stored',
+    links: { usageUrl: 'https://platform.deepseek.com/usage', topUpUrl: 'https://platform.deepseek.com/top_up' },
+  } }), { usageUrl: 'https://platform.deepseek.com/usage', topUpUrl: 'https://platform.deepseek.com/top_up' })
+  // 未登录也有链接，仍应可用。
+  assert.deepEqual(accountLinks({ ok: true, value: {
+    status: 'signed-out', links: { usageUrl: 'https://p.example/usage', topUpUrl: 'https://p.example/top_up' },
+  } }).usageUrl, 'https://p.example/usage')
+  // 非 http(s) 或缺失一律丢弃，绝不渲染一个可疑链接。
+  assert.deepEqual(accountLinks({ ok: true, value: { links: { usageUrl: 'javascript:alert(1)' } } }), {})
+  assert.deepEqual(accountLinks({ ok: true, value: { links: { topUpUrl: '/relative' } } }), {})
+  assert.deepEqual(accountLinks(null), {})
+  assert.deepEqual(accountLinks({ ok: false, error: {} }), {})
+})
+
+test('withAccountExtras: every account path keeps the usage and top-up links', () => {
+  // 回归锁：未登录、profile 不可用、余额失败这三条早退分支曾经直接 return
+  // `accountSeatState(...)`，把那两条链接一起丢掉；真实账号浮层因此对未登录用户
+  // 永不显示「查询用量 / 充值」。宿主 getState 无论登录态都带 links。
+  const view = { ok: true, value: {
+    status: 'signed-out',
+    links: { usageUrl: 'https://p.example/usage', topUpUrl: 'https://p.example/top_up' },
+  } }
+  const seat = accountSeatState(view, null)
+  for (const balance of [null, { ok: false, error: {} }, { ok: true, value: { status: 'failed' } }]) {
+    const merged = withAccountExtras(seat, view, balance)
+    assert.equal(merged.links.usageUrl, 'https://p.example/usage')
+    assert.equal(merged.links.topUpUrl, 'https://p.example/top_up')
+    // 余额不可用时仍是空数组，而不是 undefined（渲染层按 length 判断）。
+    assert.deepEqual(merged.balances, { wallets: [], bonusWallets: [] })
+    assert.equal(merged.kind, 'signed-out')
+  }
+  // 没有任何视图时也不抛错：链接为空、余额为空。
+  const bare = withAccountExtras({ kind: 'unknown', avatarUrl: undefined }, null, null)
+  assert.deepEqual(bare.links, {})
+  assert.deepEqual(bare.balances, { wallets: [], bonusWallets: [] })
 })
 
 test('relativeTime: Chinese and English phrasing', () => {

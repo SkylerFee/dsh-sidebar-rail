@@ -1,107 +1,145 @@
+**[English](README.md)** | [简体中文](README.zh.md)
+
 # dsh-sidebar-rail
 
-[![npm](https://img.shields.io/npm/v/%40skylerfee%2Fdsh-sidebar-rail.svg)](https://www.npmjs.com/package/@skylerfee/dsh-sidebar-rail) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/SkylerFee/dsh-sidebar-rail/ci.yml?branch=main&style=flat-square&label=CI&logo=githubactions&logoColor=white)](https://github.com/SkylerFee/dsh-sidebar-rail/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/%40skylerfee%2Fdsh-sidebar-rail?style=flat-square&logo=npm)](https://www.npmjs.com/package/@skylerfee/dsh-sidebar-rail)
+[![macOS Desktop](https://img.shields.io/badge/platform-macOS_Desktop-000000?style=flat-square&logo=apple&logoColor=white)](#support)
+[![MIT license](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 
-An **additive** icon rail for the [DeepSeek Harness](https://github.com/SkylerFee/deepseek-harness) sidebar on **macOS Desktop**.
+Reach workspaces, recent sessions, scheduled tasks, plugins and your account while the DeepSeek Harness sidebar is collapsed on macOS Desktop.
 
-On macOS the host folds the left column to zero width and clips it (`AppFrame: collapsedWidth = darwin ? 0 : 56`, plus `overflow: hidden` on the column), so the shipped build leaves no rail behind. This plugin fills exactly that one gap: while the sidebar is collapsed it draws a 56px rail on the left edge — Workspaces / Scheduled tasks / Plugins / More, plus an account seat at the foot. Hovering an entry opens its list after 120ms; leaving closes it after 200ms; `Escape` closes it too.
+The rail starts hidden. Collapse the host sidebar, then move the pointer into the 12px strip along the window's left edge to reveal a 56px icon rail. Hover an icon to browse its flyout and choose an entry to navigate. Expanding the sidebar keeps the host's search, workspace tree, account menu and settings.
 
-- **Additive**: never replaces the host `sidebar` slot, never touches the host's grid columns, never overrides host styles.
-- **Every other state renders nothing**: the expanded sidebar and the Web build stay entirely the host's.
-- Workspace pinning lives in `localStorage`; the collapse state belongs to the host — this plugin only reads it.
+<a id="screenshots"></a>
+## Screenshots
 
-## Support matrix
+These cropped screenshots show the real macOS Desktop client in Chinese, with a dark appearance and the Catppuccin skin. Workspace names and session titles are blurred. Recent count is set to 9 in the images; its default remains 5.
+
+<table>
+  <tr><th>Workspaces, pins and recent sessions</th><th>My plugins</th></tr>
+  <tr>
+    <td valign="top"><img src="docs/images/workspace-flyout.png" alt="Collapsed rail workspace flyout with pinned projects, recent session status and the count setting" width="330"></td>
+    <td valign="top"><img src="docs/images/plugins-flyout.png" alt="My plugins flyout showing enabled user plugins and their versions" width="330"></td>
+  </tr>
+</table>
+
+## Navigation
+
+[Screenshots](#screenshots) · [Install and manage](#install) · [Usage](#usage) · [Preferences and local data](#preferences) · [Troubleshooting](#troubleshooting) · [Development and contributions](#development) · [Documentation](#docs)
+
+<a id="support"></a>
+## Support
 
 | Environment / state | Behaviour |
 | --- | --- |
-| macOS Desktop, sidebar collapsed, viewport ≥ 768px | Draws the 56px floating rail (the plugin's only rendering branch) |
-| macOS Desktop, sidebar collapsed, viewport < 768px | Renders nothing. The host keeps its own reopen control in `shell.leading`, so no way back is lost |
-| macOS Desktop, sidebar expanded | Renders nothing. Search, view options, add-workspace, the settings seat and the account menu all stay shipped behaviour |
-| Web (any platform) | Renders nothing. The Web build already ships its own 56px collapsed rail, so a second one would be a duplicate |
-| Windows / Linux | Untested; renders nothing |
+| macOS Desktop, sidebar collapsed, viewport width ≥ 768px | Hidden rail, revealed by the edge strip or keyboard focus |
+| macOS Desktop, sidebar collapsed, viewport width < 768px | No rail; the host button still expands the sidebar |
+| macOS Desktop, sidebar expanded | No rail; the host sidebar remains available |
+| Web, any platform | No rail; the host keeps its existing collapsed rail |
+| Windows / Linux Desktop | No rail; support is untested |
 
-The decision is a pure function of three inputs, unit-tested in `test/data.test.mjs`:
+Recorded Desktop checks used macOS Desktop `0.2.2-rc.1`. See `peerDependencies` in [package.json](package.json) for other compatible host versions. Some new settings and balance displays still have unverified paths; see the [verification log](docs/verify.md). Source development and checks require Node.js ≥ 22.19.0, with no dependency installation or build step.
 
-```
-platform === 'darwin'  &&  host sidebar collapsed  &&  viewport width >= 768
-```
+<a id="install"></a>
+## Install and manage
 
-768 = 680 (the host's content floor) + 56 (rail) + 32 (breathing room).
+Ask the assistant in DSH to install `@skylerfee/dsh-sidebar-rail`. A profile with plugin management enabled can call `plugin_manager` with these arguments; this is a tool request, not a terminal command:
 
-## Install
-
-The plugin is a bundle patch plus a client module (`dsh.bundle` + `dsh.client` in `package.json`). Install it into a DSH profile with `plugin_manager`:
-
-```
-plugin_manager  action: install_bundle
-                target: @skylerfee/dsh-sidebar-rail      # published package
-                # or: target: <absolute path to this repo>
+```json
+{
+  "action": "install_bundle",
+  "target": "@skylerfee/dsh-sidebar-rail"
+}
 ```
 
-Reload the page afterwards so the client module loads. Remove it with `plugin_manager action: remove_bundle`, or switch it off with `set_bundle enabled: false`.
+For local development, replace `target` with this repository's absolute path. Installation affects the current profile. Follow the result's `nextStep` for a refresh or restart, then confirm that Sidebar rail is enabled and its component is running in the plugin manager.
 
-## Features
-
-| Entry | Behaviour |
+| Operation | `plugin_manager` arguments |
 | --- | --- |
-| Workspaces | Rail entry keeps the shipped 36×36 button shape (20px glyph, `aria-label`); the flyout lists pinned projects, then projects, with recent sessions in the foot |
-| Scheduled tasks | `remote.schedule.catalog()`, active tasks only; failure and empty states offer "Open panel" |
-| Plugins | `remote.pluginInventory.list()`, skipping rows explicitly marked `enabled: false`; failure and empty states offer "Open panel" |
-| More | "Expand sidebar" plus the remaining `sidebar.panellist` entries (read-only subscription) |
-| Account | Explains that account and settings live in the host sidebar, and offers "Expand sidebar" |
-| Pinning | In-row pin button; pinned projects lead the list and persist to `localStorage['dsh.sidebar-rail.v1'].pinnedWorkspaceIds` |
-| Recent sessions | `updatedAt` descending, archived / blank / subagent sessions dropped, capped at 10 (the flyout foot shows the first 5) |
+| Disable | `action: "set_bundle"`, `target: "@skylerfee/dsh-sidebar-rail"`, `enabled: false` |
+| Enable again | Same request with `enabled: true` |
+| Uninstall | `action: "remove_bundle"`, `target: "@skylerfee/dsh-sidebar-rail"` |
 
-## Layout
+The host plugin manager also provides an enable switch. Local preferences remain after disabling or uninstalling the plugin.
 
-```
-dsh-sidebar-rail/
-├─ client.js            # all UI logic (a __ModuleLoader__ static module)
-├─ index.js             # host half (empty apply; install/display only)
-├─ cordis.patch.yml     # bundle patch, inserts one row
-├─ package.json         # dsh.bundle + dsh.client declarations
-├─ locale/{en,zh}.json  # plugin-manager metadata
-├─ icon.svg             # plugin icon (original)
-├─ test/data.test.mjs   # pure-logic tests, sliced out of client.js
-├─ test/client-registration.test.mjs # static bundle registration under the full package name
-└─ docs/
-   ├─ PRD.md            # requirements, interaction spec, acceptance checklist
-   ├─ design.md         # architecture, constraints, data sources, known gaps
-   ├─ verify.md         # verification log, including what stayed untested
-   └─ desktop-validation-2026-11-04.md
-```
+<a id="usage"></a>
+## Usage
 
-## Known limitations
+1. Collapse the sidebar with the host button. Move the pointer to the window's left edge, below the window controls, to reveal the rail.
+2. Hover an icon for about 120ms to open its flyout. Leaving closes the flyout after about 200ms. Moving between rail icons switches the flyout without retracting the rail.
+3. Choose an entry to navigate and retract the rail. Expand the host sidebar for native search, settings or workspace management.
 
-1. **The rail hides until you reach for it.** It stays slid out of the window and appears from a 12px edge strip (or on keyboard focus). A persistent rail covered the conversation's first tab: the host gives the tab row no leading clearance while the column is collapsed, so the only way to keep the tab usable was to stop covering it. The host's collapsed column is zero-width with `overflow: hidden`, so the rail can only be `createPortal(document.body)` + `position: fixed`; it cannot be put back into the host grid. Below a 768px viewport it is not rendered at all, so it never sits on top of the conversation copy.
-2. **The top 48px stay empty.** The macOS traffic lights (x ≈ 16–68) and the host's own reopen / new-session controls in `shell.leading` (`left: 88px`) occupy the `--dsh-frame-top-clearance` band, so the rail starts at 48px.
-3. **Windows / Linux are untested.** The plugin renders nothing there and claims no support.
-4. **Pinning is a local concept.** The host has no field for it, so clearing `localStorage` or switching browsers loses it.
-5. **Task and plugin lists depend on optional remote services.** When the service is missing, unauthorized, or slow to answer (5s), the flyout shows a failure line plus "Open panel".
-6. **No account data is copied.** Account details and usage stay in the host settings page.
-7. **The plugin deliberately ships no expanded-column UI.** Replacing the host sidebar would unmount the host's settings shell, which makes Settings unreachable — including its shortcut.
+| Entry | Available actions |
+| --- | --- |
+| Workspaces | Browse pinned projects and projects by name; choose a name to switch workspace or use the pin button to pin or unpin it |
+| Recent sessions | Scroll independently at the foot of the workspace flyout, newest first, excluding archived, blank and subagent sessions; open an existing session and see its relative time and host-provided status mark |
+| Scheduled tasks | Browse tasks that have not ended or paused; choose a row or Open panel to enter the task panel |
+| My plugins | Browse bundles you installed and enabled, excluding host bundles; choose a row to enter the plugin manager |
+| More | Open other host panels or expand the native sidebar |
+| Account and settings | See the host avatar and available balances, bonuses, View usage and Top up links; signed-out accounts get a hint; the flyout also names the path to the host Settings panel (expand the sidebar, then Settings at its foot); sign-in, sign-out and payment remain in the host or destination page |
 
-## Development
+Keyboard: `Tab` to an icon reveals the rail. On a top-row function icon, press `↓` or `→` to enter its flyout, then `Tab` through the list. `Escape` inside the flyout closes it and returns focus to its trigger. `Enter` activates the focused button like a click; activating an icon navigates directly rather than entering its flyout list.
+
+<a id="preferences"></a>
+## Preferences and local data
+
+Recent count defaults to **5**, with a range of **1–20**. Adjust it with the stepper at the foot of the workspace flyout or on the plugin detail page. Recent sessions scroll independently when they exceed the visible height.
+
+![Recent count setting on the plugin detail page, showing 9 with decrease and increase buttons](docs/images/plugin-settings.png)
+
+Preferences belong to this client and use `localStorage['dsh.sidebar-rail.v1']`:
+
+| Field | Purpose |
+| --- | --- |
+| `pinnedWorkspaceIds` | Pinned workspace IDs, most recently pinned first |
+| `recentCount` | Number of recent rows, normalised to an integer from 1 to 20; unparseable values use the default |
+
+The host owns the collapse state; the plugin only reads it. Account and balance data come from host services and are not written to these preferences. Clearing client storage loses local settings. Both settings surfaces share this preference; see the [verification log](docs/verify.md) for real Desktop checks of immediate synchronisation between them.
+
+<a id="troubleshooting"></a>
+## Troubleshooting and limitations
+
+| Symptom | Check or recovery |
+| --- | --- |
+| No rail after installation | Confirm macOS Desktop, the enabled plugin, a collapsed sidebar and viewport width ≥ 768px; the rail starts hidden and needs the left-edge strip |
+| A recent session is missing | Check Recent count; archived, blank and subagent sessions are excluded |
+| Task or plugin loading fails | Missing services, structured failures and requests exceeding 5s enter the failure state; use Open panel for the host page, or close and reopen the flyout to retry |
+| No avatar or balance | A missing avatar uses a fallback glyph; unavailable balances get a hint. Account data are read on component mount and are not guaranteed to refresh live; use the host account page for full details |
+| A revealed rail covers the page's left edge | It is a temporary overlay that reserves no host grid space; the hidden default preserves the conversation tab entry, and moving the pointer away lets the rail retract |
+| Sidebar rail unavailable or a boot import error | Keep the visible error and host diagnostics, disable the plugin through the native sidebar, and report the host version, plugin version and reproduction steps in this repository; omit credentials and conversation content |
+
+The plugin keeps the expanded host sidebar and its column width. The top 48px remain clear for macOS window controls; reduced-motion preferences are respected. For light themes, other platforms, real remote failures, plugin-detail settings interactions and the primary balance row on a funded account, rely on the actual results and unverified items in the [verification log](docs/verify.md).
+
+<a id="development"></a>
+## Development and contributions
 
 ```bash
-npm test               # node --test test/*.test.mjs — 13 cases
-npm run check          # scripts/check.mjs (repo rules) + node --check on both entries + tests
-npm run hooks:install  # enable .githooks: pre-commit runs check, commit-msg enforces conventional commits
+npm test               # Pure logic and client factory registration tests
+npm run check          # Repository rules, syntax checks for both entries, and tests
+npm run hooks:install  # Optional: enable this repository's commit hooks
 ```
 
-The logic tests slice pure helpers out of `client.js` between `#region` markers to cover grouping, pinning order, the recent-session cap, data normalisation, relative-time wording, locale resolution and the rail's render predicate. A separate registration test executes the complete static script against the host loader facade and requires its factory ID to match the complete package name, including the scope. Rendering and slot registration still require Desktop validation.
+The client is a hand-written static module with no dependency installation or build step. Tests extract pure functions from the `#region` sections of `client.js`; the registration test requires the factory ID to match the full scoped package name. These checks do not replace real Desktop validation.
 
-Releasing: bump `version`, push, then create a GitHub Release tagged `v<version>` — `publish.yml` verifies the tag, the branch and the checks, then publishes over npm OIDC trusted publishing (no token, no 2FA).
+Use Conventional Commits for PR titles, with the summary, description and verification results in Simplified Chinese. Keep code identifiers and original diagnostics in English. Follow the [PR template](.github/pull_request_template.md) for the problem, changes, validation and unverified items; update both README languages when behaviour changes. UI, loading or registration changes require real environment and operation results in [docs/verify.md](docs/verify.md). See [AGENTS.md](AGENTS.md) and [CODING_STANDARDS.md](CODING_STANDARDS.md) for the full rules.
 
-`scripts/check.mjs` carries the rules a linter would own here (region markers, manifest consistency, banned patterns, i18n key parity); [CODING_STANDARDS.md](CODING_STANDARDS.md) carries the judgement calls a script cannot express, and is what a reviewer reads.
+Follow [ADR-0003](docs/adr/0003-release-pipeline.md) to release: update and push the version, then create a GitHub Release tagged `v<version>`. `publish.yml` validates it and uses npm OIDC trusted publishing; the npm Trusted Publisher must allow direct publishing.
 
-## Docs
+<a id="docs"></a>
+## Documentation
 
-- Requirements and acceptance: [docs/PRD.md](docs/PRD.md)
-- Design and constraints: [docs/design.md](docs/design.md)
-- Verification log: [docs/verify.md](docs/verify.md)
-- 中文说明: [README.zh.md](README.zh.md)
+| Document | Content |
+| --- | --- |
+| [Product requirements](docs/PRD.md) | Use cases, interactions and acceptance criteria |
+| [Design](docs/design.md) | Additive registration, layout, data sources, cleanup and local storage |
+| [Verification log](docs/verify.md) | Recorded results, historical defects and unverified paths |
+| [0.2.0 audit report](docs/desktop-audit-0.2.0-2026-11-04.md) | Findings and reproduction evidence from that version; later verification entries track fixes |
+| [Glossary](GLOSSARY.md) | Shared terms for the rail, sidebar, flyout and current session |
+| [Architecture decisions](docs/adr/) | Narrow-window eligibility, zero dependencies and release workflow |
 
 ## License
 
-MIT © 2026 SkylerFee — see [LICENSE](LICENSE).
+MIT © 2026 SkylerFee. See [LICENSE](LICENSE).
+
+[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
