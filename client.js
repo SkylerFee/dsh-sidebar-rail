@@ -91,6 +91,14 @@ window.__ModuleLoader__.load({
     /** Bounds the preference may take; the settings input clamps to this range. */
     const MIN_RECENT_COUNT = 1
     const MAX_RECENT_COUNT = RECENT_LIMIT
+    /**
+     * Pending-interaction kinds the host paints as `warning`.
+     *
+     * `ui-workspace/tree.ts#visiblePendingKind` whitelists exactly these three;
+     * every other declared domain key is navigation-irrelevant there, so the
+     * rail must not turn amber for one either.
+     */
+    const VISIBLE_PENDING_KINDS = new Set(['approval', 'plan-review', 'question'])
 
     // ---------------------------------------------------------------- locale --
     const zh = {
@@ -193,6 +201,66 @@ window.__ModuleLoader__.load({
       } catch {
         // A blocked storage backend must never break rendering.
       }
+    }
+
+    // ------------------------------------------------- shared preference store --
+    // The recent-session count has two surfaces (the plugin detail page and the
+    // rail's flyout). They used to keep one `useState` each and read the value
+    // once at mount, so editing in one place left the other showing — and then
+    // writing back — a stale number: setting 8 on the detail page and pressing
+    // "+" in the flyout persisted 7. One module-level store fixes both the stale
+    // read and the clobbering write: every surface subscribes to the same value,
+    // and `recentCount` is always re-read from storage before it is written.
+    /** Current `recentCount`, or undefined before the first surface reads it. */
+    let recentCountSnapshot
+    /** Surfaces listening for a `recentCount` change. */
+    const recentCountListeners = new Set()
+
+    /**
+     * Read the persisted `recentCount`, clamping whatever storage held.
+     * @returns An integer between MIN_RECENT_COUNT and MAX_RECENT_COUNT.
+     */
+    function readRecentCountFromStore() {
+      return readRecentCount(readStore().recentCount)
+    }
+
+    /**
+     * Publish a new `recentCount` to every surface and to storage.
+     *
+     * Storage is re-read before the merge so a concurrent writer cannot be
+     * clobbered by a value this surface merely had in memory.
+     * @param next - Requested count; clamped before it is written.
+     * @returns The clamped value that was published.
+     */
+    function setRecentCount(next) {
+      const value = readRecentCount(next)
+      recentCountSnapshot = value
+      writeStore({ recentCount: value })
+      for (const listener of recentCountListeners) listener()
+      return value
+    }
+
+    /**
+     * Subscribe to `recentCount` for `useSyncExternalStore`.
+     * @param listener - Called after every publish.
+     * @returns Unsubscribe function.
+     */
+    function subscribeRecentCount(listener) {
+      recentCountListeners.add(listener)
+      return () => { recentCountListeners.delete(listener) }
+    }
+
+    /**
+     * Read the current `recentCount` snapshot.
+     *
+     * The first call materialises from storage so two surfaces mounted in the
+     * same session agree immediately. Once published, the in-memory snapshot is
+     * authoritative: storage can only change through this module.
+     * @returns An integer between MIN_RECENT_COUNT and MAX_RECENT_COUNT.
+     */
+    function getRecentCountSnapshot() {
+      if (recentCountSnapshot === undefined) recentCountSnapshot = readRecentCountFromStore()
+      return recentCountSnapshot
     }
 
     // ---------------------------------------------------------------- styles --
@@ -579,18 +647,16 @@ window.__ModuleLoader__.load({
      */
     function RailSettings(props) {
       const t = typeof props?.t === 'function' ? props.t : (key) => String(key)
-      const [count, setCount] = useState(() => readRecentCount(readStore().recentCount))
-      const change = (next) => {
-        const value = readRecentCount(next)
-        setCount(value)
-        writeStore({ recentCount: value })
-      }
+      // Shared store, not local state: the flyout stepper writes the same value,
+      // and two independent `useState`s left whichever surface was not edited
+      // showing (then re-writing) a stale count.
+      const count = useSyncExternalStore(subscribeRecentCount, getRecentCountSnapshot, getRecentCountSnapshot)
       return h('div', { className: 'dsr-settings' },
         h('h4', { className: 'dsr-settings-title' }, t('settings.title')),
         h(RecentCountRow, {
           value: count,
           label: t('settings.recentCount'),
-          onChange: change,
+          onChange: setRecentCount,
           min: MIN_RECENT_COUNT,
           max: MAX_RECENT_COUNT,
         }),
@@ -646,13 +712,39 @@ window.__ModuleLoader__.load({
     // ---------------------------------------------------------- data adapters --
     // #region pure-data
     /**
+     * Add one to a non-negative decimal integer string without going through
+     * `Number`, so an amount far beyond `Number.MAX_SAFE_INTEGER` still carries.
+     * @param digits - Decimal integer text such as `99` or `0`.
+     * @returns The incremented text, with a new leading digit when it overflows.
+     */
+    function incrementDecimalDigits(digits) {
+      const chars = digits.split('')
+      let index = chars.length - 1
+      while (index >= 0) {
+        if (chars[index] === '9') {
+          chars[index] = '0'
+          index -= 1
+        } else {
+          chars[index] = String(Number(chars[index]) + 1)
+          return chars.join('')
+        }
+      }
+      return `1${chars.join('')}`
+    }
+
+    /**
      * Format one wallet balance the way the host does.
      *
-     * Mirrors ui-settings-account `formatBalance`: zero reads `¥0.00`, a positive
-     * amount below one cent reads `<¥0.01`, negatives keep a leading minus and
-     * never claim less than a cent, and everything else is truncated (not
-     * rounded) to two decimals with grouped digits. String math avoids the
-     * `Big` dependency this static module cannot load.
+     * Mirrors ui-settings-account `formatBalance` exactly: zero reads `¥0.00`, a
+     * positive amount below one cent reads `<¥0.01`, negatives keep a leading
+     * minus and never claim less than a cent, and everything else is truncated
+     * (positives, `roundDown`) or half-up rounded (negatives, `toFixed`). String
+     * math avoids the `Big` dependency this static module cannot load.
+     *
+     * The negative branch rounds the ABSOLUTE value, so it can carry into the
+     * whole units: `-0.999` is `-¥1.00` and `-99.999` is `-¥100.00` on the host.
+     * Padding the cent field alone produced `-¥0.100`, which is why the carry is
+     * handled explicitly here.
      * @param amount - Decimal balance string from the wallet.
      * @param symbol - Currency symbol.
      * @returns Display text.
@@ -666,22 +758,28 @@ window.__ModuleLoader__.load({
       const text = expandExponent(raw)
       if (text === null) return ''
       const negative = text.startsWith('-')
-      const [whole, fraction = ''] = (negative ? text.slice(1) : text).split('.')
-      const cents = fraction.padEnd(3, '0')
-      const zero = /^0*$/.test(whole) && /^0*$/.test(fraction)
+      const [wholeRaw, fraction = ''] = (negative ? text.slice(1) : text).split('.')
+      const whole = wholeRaw === '' ? '0' : wholeRaw
+      const zero = /^0*$/.test(wholeRaw) && /^0*$/.test(fraction)
       if (zero) return `${symbol}0.00`
-      const subCent = /^0*$/.test(whole) && cents.slice(0, 2) === '00'
+      const subCent = /^0*$/.test(wholeRaw) && fraction.padEnd(3, '0').slice(0, 2) === '00'
       if (subCent) return negative ? `-${symbol}0.01` : `<${symbol}0.01`
-      // The host truncates a positive balance but ROUNDS a negative one
-      // (formatBalance: roundDown for positives, toFixed for negatives), so a
-      // debit of 12.345 renders -¥12.35 there and must read the same here.
-      const truncated = fraction.padEnd(2, '0').slice(0, 2)
-      const nextDigit = fraction.length > 2 ? Number(fraction[2]) : 0
-      const roundedCents = negative && nextDigit >= 5
-        ? String(Number(truncated) + 1).padStart(2, '0')
-        : truncated
-      const grouped = Number(whole === '' ? '0' : whole).toLocaleString()
-      return `${negative ? '-' : ''}${symbol}${grouped}.${roundedCents}`
+      let cents = fraction.padEnd(2, '0').slice(0, 2)
+      let units = whole
+      // The host rounds a negative balance (Big#toFixed) and truncates a
+      // positive one (roundDown); only the negative branch can carry.
+      if (negative && fraction.length > 2 && Number(fraction[2]) >= 5) {
+        const bumped = Number(cents) + 1
+        if (bumped === 100) {
+          units = incrementDecimalDigits(units)
+          cents = '00'
+        } else {
+          cents = String(bumped).padStart(2, '0')
+        }
+      }
+      // `addCommas` in the host groups through `Number`, so this matches it.
+      const grouped = Number(units).toLocaleString()
+      return `${negative ? '-' : ''}${symbol}${grouped}.${cents}`
     }
 
     /**
@@ -782,16 +880,28 @@ window.__ModuleLoader__.load({
      * unread-completion reminder, which is followed by plain idle. Keeping the
      * same order means the rail and the shipped sidebar never label the same
      * session differently.
-     * @param summary - The row's SessionSummary (for `running`).
+     *
+     * Two host details are reproduced exactly rather than approximated:
+     *   - only `approval` / `plan-review` / `question` count as a visible pending
+     *     interaction (`visiblePendingKind`); any other kind is ignored, so a
+     *     future domain key cannot silently paint the rail amber;
+     *   - `running` falls back to the SessionSummary when the status snapshot has
+     *     no entry yet, which is how the tree resolves it (`status?.running ??
+     *     s.running`).
+     * Running subagents are NOT folded in: that needs `subagentCatalog` from
+     * `projectionsBySession`, which this row projection does not carry.
+     * @param summary - The row's SessionSummary (for the `running` fallback).
      * @param status - The SessionStatus entry from `useSessionStatus`, if any.
      * @returns 'warning' | 'ongoing' | 'done' | 'idle'.
      */
     function sessionStatusOf(summary, status) {
       const pending = status?.pendingInteraction
-      if (pending !== undefined && pending !== null) return 'warning'
+      if (pending !== undefined && pending !== null && VISIBLE_PENDING_KINDS.has(pending.kind)) return 'warning'
       const running = status?.running === undefined ? summary?.running : status.running
       if (running === true) return 'ongoing'
-      if (status?.completionUnread === true || summary?.completed === true) return 'done'
+      // `summary.completed` deliberately does not participate: the host reads
+      // `completionUnread` only (`SessionSummary` has no `completed` field).
+      if (status?.completionUnread === true) return 'done'
       return 'idle'
     }
 
@@ -925,6 +1035,24 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Attach the read-only extras every account answer carries.
+     *
+     * `getState` answers `links` whether or not a credential is stored (the host
+     * builds them from its platform origin), so the signed-out and
+     * profile-unavailable paths must keep them too: only `balances` depends on
+     * being signed in. Folding this into one function keeps those early returns
+     * from silently dropping the usage/top-up entries — the bug that made them
+     * disappear for a signed-out account.
+     * @param seat - Result of `accountSeatState`.
+     * @param viewAnswer - `remote.account.getState()` answer, for its `links`.
+     * @param balanceAnswer - `remote.account.getBalance()` answer, when fetched.
+     * @returns The seat plus `balances` and `links`, both always present.
+     */
+    function withAccountExtras(seat, viewAnswer, balanceAnswer) {
+      return { ...seat, balances: balanceRows(balanceAnswer), links: accountLinks(viewAnswer) }
+    }
+
+    /**
      * Split workspaces into pinned and normal rows and collect recent sessions.
      * @param items - WorkspaceView[].
      * @param sessions - SessionListState.
@@ -932,7 +1060,12 @@ window.__ModuleLoader__.load({
      * @param pinnedIds - Locally pinned workspace ids, most recent first.
      * @param language - Active locale id.
      * @param panelCovering - True while a non-session panel covers the conversation.
-     * @returns Pinned rows, normal rows and recent session rows.
+     * @param recentCount - Requested number of recent rows; clamped by `readRecentCount`.
+     * @param statuses - `SessionStatusSnapshot` (a Map keyed by SessionId) from
+     *   `useSessionStatus`; absent when the Host does not inject the hook.
+     * @returns Pinned rows, normal rows and recent session rows. Each recent row
+     *   carries `status` ('warning' | 'ongoing' | 'done' | 'idle') so the renderer
+     *   can draw the host's state mark beside it.
      */
     function deriveSections(items, sessions, archivedIds, pinnedIds, language, panelCovering, recentCount, statuses) {
       const list = Array.isArray(items) ? items : []
@@ -955,6 +1088,13 @@ window.__ModuleLoader__.load({
       pinnedRows.sort((a, b) => (pinnedRank.get(a.id) ?? 0) - (pinnedRank.get(b.id) ?? 0))
       const shownSessionId = currentSessionId(sessions, panelCovering)
       const byId = sessions?.byId ?? {}
+      // `useSessionStatus` answers a ReadonlyMap; a plain object is tolerated so a
+      // host shape change degrades to "no marks" instead of throwing in render.
+      const statusOf = (id) => {
+        if (statuses === null || statuses === undefined || typeof statuses !== 'object') return undefined
+        if (typeof statuses.get === 'function') return statuses.get(id)
+        return statuses[id]
+      }
       const recentRows = []
       for (const entry of Object.values(byId)) {
         if (entry == null || typeof entry !== 'object') continue
@@ -966,6 +1106,8 @@ window.__ModuleLoader__.load({
           meta: relativeTime(entry.updatedAt, language),
           updatedAt: Number.isFinite(entry.updatedAt) ? entry.updatedAt : 0,
           active: entry.id === shownSessionId,
+          // The renderer keys the state mark off this; 'idle' draws nothing.
+          status: sessionStatusOf(entry, statusOf(entry.id)),
         })
       }
       recentRows.sort((a, b) => b.updatedAt - a.updatedAt)
@@ -1230,9 +1372,11 @@ window.__ModuleLoader__.load({
       // Declared before the derived sections: `useMemo` below reads both, and a
       // later declaration would hit the temporal dead zone at render time.
       const [accountSeat, setAccountSeat] = useState({ kind: 'unknown', avatarUrl: undefined })
-      // Persisted in this plugin's own store; the plugin detail page writes the
-      // same key, so both surfaces share one value.
-      const [recentCount, setRecentCount] = useState(() => readRecentCount(readStore().recentCount))
+      // Shared store rather than local state: the plugin detail page edits the
+      // same preference, and two independent `useState`s meant whichever surface
+      // was not edited kept showing — and on its next click, re-wrote — a stale
+      // count. Subscribing here makes either surface's edit land in both.
+      const recentCount = useSyncExternalStore(subscribeRecentCount, getRecentCountSnapshot, getRecentCountSnapshot)
       const statuses = readStatuses((snapshot) => snapshot)
       const panelEntries = useObservable(panels, identity)
       const language = useObservable(locale, (snapshot) => snapshot?.active ?? 'en')
@@ -1463,14 +1607,14 @@ window.__ModuleLoader__.load({
 
       /**
        * Persist a new recent-session count and reflect it immediately.
+       *
+       * Delegates to the module-level store so the plugin detail page sees the
+       * same value on its next render; a local `setState` here was what let the
+       * other surface keep — and later re-persist — a stale count.
        * @param next - Requested count; clamped before it is written.
        * @returns Nothing.
        */
-      const changeRecentCount = useCallback((next) => {
-        const value = readRecentCount(next)
-        setRecentCount(value)
-        writeStore({ recentCount: value })
-      }, [])
+      const changeRecentCount = useCallback((next) => { setRecentCount(next) }, [])
 
       /** Toggle one workspace's pin and persist the new order. */
       const togglePin = useCallback((workspaceId) => {
@@ -1864,45 +2008,82 @@ window.__ModuleLoader__.load({
           // identity and answers the sign-in question alone, so a missing build
           // version can never cost us the signed-out rendering. Only a signed-in
           // account reaches `getProfile`, which does require the identity.
+          //
+          // Every path returns through `withAccountExtras`: `getState` carries
+          // `links` for signed-out accounts too, and dropping them there made the
+          // usage/top-up entries vanish for anyone not signed in. The whole read
+          // is also raced against `REMOTE_TIMEOUT_MS` (AGENTS.md hard rule 8): a
+          // hung Host call must end in a visible failure state, never in a
+          // forever-"balance unavailable" seat.
           accountSeat: async () => {
             const account = ctx.get('remote.account')
             if (account === undefined || typeof account.getState !== 'function') {
-              return { kind: 'unknown', avatarUrl: undefined }
+              return withAccountExtras({ kind: 'unknown', avatarUrl: undefined }, null, null)
             }
-            let view
-            try {
-              view = await account.getState()
-            } catch (error) {
-              console.warn('[dsh-sidebar-rail] account state unavailable', error)
-              return { kind: 'unknown', avatarUrl: undefined }
-            }
-            const viewValue = view !== null && typeof view === 'object' && 'value' in view ? view.value : null
-            const signedIn = viewValue !== null && typeof viewValue === 'object'
-              && viewValue.status === 'credential-stored'
-            if (!signedIn) return accountSeatState(view, null)
-            if (typeof account.getProfile !== 'function') return { kind: 'signed-in', avatarUrl: undefined }
-            const metadata = accountClientMetadata(
-              resolveLocaleId(ctx.locale.getSnapshot?.() ?? null),
-              clientBuildVersion(),
-              new Date().getTimezoneOffset(),
-            )
-            if (metadata === null) return { kind: 'signed-in', avatarUrl: undefined }
-            // Profile and balance are independent queries on the host side, so one
-            // failing must not blank the other: each keeps its own fallback.
-            const [profile, balance] = await Promise.all([
-              account.getProfile(metadata).catch((error) => {
-                console.warn('[dsh-sidebar-rail] account profile unavailable', error)
-                return null
-              }),
-              typeof account.getBalance === 'function'
-                ? account.getBalance(metadata).catch((error) => {
-                  console.warn('[dsh-sidebar-rail] account balance unavailable', error)
+            let timedOut = false
+            /** Timer handle; cleared on every exit so a settled read leaks nothing. */
+            let timerId
+            const timer = new Promise((resolve) => {
+              timerId = window.setTimeout(() => {
+                timedOut = true
+                console.warn('[dsh-sidebar-rail] account read timed out')
+                resolve(null)
+              }, REMOTE_TIMEOUT_MS)
+            })
+            const read = (async () => {
+              let view
+              try {
+                view = await account.getState()
+              } catch (error) {
+                console.warn('[dsh-sidebar-rail] account state unavailable', error)
+                return withAccountExtras({ kind: 'unknown', avatarUrl: undefined }, null, null)
+              }
+              // `view` is already in hand here: carry its `links` even when the
+              // rest of the read stops early.
+              const viewValue = view !== null && typeof view === 'object' && 'value' in view ? view.value : null
+              const signedIn = viewValue !== null && typeof viewValue === 'object'
+                && viewValue.status === 'credential-stored'
+              if (!signedIn) return withAccountExtras(accountSeatState(view, null), view, null)
+              const metadata = accountClientMetadata(
+                resolveLocaleId(ctx.locale.getSnapshot?.() ?? null),
+                clientBuildVersion(),
+                new Date().getTimezoneOffset(),
+              )
+              if (metadata === null) {
+                console.warn('[dsh-sidebar-rail] account calls skipped: no client build version')
+                return withAccountExtras({ kind: 'signed-in', avatarUrl: undefined }, view, null)
+              }
+              if (typeof account.getProfile !== 'function') {
+                return withAccountExtras({ kind: 'signed-in', avatarUrl: undefined }, view, null)
+              }
+              // Profile and balance are independent queries on the host side, so one
+              // failing must not blank the other: each keeps its own fallback.
+              const [profile, balance] = await Promise.all([
+                account.getProfile(metadata).catch((error) => {
+                  console.warn('[dsh-sidebar-rail] account profile unavailable', error)
                   return null
-                })
-                : Promise.resolve(null),
-            ])
-            const seat = accountSeatState(view, profile)
-            return { ...seat, balances: balanceRows(balance), links: accountLinks(view) }
+                }),
+                typeof account.getBalance === 'function'
+                  ? account.getBalance(metadata).catch((error) => {
+                    console.warn('[dsh-sidebar-rail] account balance unavailable', error)
+                    return null
+                  })
+                  : Promise.resolve(null),
+              ])
+              return withAccountExtras(accountSeatState(view, profile), view, balance)
+            })()
+            try {
+              // The losing side of the race is left to settle on its own; `read`
+              // already swallows its own failures, and a late answer must not
+              // write state (the caller's `live` flag covers that).
+              const result = await Promise.race([read, timer])
+              if (timedOut || result === null) {
+                return withAccountExtras({ kind: 'unknown', avatarUrl: undefined }, null, null)
+              }
+              return result
+            } finally {
+              window.clearTimeout(timerId)
+            }
           },
           fallbackText: 'Sidebar rail unavailable',
         })

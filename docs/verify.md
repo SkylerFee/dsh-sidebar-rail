@@ -124,6 +124,66 @@
 - 问题 4 的键盘路径按实现核对，**未做完整 Tab/Escape 焦点遍历审计**。
 - 滑出动画的 160ms 手感、以及滑出状态与浮层交互（指针离开轨但浮层仍开）未逐帧验证。
 
+## 0.3.1 三项优化的验收修复（2026-11-05，第 18 轮）
+
+第 17 轮的三项功能经真机 + 代码链路复核后，发现并修复 4 个缺陷。**上一轮「真机验证」表里的两项结论不成立，已在本轮更正**，详见文末。
+
+### 修复 1（P0）：会话状态标识完全没有接线
+
+`sessionStatusOf` 定义完整、单测 4 条全绿，但**全仓库零调用点**；`deriveSections` 加了 `statuses` 形参却在函数体内一次都没用；行对象没有 `status` 字段，`row.status` 恒 `undefined`，`StateMark` 永不渲染。即：**功能完全不存在，测试却全绿**。
+
+- `deriveSections` 现在逐行写 `status: sessionStatusOf(entry, statusOf(entry.id))`（`client.js`，`recentRows.push` 处）。
+- `statuses` 按宿主真实契约读取：`ReadonlyMap<SessionId, SessionStatus>`；普通对象形状也容忍，缺失时退化为「无状态事实」而非崩溃。
+- `sessionStatusOf` 同步修正两个与宿主的偏差：
+  - 只把 `approval` / `plan-review` / `question` 视为 visible pending（对齐 `tree.ts#visiblePendingKind`），其他 kind 不再误染 warning；
+  - 去掉 `summary.completed` 分支 —— 宿主 `SessionSummary` 没有该字段，是永不成立的条件。
+- 新增回归锁：`deriveSections: recent rows carry the host status mark` 直接断言生产路径输出的 `status` 值，不再只测纯函数。
+
+### 修复 2（P1）：`recentCount` 跨入口状态陈旧且会丢数据
+
+两个入口各自 `useState` + 仅在挂载时读一次，无 `storage` 监听。真机复现：详情页设 8 → 浮层仍显示 6 → 在浮层按 `+` 后，**localStorage 里的 8 被覆盖成 7**（实测序列 `…6,7,8,7`）。
+
+- 改为模块级共享存储（`subscribeRecentCount` / `getRecentCountSnapshot` / `setRecentCount`），两个入口都用 `useSyncExternalStore` 订阅同一值；写入前重新夹取，不再回写内存里的陈旧值。
+- 真机复验：详情页 7 → `+` 变 8 → 折叠后打开浮层**立即显示 8**、列表渲染 8 条；在浮层点 `+` 变 9 后，**同一屏右侧详情页同步为 9**；leveldb 持久值 9，序列末端无回退。
+
+### 修复 3（P1）：负数余额进位溢出到分位以上
+
+`String(Number(truncated)+1).padStart(2,'0')` 在 `truncated === '99'` 时产出三位小数。对照从 asar 取出的宿主 `formatBalance`（用 `Big`）实测：插件 `-0.999 → -¥0.100`、`-99.999 → -¥99.100`，宿主应为 `-¥1.00` / `-¥100.00`。
+
+- 负数分支改为「绝对值进位 + 整元进位」：`bumped === 100` 时整数位 +1、分位置 `00`；新增 `incrementDecimalDigits` 做纯字符串进位（不经过 `Number`，大额不丢精度）。
+- 回归对照 28 条（含 `-0.995`、`-999.994`、`-1234.566`、指数记法）与宿主 Big 语义**逐条一致**。
+- 注意：用 `Math.abs(x).toFixed(2)` 做对照会因二进制浮点把 `-0.995` 算成 `0.99`，那是错基准；宿主是精确十进制 half-up。
+
+### 修复 4（P1）：未登录账号浮层丢失用量/充值链接；账号读取无超时
+
+`client.js` 的 `accountSeat` 在 `!signedIn`、无 `getProfile`、`metadata === null` 三条早退分支直接 `return accountSeatState(...)`，从未调用 `accountLinks`，而宿主 `getState` 无论登录态都返回 `links` → 未登录用户永远看不到那两个入口。另外整段读取没有超时，违反 AGENTS.md 硬约束 8。
+
+- 新增 `withAccountExtras(seat, viewAnswer, balanceAnswer)`，所有返回路径统一经过它，`balances` / `links` 恒存在。
+- 整段读取与 `REMOTE_TIMEOUT_MS` 赛跑，超时落到明确的失败态并打 `[dsh-sidebar-rail] account read timed out` 日志。
+- 新增回归锁：`withAccountExtras: every account path keeps the usage and top-up links`。
+
+### 真机复验（macOS Desktop 0.2.2-rc.1，折叠态，判据为像素/文案）
+
+| 项 | 结果 |
+| --- | --- |
+| 状态标识接线 | ✅ 最近会话首行右侧出现 `ongoing` 14px 圆环（轨道 + 弧线）；此前同一位置完全空白 |
+| 跨入口同步（详情→浮层） | ✅ 详情页 8 → 浮层立即显示 8 且列表 8 条 |
+| 跨入口同步（浮层→详情） | ✅ 浮层 9 → 同屏详情页同步 9；leveldb 末值 9，无回退 |
+| 账号浮层 | ✅ 余额 `¥0.00`、赠金 `¥0.00`、「查询用量」「充值」、真实头像 |
+| `npm run check` | ✅ 仓库规则 4 条 + 两入口语法 + **33 项测试**全过 |
+
+### 未验证
+
+- 未逐帧核对 `ongoing` 旋转动画的观感（只确认形态为圆环）。
+- 未在**真实有余额**的账号上验证主余额行与进位分支（当前账号主钱包为空）。
+- 未验证登录态在插件已挂载期间切换时的刷新时机（本次只修了早退丢链接与超时，未做 `account/watch` 订阅）。
+- 状态标识未覆盖 `runningSubagentCount > 0` 的子代理场景：需要 `projectionsBySession.subagentCatalog`，当前行投影不携带。
+
+### 对第 17 轮记录的两处更正
+
+- 第 17 轮「会话状态标识 ✅ 运行中的会话行出现 `ongoing` 圆环」：**当时不可能成立**（该功能零调用、组件永不渲染）。当时看到的大概率是宿主展开侧栏自己的 `StateDot`。本轮修复后才真正出现。
+- 第 17 轮「两处写同一个键，不会互相矛盾」：只在持久层成立，UI 层当时会互相陈旧并互相覆盖。本轮已改为共享存储。
+
 ## 0.3.1 三项优化（2026-11-05，第 17 轮）
 
 ### 1 最近会话条数设置 + 独立滚动
