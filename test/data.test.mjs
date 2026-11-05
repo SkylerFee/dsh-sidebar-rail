@@ -32,11 +32,13 @@ const helpers = new Function(`${region('pure-helpers')}
 ${region('pure-data')}
 return { EMPTY_SESSIONS, EMPTY_WORKSPACES, selectorHook, relativeTime, shortPath,
   resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT,
-  deriveSections, normalizeTasks, normalizePlugins, currentSessionId, accountSeatState, accountClientMetadata, clientBuildVersion }`)()
+  deriveSections, normalizeTasks, normalizePlugins, currentSessionId, accountSeatState, accountClientMetadata, clientBuildVersion,
+  remoteOutcome, flyoutPlacement }`)()
 
 const { deriveSections, normalizeTasks, normalizePlugins, relativeTime, shortPath, selectorHook,
   resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT, currentSessionId, accountSeatState,
-  accountClientMetadata, clientBuildVersion, EMPTY_SESSIONS } = helpers
+  accountClientMetadata, clientBuildVersion, remoteOutcome, flyoutPlacement,
+  EMPTY_SESSIONS } = helpers
 
 /**
  * Build a SessionSummary-shaped row.
@@ -223,6 +225,37 @@ test('accountClientMetadata: host-shaped identity, null without a version', () =
   assert.equal(accountClientMetadata('zh', '', 0), null)
   // locale 缺失时退化为 en，而不是发空串。
   assert.equal(accountClientMetadata('', '1.0.0', 0).locale, 'en')
+})
+
+test('remoteOutcome: a resolved failure frame is not an empty list', () => {
+  // geteway 把 RPC 失败作为 { ok:false, error } 解析返回，宿主也显式判 ok。
+  const failed = remoteOutcome({ ok: false, error: { code: 'gateway/peer-disposed', message: 'offline' } })
+  assert.equal(failed.kind, 'failed')
+  assert.equal(failed.error.code, 'gateway/peer-disposed')
+  // 成功但空列表：这才是「空态」。
+  assert.deepEqual(remoteOutcome({ ok: true, value: [] }), { kind: 'ready', value: [], error: undefined })
+  // 可选服务不存在时包装函数返回 null → 服务不可用，不是空列表。
+  assert.equal(remoteOutcome(null).kind, 'unavailable')
+  assert.equal(remoteOutcome(undefined).kind, 'unavailable')
+  // 裸载荷（测试或未来的直连 remote）按成功处理。
+  assert.equal(remoteOutcome([1, 2]).kind, 'ready')
+})
+
+test('flyoutPlacement: never claims more height than the window has left', () => {
+  // 矮窗口 + 靠下的锚点：旧实现用固定的 100vh-32px，浮层底部必然越界。
+  const short = flyoutPlacement({ top: 600, bottom: 636 }, 700, false)
+  assert.equal(short.top, 600)
+  assert.equal(short.maxHeight, 700 - 600 - 12)
+  assert.ok(short.top + short.maxHeight <= 700)
+  // 顶到边缘时抬到最小间距，但高度仍受窗口约束。
+  const clamped = flyoutPlacement({ top: 0, bottom: 36 }, 700, false)
+  assert.equal(clamped.top, 12)
+  assert.ok(clamped.top + clamped.maxHeight <= 700)
+  // 账号座位：底对齐，从底部往上算可用高度。
+  const account = flyoutPlacement({ top: 640, bottom: 676 }, 700, true)
+  assert.equal(account.bottom, 700 - 676)
+  assert.equal(account.maxHeight, 700 - account.bottom - 12)
+  assert.equal(account.top, undefined)
 })
 
 test('relativeTime: Chinese and English phrasing', () => {
