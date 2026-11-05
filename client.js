@@ -192,8 +192,12 @@ window.__ModuleLoader__.load({
 @media (prefers-reduced-motion: reduce) { .dsr-rail-float { transition:none; } }
 /* The edge strip stays clickable/hoverable while the rail is out, which is what
    lets the pointer "find" it without a visible handle. */
+/* 12px rather than 8px: macOS keeps an invisible resize band along the window
+   edge, so a narrower strip left the pointer on the resize cursor and its events
+   never reached the page. This width stays clear of that band while still being
+   far narrower than the 56px rail it reveals. */
 .dsr-rail-hotzone { position:fixed; left:0; top:var(--dsh-frame-top-clearance, 48px); bottom:0;
-  width:8px; z-index:59; -webkit-app-region:no-drag; }
+  width:12px; z-index:59; -webkit-app-region:no-drag; }
 .dsr-rail-btn { display:flex; align-items:center; justify-content:center; width:36px; height:36px; padding:0;
   border:none; background:transparent; border-radius:var(--dsw-radius-sm, 8px);
   color:var(--dsw-alias-label-primary); cursor:pointer;
@@ -673,6 +677,30 @@ window.__ModuleLoader__.load({
       return { top, maxHeight: budget(top) }
     }
 
+    /** Width of the edge strip that reveals the rail. */
+    const RAIL_HOTZONE_WIDTH = 12
+    /** Width the rail occupies once revealed (matches `.dsr-rail-float`). */
+    const RAIL_REVEAL_WIDTH = 56
+    /** Grace period before the rail retracts after the pointer leaves it. */
+    const RETRACT_DELAY_MS = 180
+    /**
+     * Whether the pointer is still inside the region that keeps the rail out.
+     *
+     * Element-level `pointerleave` cannot answer this: the rail slides over the
+     * edge strip, so the strip receives `pointerleave` the moment the rail
+     * covers it, and retracting uncovers it again — the pair oscillates. Reading
+     * the pointer's x against the revealed width is stable regardless of which
+     * element happens to be on top.
+     * @param x - Pointer x in client coordinates.
+     * @param railWidth - Width the rail occupies once revealed.
+     * @returns True when the pointer should keep the rail visible.
+     */
+    function keepsRailRevealed(x, railWidth) {
+      if (!Number.isFinite(x)) return false
+      const width = Number.isFinite(railWidth) && railWidth > 0 ? railWidth : 56
+      return x >= 0 && x <= width
+    }
+
     /**
      * Classify a remote answer before normalising it.
      *
@@ -901,6 +929,44 @@ window.__ModuleLoader__.load({
       // person focuses it with the keyboard. See the CSS note on why the default
       // state must not cover the host's conversation tabs.
       const [revealed, setRevealed] = useState(false)
+      const retractTimer = useRef(undefined)
+      /** Cancel a pending retraction while the pointer is back over the rail. */
+      const cancelRetract = useCallback(() => {
+        if (retractTimer.current !== undefined) {
+          window.clearTimeout(retractTimer.current)
+          retractTimer.current = undefined
+        }
+      }, [])
+      /** Retract after a beat, so crossing the rail edge does not flicker. */
+      const scheduleRetract = useCallback(() => {
+        cancelRetract()
+        retractTimer.current = window.setTimeout(() => { setRevealed(false) }, RETRACT_DELAY_MS)
+      }, [cancelRetract])
+      useEffect(() => cancelRetract, [cancelRetract])
+
+      /**
+       * Keep the rail's visibility in step with the pointer's position.
+       *
+       * A window-level listener rather than element events: the reveal strip and
+       * the sliding rail overlap, so `pointerleave` on either one fires when the
+       * other takes the hit target. Position decides instead — inside the rail's
+       * own width keeps it out, anything further left of the window retracts it —
+       * and an open flyout always wins so the pointer can travel to it.
+       */
+      useEffect(() => {
+        if (!revealed) return undefined
+        const onMove = (event) => {
+          if (open !== null) return
+          const railWidth = RAIL_REVEAL_WIDTH
+          const inFlyout = panelRef.current !== null && panelRef.current.contains(event.target)
+          if (inFlyout) return
+          if (keepsRailRevealed(event.clientX, railWidth)) return
+          setRevealed(false)
+        }
+        window.addEventListener('pointermove', onMove, { passive: true })
+        return () => { window.removeEventListener('pointermove', onMove) }
+      }, [revealed, open])
+
       /**
        * Dismiss the flyout and retract the rail.
        *
@@ -1260,16 +1326,24 @@ window.__ModuleLoader__.load({
       // itself, which slides in over it. The strip is what makes a hidden rail
       // discoverable without covering the conversation tabs.
       return createPortal(h('div', null,
+        // The strip only ever reveals. It deliberately has no pointerleave: the
+        // rail slides on top of it, so a leave-from-the-strip handler fired the
+        // moment the rail appeared and the two states oscillated. Retraction is
+        // decided from the pointer's position instead (effect below).
         h('div', {
           className: 'dsr-rail-hotzone',
           onPointerEnter: () => setRevealed(true),
-          onPointerLeave: () => { if (open === null) setRevealed(false) },
         }),
         h('div', {
           className: 'dsr-rail-float',
           'data-dsr-revealed': revealed === true ? 'true' : undefined,
-          onPointerEnter: () => setRevealed(true),
-          onPointerLeave: () => { if (open === null) setRevealed(false) },
+          onPointerEnter: () => { cancelRetract(); setRevealed(true) },
+          // Leaving the rail retracts it, after a short delay so a pointer that
+          // merely crosses the edge does not make it flicker. The reveal strip has
+          // no leave handler of its own, which is what keeps the two states from
+          // chasing each other.
+          onPointerLeave: () => { if (open === null) scheduleRetract() },
+          onPointerMove: cancelRetract,
           onFocusCapture: () => setRevealed(true),
           // Leaving the rail region with focus still inside would hide it under
           // the keyboard user, so only collapse when focus really left.

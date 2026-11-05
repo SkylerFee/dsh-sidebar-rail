@@ -33,11 +33,11 @@ ${region('pure-data')}
 return { EMPTY_SESSIONS, EMPTY_WORKSPACES, selectorHook, relativeTime, shortPath,
   resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT,
   deriveSections, normalizeTasks, normalizePlugins, currentSessionId, accountSeatState, accountClientMetadata, clientBuildVersion,
-  remoteOutcome, flyoutPlacement }`)()
+  remoteOutcome, flyoutPlacement, keepsRailRevealed, RAIL_REVEAL_WIDTH }`)()
 
 const { deriveSections, normalizeTasks, normalizePlugins, relativeTime, shortPath, selectorHook,
   resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT, currentSessionId, accountSeatState,
-  accountClientMetadata, clientBuildVersion, remoteOutcome, flyoutPlacement,
+  accountClientMetadata, clientBuildVersion, remoteOutcome, flyoutPlacement, keepsRailRevealed, RAIL_REVEAL_WIDTH,
   EMPTY_SESSIONS } = helpers
 
 /**
@@ -256,6 +256,21 @@ test('flyoutPlacement: never claims more height than the window has left', () =>
   assert.equal(account.bottom, 700 - 676)
   assert.equal(account.maxHeight, 700 - account.bottom - 12)
   assert.equal(account.top, undefined)
+})
+
+test('keepsRailRevealed: position decides, so an overlaid strip cannot oscillate', () => {
+  // 轨区（0..56）内保持展开；这不受"哪个元素在指针下"影响——这正是修闪烁的关键。
+  assert.equal(keepsRailRevealed(0, RAIL_REVEAL_WIDTH), true)
+  assert.equal(keepsRailRevealed(27, RAIL_REVEAL_WIDTH), true)
+  assert.equal(keepsRailRevealed(RAIL_REVEAL_WIDTH, RAIL_REVEAL_WIDTH), true)
+  // 越过轨宽即收起，右移 1px 就会离开。
+  assert.equal(keepsRailRevealed(RAIL_REVEAL_WIDTH + 1, RAIL_REVEAL_WIDTH), false)
+  assert.equal(keepsRailRevealed(600, RAIL_REVEAL_WIDTH), false)
+  // 指针移出窗口左缘（macOS 下 clientX 可为负）也收起。
+  assert.equal(keepsRailRevealed(-1, RAIL_REVEAL_WIDTH), false)
+  // 宽度未知时退回默认 56，不因为脏参数崩溃。
+  assert.equal(keepsRailRevealed(30, Number.NaN), true)
+  assert.equal(keepsRailRevealed(Number.NaN, RAIL_REVEAL_WIDTH), false)
 })
 
 test('relativeTime: Chinese and English phrasing', () => {
