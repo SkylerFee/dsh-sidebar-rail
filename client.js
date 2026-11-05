@@ -182,6 +182,22 @@ window.__ModuleLoader__.load({
   border-right:.5px solid var(--dsw-alias-border-l3);
   -webkit-app-region:no-drag; }
 .dsr-rail-float .dsr-rail { width:100%; }
+/* Default state: the rail is slid out of the window, leaving only a thin edge
+   strip. It covers the host's first conversation tab otherwise — the frame's
+   collapsed column is zero-width and the tab row carries no leading clearance
+   (ui-conversation ConversationRoot.module.css ".tabs" rule), so anything wider
+   than this strip hides the tab's text and hit area. */
+.dsr-rail-float { transform:translateX(-100%); transition:transform 160ms ease; }
+.dsr-rail-float[data-dsr-revealed="true"] { transform:translateX(0); }
+@media (prefers-reduced-motion: reduce) { .dsr-rail-float { transition:none; } }
+/* The edge strip stays clickable/hoverable while the rail is out, which is what
+   lets the pointer "find" it without a visible handle. */
+/* 12px rather than 8px: macOS keeps an invisible resize band along the window
+   edge, so a narrower strip left the pointer on the resize cursor and its events
+   never reached the page. This width stays clear of that band while still being
+   far narrower than the 56px rail it reveals. */
+.dsr-rail-hotzone { position:fixed; left:0; top:var(--dsh-frame-top-clearance, 48px); bottom:0;
+  width:12px; z-index:59; -webkit-app-region:no-drag; }
 .dsr-rail-btn { display:flex; align-items:center; justify-content:center; width:36px; height:36px; padding:0;
   border:none; background:transparent; border-radius:var(--dsw-radius-sm, 8px);
   color:var(--dsw-alias-label-primary); cursor:pointer;
@@ -398,7 +414,10 @@ window.__ModuleLoader__.load({
       const main = h('button', {
         type: 'button',
         className: 'dsr-row',
-        style: { flex: '1 1 auto', minWidth: 0, background: 'transparent' },
+        // No inline background: it used to outrank the hover, focus-visible and
+        // current rules in CSS, so rows without a pin wrapper never showed any
+        // state. Row backgrounds belong to the stylesheet now.
+        style: { flex: '1 1 auto', minWidth: 0 },
         'aria-current': current === true ? 'page' : undefined,
         'data-dsr-current': current === true ? 'true' : undefined,
         onClick,
@@ -623,6 +642,88 @@ window.__ModuleLoader__.load({
     }
 
 
+    /** Gap kept between a flyout and the window edge. */
+    const FLYOUT_EDGE_GAP = 12
+    /** Reserved height for the flyout head and foot when budgeting space. */
+    const FLYOUT_CHROME_HEIGHT = 96
+
+    /**
+     * Place a flyout against its anchor without letting it leave the window.
+     *
+     * A fixed `max-height: calc(100vh - 32px)` ignores the flyout's own offset:
+     * on a short window the panel started partway down and still claimed most of
+     * the viewport, so its bottom (and the recent-session foot) fell outside.
+     * The budget here is the space actually left below the anchor.
+     * @param anchor - `{ top, bottom }` of the rail entry that opened the flyout.
+     * @param viewportHeight - `window.innerHeight`.
+     * @param bottomAligned - True for the account seat, which anchors at the foot.
+     * @returns Top or bottom offset, plus the maximum height the panel may use.
+     */
+    function flyoutPlacement(anchor, viewportHeight, bottomAligned) {
+      // Staying inside the window outranks the comfortable minimum: a panel that
+      // insists on FLYOUT_CHROME_HEIGHT near the bottom edge is exactly the
+      // overflow this guards against.
+      const budget = (offset) => Math.max(0, Math.min(
+        Math.max(viewportHeight - offset - FLYOUT_EDGE_GAP, 0),
+        Math.max(FLYOUT_CHROME_HEIGHT, viewportHeight - offset - FLYOUT_EDGE_GAP),
+      ))
+      if (bottomAligned === true) {
+        // The seat sits at the foot: pin the panel's bottom to it and let the
+        // panel grow upward within the room above.
+        const bottom = Math.max(FLYOUT_EDGE_GAP, viewportHeight - anchor.bottom)
+        return { bottom, maxHeight: budget(bottom) }
+      }
+      const top = Math.max(FLYOUT_EDGE_GAP, anchor.top)
+      return { top, maxHeight: budget(top) }
+    }
+
+    /** Width of the edge strip that reveals the rail. */
+    const RAIL_HOTZONE_WIDTH = 12
+    /** Width the rail occupies once revealed (matches `.dsr-rail-float`). */
+    const RAIL_REVEAL_WIDTH = 56
+    /** Grace period before the rail retracts after the pointer leaves it. */
+    const RETRACT_DELAY_MS = 180
+    /**
+     * Whether the pointer is still inside the region that keeps the rail out.
+     *
+     * Element-level `pointerleave` cannot answer this: the rail slides over the
+     * edge strip, so the strip receives `pointerleave` the moment the rail
+     * covers it, and retracting uncovers it again — the pair oscillates. Reading
+     * the pointer's x against the revealed width is stable regardless of which
+     * element happens to be on top.
+     * @param x - Pointer x in client coordinates.
+     * @param railWidth - Width the rail occupies once revealed.
+     * @returns True when the pointer should keep the rail visible.
+     */
+    function keepsRailRevealed(x, railWidth) {
+      if (!Number.isFinite(x)) return false
+      const width = Number.isFinite(railWidth) && railWidth > 0 ? railWidth : 56
+      return x >= 0 && x <= width
+    }
+
+    /**
+     * Classify a remote answer before normalising it.
+     *
+     * A resolved promise is not success: the gateway returns failures as
+     * `{ ok: false, error }` frames (api/gateway/src/client/index.ts), and the
+     * host checks `ok` explicitly rather than relying on rejection. Showing a
+     * failed frame as an empty list would report "no plugins" for a broken
+     * connection, so the three outcomes are kept apart.
+     * @param answer - Resolved value from a remote call, or null when the
+     *   service is absent (the wrapper returns null in that case).
+     * @returns 'ready' with the payload, 'failed' with the error, or 'unavailable'.
+     */
+    function remoteOutcome(answer) {
+      if (answer === null || answer === undefined) return { kind: 'unavailable', value: undefined, error: undefined }
+      if (typeof answer === 'object' && 'ok' in answer) {
+        return answer.ok === true
+          ? { kind: 'ready', value: answer.value, error: undefined }
+          : { kind: 'failed', value: undefined, error: answer.error }
+      }
+      // Bare payloads (tests, or a future remote that answers directly).
+      return { kind: 'ready', value: answer, error: undefined }
+    }
+
     /**
      * Normalize an unknown schedule catalog answer into active task rows.
      * @param answer - Whatever the schedule remote returned.
@@ -804,6 +905,10 @@ window.__ModuleLoader__.load({
       const [plugins, setPlugins] = useState({ phase: 'idle', rows: [] })
       const openTimer = useRef(undefined)
       const closeTimer = useRef(undefined)
+      /** The rail button that opened the flyout, for Escape focus return. */
+      const triggerRef = useRef(null)
+      /** The flyout panel element, for moving focus into its list. */
+      const panelRef = useRef(null)
       const sections = useMemo(
         () => deriveSections(workspaceItems, sessions, archivedIds, pins, language, panelCovering),
         [workspaceItems, sessions, archivedIds, pins, language, panelCovering],
@@ -820,6 +925,73 @@ window.__ModuleLoader__.load({
       //     effect on every render and reintroduce the bug above.
       // The account picture is read once per mount; an absent or failed read
       // simply leaves the neutral fallback glyph in place.
+      // The rail stays slid out until the pointer reaches the left edge, or the
+      // person focuses it with the keyboard. See the CSS note on why the default
+      // state must not cover the host's conversation tabs.
+      const [revealed, setRevealed] = useState(false)
+      const retractTimer = useRef(undefined)
+      /** Cancel a pending retraction while the pointer is back over the rail. */
+      const cancelRetract = useCallback(() => {
+        if (retractTimer.current !== undefined) {
+          window.clearTimeout(retractTimer.current)
+          retractTimer.current = undefined
+        }
+      }, [])
+      /** Retract after a beat, so crossing the rail edge does not flicker. */
+      const scheduleRetract = useCallback(() => {
+        cancelRetract()
+        retractTimer.current = window.setTimeout(() => { setRevealed(false) }, RETRACT_DELAY_MS)
+      }, [cancelRetract])
+      useEffect(() => cancelRetract, [cancelRetract])
+
+      /**
+       * Keep the rail's visibility in step with the pointer's position.
+       *
+       * A window-level listener rather than element events: the reveal strip and
+       * the sliding rail overlap, so `pointerleave` on either one fires when the
+       * other takes the hit target. Position decides instead — inside the rail's
+       * own width keeps it out, anything further left of the window retracts it —
+       * and an open flyout always wins so the pointer can travel to it.
+       */
+      useEffect(() => {
+        if (!revealed) return undefined
+        const onMove = (event) => {
+          if (open !== null) return
+          const railWidth = RAIL_REVEAL_WIDTH
+          const inFlyout = panelRef.current !== null && panelRef.current.contains(event.target)
+          if (inFlyout) return
+          if (keepsRailRevealed(event.clientX, railWidth)) return
+          setRevealed(false)
+        }
+        window.addEventListener('pointermove', onMove, { passive: true })
+        return () => { window.removeEventListener('pointermove', onMove) }
+      }, [revealed, open])
+
+      /**
+       * Close the flyout, leaving the rail where it is.
+       *
+       * Hovering between rail icons fires this: the pointer crosses each icon's
+       * boundary, and treating that as "the interaction is over" retracted the
+       * rail, which then re-revealed from the edge strip — an oscillation that
+       * was easiest to trigger exactly over the icon column, where boundaries
+       * are densest.
+       */
+      const dismiss = useCallback(() => {
+        setOpen(null)
+      }, [])
+
+      /**
+       * Close the flyout and retract the rail.
+       *
+       * Used where the interaction really ends: choosing an entry, navigating
+       * away, or Escape. Retraction cannot ride on the rail's own
+       * `pointerleave` for those paths — choosing an entry leaves the pointer
+       * over the flyout, to the right of the rail, so no rail event follows.
+       */
+      const retract = useCallback(() => {
+        setOpen(null)
+        setRevealed(false)
+      }, [])
       const [accountSeat, setAccountSeat] = useState({ kind: 'unknown', avatarUrl: undefined })
       const avatarAsked = useRef(false)
       useEffect(() => {
@@ -856,18 +1028,32 @@ window.__ModuleLoader__.load({
         }, REMOTE_TIMEOUT_MS)
         Promise.resolve()
           .then(() => load())
-          .then((answer) => { if (live) apply({ phase: 'ready', rows: answer }) })
+          .then((answer) => {
+            if (!live) return
+            const outcome = remoteOutcome(answer)
+            apply({ phase: outcome.kind, rows: outcome.value })
+          })
           .catch(() => { if (live) apply({ phase: 'failed', rows: [] }) })
           .finally(() => { window.clearTimeout(timer) })
-        return () => { live = false; window.clearTimeout(timer) }
+        // The cleanup runs when the flyout switches away. `live` stops the old
+        // answer from landing, but `started` must also reset or switching back
+        // returns early and the list stays on "loading" forever: its own request
+        // was abandoned and nothing restarts one.
+        return () => {
+          live = false
+          window.clearTimeout(timer)
+          started.current[key] = false
+        }
       }
 
       /** Merge a remote descriptor into one list slot, normalizing ready rows. */
-      const writer = (setState, normalize) => (next) => setState((current) => (
-        typeof next === 'function'
-          ? next(current)
-          : { phase: next.phase, rows: next.phase === 'ready' ? normalize(next.rows) : [] }
-      ))
+      const writer = (setState, normalize) => (next) => setState((current) => {
+        if (typeof next === 'function') return next(current)
+        // 'unavailable' means the optional remote is absent — that is a failure
+        // the person can act on ("open panel"), never an empty list.
+        const phase = next.phase === 'unavailable' ? 'failed' : next.phase
+        return { phase, rows: phase === 'ready' ? normalize(next.rows) : [] }
+      })
 
       useEffect(() => {
         // A closed flyout forgets its attempt, so re-opening retries a hung call.
@@ -886,10 +1072,10 @@ window.__ModuleLoader__.load({
 
       useEffect(() => {
         if (open === null) return undefined
-        const onKey = (event) => { if (event.key === 'Escape') setOpen(null) }
+        const onKey = (event) => { if (event.key === 'Escape') dismiss() }
         window.addEventListener('keydown', onKey)
         return () => window.removeEventListener('keydown', onKey)
-      }, [open])
+      }, [open, dismiss])
 
       const clearTimers = useCallback(() => {
         if (openTimer.current !== undefined) { window.clearTimeout(openTimer.current); openTimer.current = undefined }
@@ -912,11 +1098,26 @@ window.__ModuleLoader__.load({
         if (closeTimer.current !== undefined) { window.clearTimeout(closeTimer.current); closeTimer.current = undefined }
       }, [])
 
+      /**
+       * Move keyboard focus from the trigger into the open flyout.
+       *
+       * Ordinary Tab walks the rail icons first, and each icon opens its own
+       * flyout on focus, so tabbing replaced the list before focus could reach
+       * it. An explicit entry (Down/Right on the trigger) is what makes the list
+       * reachable without inventing a separate roving-tabindex over the rail.
+       */
+      const focusFlyout = useCallback(() => {
+        const panel = panelRef.current
+        if (panel === null) return
+        const first = panel.querySelector('button:not([data-dsr-skip-focus])')
+        if (first !== null) first.focus()
+      }, [])
+
       /** Close after the grace period. */
       const scheduleClose = useCallback(() => {
         clearTimers()
-        closeTimer.current = window.setTimeout(() => setOpen(null), CLOSE_DELAY_MS)
-      }, [clearTimers])
+        closeTimer.current = window.setTimeout(() => dismiss(), CLOSE_DELAY_MS)
+      }, [clearTimers, dismiss])
 
       /** Toggle one workspace's pin and persist the new order. */
       const togglePin = useCallback((workspaceId) => {
@@ -931,9 +1132,9 @@ window.__ModuleLoader__.load({
 
       /** Open a workspace and dismiss the flyout. */
       const openWorkspaceFromRail = useCallback((workspaceId) => {
-        setOpen(null)
+        retract()
         Promise.resolve(openWorkspace(workspaceId)).catch(() => {})
-      }, [openWorkspace])
+      }, [openWorkspace, retract])
 
       /**
        * Reveal one existing session and dismiss the flyout.
@@ -944,7 +1145,7 @@ window.__ModuleLoader__.load({
        * which is why clicking a recent session started a new one.
        */
       const openSessionFromRail = useCallback((sessionId) => {
-        setOpen(null)
+        retract()
         try {
           // Synchronous: the host throws on an unknown id before returning, so a
           // promise-level catch would never see it.
@@ -952,7 +1153,7 @@ window.__ModuleLoader__.load({
         } catch (error) {
           console.warn('[dsh-sidebar-rail] open session failed', error)
         }
-      }, [openSession])
+      }, [openSession, retract])
 
       /**
        * Draw the flyout shell for one entry.
@@ -962,20 +1163,30 @@ window.__ModuleLoader__.load({
        * @returns The flyout element.
        */
       const flyoutShell = (title, body, foot, bottomAligned) => createPortal(h('div', {
+        ref: panelRef,
         className: 'dsr-flyout',
         role: 'dialog',
         'aria-label': title,
-        style: bottomAligned === true
-          // The account seat sits at the foot of the rail, so a top-aligned panel
-          // drifted far above it. Anchoring the panel's bottom edge to the seat
-          // keeps the pair together whatever the window height is.
-          ? { bottom: `${Math.max(12, window.innerHeight - anchor.bottom)}px`, left: `${anchor.right + 8}px` }
-          : {
-            top: `${Math.max(12, Math.min(anchor.top, Math.max(12, window.innerHeight - 200)))}px`,
+        style: (() => {
+          const placed = flyoutPlacement(anchor, window.innerHeight, bottomAligned)
+          return {
+            ...(placed.top === undefined ? {} : { top: `${placed.top}px` }),
+            ...(placed.bottom === undefined ? {} : { bottom: `${placed.bottom}px` }),
+            maxHeight: `${placed.maxHeight}px`,
             left: `${anchor.right + 8}px`,
-          },
+          }
+        })(),
         onPointerEnter: cancelClose,
         onPointerLeave: scheduleClose,
+        onKeyDown: (event) => {
+          // Escape hands focus back to the trigger so the next Tab continues from
+          // the rail instead of jumping to the top of the page.
+          if (event.key !== 'Escape') return
+          event.stopPropagation()
+          retract()
+          const trigger = triggerRef.current
+          if (trigger !== null) trigger.focus()
+        },
       },
       h('div', { className: 'dsr-flyout-head' }, title),
       h('div', { className: 'dsr-flyout-body' }, body),
@@ -1025,10 +1236,10 @@ window.__ModuleLoader__.load({
                     key: `task-${row.id}`,
                     title: row.title,
                     meta: row.meta,
-                    onClick: () => { setOpen(null); selectPanel('schedules') },
+                    onClick: () => { retract(); selectPanel('schedules') },
                   })))
           return flyoutShell(t('rail.tasks'), body, h(ActionRow, {
-            onClick: () => { setOpen(null); selectPanel('schedules') },
+            onClick: () => { retract(); selectPanel('schedules') },
           }, t('action.openPanel')))
         }
         if (open === 'plugins') {
@@ -1040,22 +1251,22 @@ window.__ModuleLoader__.load({
                     key: `plugin-${row.name}`,
                     title: row.name,
                     meta: row.meta,
-                    onClick: () => { setOpen(null); selectPanel('plugins') },
+                    onClick: () => { retract(); selectPanel('plugins') },
                   })))
           return flyoutShell(t('rail.plugins'), body, h(ActionRow, {
-            onClick: () => { setOpen(null); selectPanel('plugins') },
+            onClick: () => { retract(); selectPanel('plugins') },
           }, t('action.openPanel')))
         }
         if (open === 'more') {
           const extras = panelEntries.filter((panel) => panel.id !== 'schedules' && panel.id !== 'plugins')
           return flyoutShell(t('rail.more'),
             h('div', null,
-              h(ActionRow, { onClick: () => { setOpen(null); toggleSidebar() } }, t('rail.expand')),
+              h(ActionRow, { onClick: () => { retract(); toggleSidebar() } }, t('rail.expand')),
               extras.length === 0 ? null : h(Section, { title: t('section.panels') },
                 extras.map((panel) => h(Row, {
                   key: `panel-${panel.id}`,
                   title: panel.label,
-                  onClick: () => { setOpen(null); selectPanel(panel.id) },
+                  onClick: () => { retract(); selectPanel(panel.id) },
                 })))),
             h('div', { className: 'dsr-hint' }, t('account.hint')))
         }
@@ -1065,7 +1276,7 @@ window.__ModuleLoader__.load({
           return flyoutShell(t('rail.account'),
             h('div', null,
               h('div', { className: 'dsr-hint' }, t('account.hint')),
-              h(ActionRow, { onClick: () => { setOpen(null); toggleSidebar() } }, t('rail.expand'))),
+              h(ActionRow, { onClick: () => { retract(); toggleSidebar() } }, t('rail.expand'))),
             undefined, true)
         }
         return null
@@ -1077,14 +1288,24 @@ window.__ModuleLoader__.load({
         onPointerEnter: (event) => scheduleOpen(kind, event),
         onPointerLeave: scheduleClose,
       }, h('button', {
+        ref: (node) => { if (open === kind) triggerRef.current = node },
         type: 'button',
         className: 'dsr-rail-btn',
         'aria-label': label,
         'aria-current': current === true ? 'page' : undefined,
         'data-dsr-open': open === kind ? 'true' : undefined,
-        onFocus: (event) => scheduleOpen(kind, event),
+        'aria-haspopup': 'dialog',
+        'aria-expanded': open === kind ? 'true' : undefined,
+        onFocus: (event) => { triggerRef.current = event.currentTarget; scheduleOpen(kind, event) },
+        onKeyDown: (event) => {
+          if (event.key !== 'ArrowDown' && event.key !== 'ArrowRight') return
+          event.preventDefault()
+          scheduleOpen(kind, event)
+          // The panel may not exist yet when the dwell timer has not fired.
+          window.setTimeout(focusFlyout, OPEN_DELAY_MS + 40)
+        },
         onClick: () => {
-          setOpen(null)
+          retract()
           if (kind === 'workspace' || kind === 'more') toggleSidebar()
           else selectPanel(kind === 'tasks' ? 'schedules' : 'plugins')
         },
@@ -1111,9 +1332,38 @@ window.__ModuleLoader__.load({
           'aria-label': t('rail.account'),
           'data-dsr-open': open === 'account' ? 'true' : undefined,
           onFocus: (event) => scheduleOpen('account', event),
-          onClick: () => { setOpen(null); toggleSidebar() },
+          onClick: () => { retract(); toggleSidebar() },
         }, h(AccountAvatar, { seat: accountSeat }))))
-      return createPortal(h('div', { className: 'dsr-rail-float' }, railNav, renderFlyout()), document.body)
+      // Two portals: the thin edge strip that catches the pointer, and the rail
+      // itself, which slides in over it. The strip is what makes a hidden rail
+      // discoverable without covering the conversation tabs.
+      return createPortal(h('div', null,
+        // The strip only ever reveals. It deliberately has no pointerleave: the
+        // rail slides on top of it, so a leave-from-the-strip handler fired the
+        // moment the rail appeared and the two states oscillated. Retraction is
+        // decided from the pointer's position instead (effect below).
+        h('div', {
+          className: 'dsr-rail-hotzone',
+          onPointerEnter: () => setRevealed(true),
+        }),
+        h('div', {
+          className: 'dsr-rail-float',
+          'data-dsr-revealed': revealed === true ? 'true' : undefined,
+          onPointerEnter: () => { cancelRetract(); setRevealed(true) },
+          // Leaving the rail retracts it, after a short delay so a pointer that
+          // merely crosses the edge does not make it flicker. The reveal strip has
+          // no leave handler of its own, which is what keeps the two states from
+          // chasing each other.
+          onPointerLeave: () => { if (open === null) scheduleRetract() },
+          onPointerMove: cancelRetract,
+          onFocusCapture: () => setRevealed(true),
+          // Leaving the rail region with focus still inside would hide it under
+          // the keyboard user, so only collapse when focus really left.
+          onBlurCapture: (event) => {
+            if (event.currentTarget.contains(event.relatedTarget)) return
+            if (open === null) setRevealed(false)
+          },
+        }, railNav, renderFlyout())), document.body)
     }
 
     // ------------------------------------------------------------------ apply --

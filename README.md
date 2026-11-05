@@ -73,7 +73,7 @@ dsh-sidebar-rail/
 
 ## Known limitations
 
-1. **The rail floats above the main column.** The host's collapsed column is zero-width with `overflow: hidden`, so the rail can only be `createPortal(document.body)` + `position: fixed`; it cannot be put back into the host grid. Below a 768px viewport it is not rendered at all, so it never sits on top of the conversation copy.
+1. **The rail hides until you reach for it.** It stays slid out of the window and appears from a 12px edge strip (or on keyboard focus). A persistent rail covered the conversation's first tab: the host gives the tab row no leading clearance while the column is collapsed, so the only way to keep the tab usable was to stop covering it. The host's collapsed column is zero-width with `overflow: hidden`, so the rail can only be `createPortal(document.body)` + `position: fixed`; it cannot be put back into the host grid. Below a 768px viewport it is not rendered at all, so it never sits on top of the conversation copy.
 2. **The top 48px stay empty.** The macOS traffic lights (x ≈ 16–68) and the host's own reopen / new-session controls in `shell.leading` (`left: 88px`) occupy the `--dsh-frame-top-clearance` band, so the rail starts at 48px.
 3. **Windows / Linux are untested.** The plugin renders nothing there and claims no support.
 4. **Pinning is a local concept.** The host has no field for it, so clearing `localStorage` or switching browsers loses it.

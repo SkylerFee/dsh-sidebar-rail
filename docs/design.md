@@ -131,12 +131,12 @@ background: var(--dsw-specific-sidebar-fill); border-right: .5px solid var(--dsw
 | 当前面板 | `usePanelInfo(info => info.activePanelId)` |
 | 其他面板条目 | `ctx.slots.entriesOfSlot('sidebar.panellist')` + `ctx.slots.subscribe`（只读别人声明的槽，不注册、不声明） |
 | 定时任务 | `ctx.get('remote.schedule')?.catalog()`（可选，失败降级） |
-| 插件 | `ctx.get('remote.pluginInventory')?.list()`（可选，失败降级） |
+| 插件 | `ctx.get('remote.pluginManager')?.listBundles()`（可选）。用 bundle 列表而非 `pluginInventory/list`：只有它带 `official` 与 `availability`，这是宿主区分「自带 / 用户安装」的结构化依据 |
 | 语言 | `ctx.locale.subscribe` 包装成可订阅快照，驱动相对时间文案 |
 
 **已知细节**：`SessionSummary` 没有 `workspaceId`，也没有归档 / 置顶字段。归属工作区靠 `WorkspaceView.sessionIds` 反查；归档靠 `archivedSessionIds` 过滤；置顶是**工作区级**的插件本地概念，宿主无对应字段。
 
-导航动作走注入的 `layout` / `uiWorkspace`：`toggleSidebar()`、`selectPanel(id)`、`openWorkspace(id)`、`openSession({ kind: 'session', sessionId })`。
+导航动作走注入的 `layout` / `uiWorkspace`：`toggleSidebar()`、`selectPanel(id)`、`openWorkspace(id)`、`openSession(sessionId)`。**`SessionTarget` 是 `SessionId | SubagentAddress`——传裸 id，不要传 `{ kind, sessionId }` 对象**：宿主会把对象当作「没有指定会话」，释放原会话并落回新建会话空态（这正是曾经的会话跳转 bug）。
 
 ## 11. 分组规则与置顶
 
