@@ -124,6 +124,52 @@
 - 问题 4 的键盘路径按实现核对，**未做完整 Tab/Escape 焦点遍历审计**。
 - 滑出动画的 160ms 手感、以及滑出状态与浮层交互（指针离开轨但浮层仍开）未逐帧验证。
 
+## 账号浮层的设置入口（2026-11-05，第 19 轮）
+
+用户要求：头像浮层现在只有账号信息，需要一个设置入口。
+
+### 为什么不是按钮，而是一行路径说明
+
+先按「新行为优先使用宿主公开扩展点」核对了三条可能路径，**都不成立**：
+
+| 设想的做法 | 结论 |
+| --- | --- |
+| `ctx.layout.selectPanel('settings')` | ❌ 设置不是 main panel。`MainPanelId` 只含已注册的中央面板（`layout.selectPanel` 会 `throw` 未注册 id），设置是 `sidebar.settings` 里的一个 dialog，不进 `main` 槽 |
+| `ctx.shortcuts` 派发 `settings.open` | ❌ `Shortcuts` 接口只暴露 `register` / `registerFixed` / `describeBinding` / `edit` 等，**没有 dispatch/invoke**；命令的 `run` 闭包在宿主 `ui-settings-general` 内部 |
+| 复用 `settings.launcher` 的 `openSettings` | ❌ 该槽是 **single** 且已被宿主账号插件 `ui-settings-account` 独占（`ctx.remoteAccess.whenAccess('account/watch', …)` 注册 `AccountMenu`）；注册会顶替宿主条目。其 `openSettings` 只作为 owner prop 下发给那一个占位者 |
+
+（`sidebar.settings` 内部 store 的 `actions.open()` 与 `entriesOfSlot(...).inject()` 属契约外，未采用。）
+
+因此按用户选定的方案 C 实现：**不新增按钮，只把路径说明写清楚**。
+
+### 改动
+
+- 新增 i18n key `account.settingsPath`（zh/en）：`设置：展开侧栏后点左下角「设置」。` / `Settings: expand the sidebar, then choose Settings at its foot.`
+- 账号浮层在原有 `account.hint` 之下渲染该行；紧接着仍是既有的「展开侧栏」动作（复用已验收的 `toggleSidebar()`，未改动其行为）。
+
+### 真机验证（macOS Desktop 0.2.2-rc.1，折叠态，中文界面）
+
+账号浮层实际渲染，自上而下：
+
+```
+账号与设置
+余额  ¥0.00
+赠金  ¥0.00
+查询用量  充值
+账号信息与用量由设置中的账号页提供。
+设置：展开侧栏后点左下角「设置」。        ← 本轮新增
+展开侧栏
+```
+
+- ✅ 新增行文案完整、未截断（像素核对：物理 y≈1790 行内文字清晰）。
+- ✅ `npm run check` 通过，i18n 从 35 key 增至 **36 key**，zh/en 对齐。
+- ✅ 宿主入口位置核实：侧栏展开后左下角确有「设置」按钮，宿主自身绑定 `⌘,`（`ui-settings-general` 的 `settings.open`，`desktop:macos` 默认 `Comma + primary`）。
+
+### 未验证
+
+- 本轮未能逐帧确认「展开侧栏」点击后的展开结果：合成鼠标在这台机器上多次落到被前台遮挡的其他窗口，窗口层序不稳定。该动作调用的是「更多」浮层里**同一个** `toggleSidebar()`，那条路径已在第 16 轮验收过，本次未改其代码。
+- 英文界面下该行的实际渲染未截图核对（仅确认字典两侧对齐、`check.mjs` 通过）。
+
 ## 0.3.1 三项优化的验收修复（2026-11-05，第 18 轮）
 
 第 17 轮的三项功能经真机 + 代码链路复核后，发现并修复 4 个缺陷。**上一轮「真机验证」表里的两项结论不成立，已在本轮更正**，详见文末。

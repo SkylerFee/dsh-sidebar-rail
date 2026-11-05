@@ -131,6 +131,7 @@ window.__ModuleLoader__.load({
       'state.failed': '加载失败，可打开面板查看',
       'action.openPanel': '打开面板',
       'account.hint': '账号信息与用量由设置中的账号页提供。',
+      'account.settingsPath': '设置：展开侧栏后点左下角「设置」。',
       'account.balance': '余额',
       'account.bonus': '赠金',
       'account.usage': '查询用量',
@@ -168,6 +169,7 @@ window.__ModuleLoader__.load({
       'state.failed': 'Could not load; open the panel instead',
       'action.openPanel': 'Open panel',
       'account.hint': 'Account and usage details live in the Settings account page.',
+      'account.settingsPath': 'Settings: expand the sidebar, then choose Settings at its foot.',
       'account.balance': 'Balance',
       'account.bonus': 'Bonus',
       'account.usage': 'View usage',
@@ -1827,6 +1829,15 @@ window.__ModuleLoader__.load({
                     rel: 'noopener noreferrer',
                   }, t('account.topUp'))),
               h('div', { className: 'dsr-hint' }, t('account.hint')),
+              // The host owns the settings panel and exposes no public
+              // "open settings" API to a third-party client module: `layout`
+              // only has selectPanel/toggleSidebar, `shortcuts` has no
+              // dispatch, and the panel's `open()` lives in a store scoped to
+              // `sidebar.settings`, whose single `settings.launcher` cell the
+              // host's own account plugin occupies. So the honest entry is the
+              // path to it, next to the action that performs the one step this
+              // plugin can do for the person.
+              h('div', { className: 'dsr-hint' }, t('account.settingsPath')),
               h(ActionRow, { onClick: () => { retract(); toggleSidebar() } }, t('rail.expand'))),
             undefined, true)
         }
