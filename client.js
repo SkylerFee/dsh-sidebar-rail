@@ -901,6 +901,19 @@ window.__ModuleLoader__.load({
       // person focuses it with the keyboard. See the CSS note on why the default
       // state must not cover the host's conversation tabs.
       const [revealed, setRevealed] = useState(false)
+      /**
+       * Dismiss the flyout and retract the rail.
+       *
+       * Retraction used to ride on the rail's own `pointerleave`, which never
+       * fires for the path that matters: clicking an entry inside the flyout
+       * leaves the pointer to the right of the rail, so after the panel unmounts
+       * nothing tells the rail to hide and it stayed out until the pointer
+       * happened to cross it again. Every dismissal therefore retracts explicitly.
+       */
+      const dismiss = useCallback(() => {
+        setOpen(null)
+        setRevealed(false)
+      }, [])
       const [accountSeat, setAccountSeat] = useState({ kind: 'unknown', avatarUrl: undefined })
       const avatarAsked = useRef(false)
       useEffect(() => {
@@ -981,10 +994,10 @@ window.__ModuleLoader__.load({
 
       useEffect(() => {
         if (open === null) return undefined
-        const onKey = (event) => { if (event.key === 'Escape') setOpen(null) }
+        const onKey = (event) => { if (event.key === 'Escape') dismiss() }
         window.addEventListener('keydown', onKey)
         return () => window.removeEventListener('keydown', onKey)
-      }, [open])
+      }, [open, dismiss])
 
       const clearTimers = useCallback(() => {
         if (openTimer.current !== undefined) { window.clearTimeout(openTimer.current); openTimer.current = undefined }
@@ -1025,8 +1038,8 @@ window.__ModuleLoader__.load({
       /** Close after the grace period. */
       const scheduleClose = useCallback(() => {
         clearTimers()
-        closeTimer.current = window.setTimeout(() => setOpen(null), CLOSE_DELAY_MS)
-      }, [clearTimers])
+        closeTimer.current = window.setTimeout(() => dismiss(), CLOSE_DELAY_MS)
+      }, [clearTimers, dismiss])
 
       /** Toggle one workspace's pin and persist the new order. */
       const togglePin = useCallback((workspaceId) => {
@@ -1041,9 +1054,9 @@ window.__ModuleLoader__.load({
 
       /** Open a workspace and dismiss the flyout. */
       const openWorkspaceFromRail = useCallback((workspaceId) => {
-        setOpen(null)
+        dismiss()
         Promise.resolve(openWorkspace(workspaceId)).catch(() => {})
-      }, [openWorkspace])
+      }, [openWorkspace, dismiss])
 
       /**
        * Reveal one existing session and dismiss the flyout.
@@ -1054,7 +1067,7 @@ window.__ModuleLoader__.load({
        * which is why clicking a recent session started a new one.
        */
       const openSessionFromRail = useCallback((sessionId) => {
-        setOpen(null)
+        dismiss()
         try {
           // Synchronous: the host throws on an unknown id before returning, so a
           // promise-level catch would never see it.
@@ -1062,7 +1075,7 @@ window.__ModuleLoader__.load({
         } catch (error) {
           console.warn('[dsh-sidebar-rail] open session failed', error)
         }
-      }, [openSession])
+      }, [openSession, dismiss])
 
       /**
        * Draw the flyout shell for one entry.
@@ -1092,7 +1105,7 @@ window.__ModuleLoader__.load({
           // the rail instead of jumping to the top of the page.
           if (event.key !== 'Escape') return
           event.stopPropagation()
-          setOpen(null)
+          dismiss()
           const trigger = triggerRef.current
           if (trigger !== null) trigger.focus()
         },
@@ -1145,10 +1158,10 @@ window.__ModuleLoader__.load({
                     key: `task-${row.id}`,
                     title: row.title,
                     meta: row.meta,
-                    onClick: () => { setOpen(null); selectPanel('schedules') },
+                    onClick: () => { dismiss(); selectPanel('schedules') },
                   })))
           return flyoutShell(t('rail.tasks'), body, h(ActionRow, {
-            onClick: () => { setOpen(null); selectPanel('schedules') },
+            onClick: () => { dismiss(); selectPanel('schedules') },
           }, t('action.openPanel')))
         }
         if (open === 'plugins') {
@@ -1160,22 +1173,22 @@ window.__ModuleLoader__.load({
                     key: `plugin-${row.name}`,
                     title: row.name,
                     meta: row.meta,
-                    onClick: () => { setOpen(null); selectPanel('plugins') },
+                    onClick: () => { dismiss(); selectPanel('plugins') },
                   })))
           return flyoutShell(t('rail.plugins'), body, h(ActionRow, {
-            onClick: () => { setOpen(null); selectPanel('plugins') },
+            onClick: () => { dismiss(); selectPanel('plugins') },
           }, t('action.openPanel')))
         }
         if (open === 'more') {
           const extras = panelEntries.filter((panel) => panel.id !== 'schedules' && panel.id !== 'plugins')
           return flyoutShell(t('rail.more'),
             h('div', null,
-              h(ActionRow, { onClick: () => { setOpen(null); toggleSidebar() } }, t('rail.expand')),
+              h(ActionRow, { onClick: () => { dismiss(); toggleSidebar() } }, t('rail.expand')),
               extras.length === 0 ? null : h(Section, { title: t('section.panels') },
                 extras.map((panel) => h(Row, {
                   key: `panel-${panel.id}`,
                   title: panel.label,
-                  onClick: () => { setOpen(null); selectPanel(panel.id) },
+                  onClick: () => { dismiss(); selectPanel(panel.id) },
                 })))),
             h('div', { className: 'dsr-hint' }, t('account.hint')))
         }
@@ -1185,7 +1198,7 @@ window.__ModuleLoader__.load({
           return flyoutShell(t('rail.account'),
             h('div', null,
               h('div', { className: 'dsr-hint' }, t('account.hint')),
-              h(ActionRow, { onClick: () => { setOpen(null); toggleSidebar() } }, t('rail.expand'))),
+              h(ActionRow, { onClick: () => { dismiss(); toggleSidebar() } }, t('rail.expand'))),
             undefined, true)
         }
         return null
@@ -1214,7 +1227,7 @@ window.__ModuleLoader__.load({
           window.setTimeout(focusFlyout, OPEN_DELAY_MS + 40)
         },
         onClick: () => {
-          setOpen(null)
+          dismiss()
           if (kind === 'workspace' || kind === 'more') toggleSidebar()
           else selectPanel(kind === 'tasks' ? 'schedules' : 'plugins')
         },
@@ -1241,7 +1254,7 @@ window.__ModuleLoader__.load({
           'aria-label': t('rail.account'),
           'data-dsr-open': open === 'account' ? 'true' : undefined,
           onFocus: (event) => scheduleOpen('account', event),
-          onClick: () => { setOpen(null); toggleSidebar() },
+          onClick: () => { dismiss(); toggleSidebar() },
         }, h(AccountAvatar, { seat: accountSeat }))))
       // Two portals: the thin edge strip that catches the pointer, and the rail
       // itself, which slides in over it. The strip is what makes a hidden rail
