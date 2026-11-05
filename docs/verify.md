@@ -124,6 +124,22 @@
 - 问题 4 的键盘路径按实现核对，**未做完整 Tab/Escape 焦点遍历审计**。
 - 滑出动画的 160ms 手感、以及滑出状态与浮层交互（指针离开轨但浮层仍开）未逐帧验证。
 
+## 0.3.0 发布（2026-11-05）
+
+| 项 | 结果 |
+| --- | --- |
+| 合并 | `fix/audit-0.2.0` 经 `--no-ff` 合入 `main`（`50f6f78`），分支历史保留 |
+| tag / Release | `v0.3.0` 指向 `50f6f78`，等于 `origin/main`；GitHub Release 已建 |
+| CI 运行 | `42006232697` **success**（2m8s），OIDC 发布一次通过 |
+| registry | `dist-tags.latest = 0.3.0`；versions `0.0.0-stage, 0.1.0, 0.2.0, 0.3.0` |
+| 产物 | shasum `2f2f1d4bfec96ea75bc01681264fe75dee1b1b7d`，10 文件，解包 94,659 字节，**provenance + 2 个签名** |
+| 内容一致性 | ✅ 解包 10 个文件与 `main` **逐字节相同** |
+| 版本语义 | minor：轨默认隐藏是可见行为变更，PRD / AGENTS / 两份 README 已同步 |
+
+### 顺带修的工程问题
+
+`git merge --no-ff -m "merge: ..."` 被仓库自己的 `commit-msg` hook 拒绝——hook 原先只放行大写的 `Merge `，而 `-m` 传入的是小写 `merge:`。已改为同时放行 `Merge `、`merge:`、`Revert `、`revert:`，并用三种输入验证（merge/revert 放行、普通不合规信息仍拒绝）。
+
 ## 0.2.0 发布（2026-11-04）
 
 走 [ADR-0003](adr/0003-release-pipeline.md) 的 Release → OIDC 链路，首次因 Trusted Publisher 权限失败，修正后一次通过。

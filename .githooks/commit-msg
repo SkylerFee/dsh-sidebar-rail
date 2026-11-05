@@ -5,8 +5,10 @@ set -e
 file=$1
 subject=$(head -n 1 "$file")
 
+# Merge commits: git writes "Merge ..." for a merge it generates, and "-m" text
+# may arrive lowercase ("merge: ..."). Reverts likewise. Both bypass the rule.
 case "$subject" in
-  Merge\ *|Revert\ *) exit 0 ;;
+  Merge\ *|merge:*|Revert\ *|revert:*) exit 0 ;;
 esac
 
 pattern='^(feat|fix|docs|chore|refactor|test|perf|build|ci|style|revert)(\([a-z0-9-]+\))?!?: .+'
