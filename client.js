@@ -84,8 +84,13 @@ window.__ModuleLoader__.load({
     /** Give up on an optional remote call after this long; a hung Host call must
      * still end in the failure state instead of an endless "loading" line. */
     const REMOTE_TIMEOUT_MS = 5000
-    /** Recent sessions shown in the "recent" section. */
-    const RECENT_LIMIT = 10
+    /** Hard cap on how many recent sessions a row list may render. */
+    const RECENT_LIMIT = 20
+    /** Default for the `recentCount` preference: how many rows the flyout shows. */
+    const DEFAULT_RECENT_COUNT = 5
+    /** Bounds the preference may take; the settings input clamps to this range. */
+    const MIN_RECENT_COUNT = 1
+    const MAX_RECENT_COUNT = RECENT_LIMIT
 
     // ---------------------------------------------------------------- locale --
     const zh = {
@@ -99,6 +104,13 @@ window.__ModuleLoader__.load({
       'section.pinned': '置顶项目',
       'section.workspaces': '项目',
       'section.recent': '最近会话',
+      'settings.title': '侧栏图标轨',
+      'settings.recentCount': '最近会话条数',
+      'settings.recentCountHint': '范围 1–20；超过可视高度时可滚动查看。',
+      'status.ongoing': '运行中',
+      'status.warning': '等待你的操作',
+      'status.done': '已完成，未查看',
+      'status.idle': '空闲',
       'section.tasks': '已创建的任务',
       'section.plugins': '我的插件',
       'section.panels': '其他面板',
@@ -111,6 +123,12 @@ window.__ModuleLoader__.load({
       'state.failed': '加载失败，可打开面板查看',
       'action.openPanel': '打开面板',
       'account.hint': '账号信息与用量由设置中的账号页提供。',
+      'account.balance': '余额',
+      'account.bonus': '赠金',
+      'account.usage': '查询用量',
+      'account.topUp': '充值',
+      'account.balanceUnavailable': '余额暂不可用',
+      'account.signedOut': '未登录。登录后可查看余额与用量。',
     }
     const en = {
       'rail.label': 'Navigation rail',
@@ -123,6 +141,13 @@ window.__ModuleLoader__.load({
       'section.pinned': 'Pinned projects',
       'section.workspaces': 'Projects',
       'section.recent': 'Recent sessions',
+      'settings.title': 'Sidebar rail',
+      'settings.recentCount': 'Recent count',
+      'settings.recentCountHint': 'From 1 to 20; the list scrolls once it exceeds the visible height.',
+      'status.ongoing': 'Running',
+      'status.warning': 'Waiting for you',
+      'status.done': 'Finished, unread',
+      'status.idle': 'Idle',
       'section.tasks': 'Scheduled tasks',
       'section.plugins': 'My plugins',
       'section.panels': 'Other panels',
@@ -135,6 +160,12 @@ window.__ModuleLoader__.load({
       'state.failed': 'Could not load; open the panel instead',
       'action.openPanel': 'Open panel',
       'account.hint': 'Account and usage details live in the Settings account page.',
+      'account.balance': 'Balance',
+      'account.bonus': 'Bonus',
+      'account.usage': 'View usage',
+      'account.topUp': 'Top up',
+      'account.balanceUnavailable': 'Balance unavailable',
+      'account.signedOut': 'Signed out. Sign in to see balance and usage.',
     }
 
     // --------------------------------------------------------------- storage --
@@ -224,6 +255,41 @@ window.__ModuleLoader__.load({
   color:var(--dsw-alias-label-primary); }
 .dsr-flyout-body { overflow-y:auto; padding:2px 6px 8px; min-height:0; }
 .dsr-flyout-foot { border-top:1px solid var(--dsw-alias-border-l1); padding:6px; }
+/* The recent block scrolls on its own so a long workspace list above cannot bury
+   it; the cap keeps it from eating the whole panel on a tall window. */
+.dsr-recent-scroll { max-height:38vh; overflow-y:auto; padding-right:2px; }
+.dsr-stepper { display:flex; align-items:center; gap:6px; padding:6px 6px 0; font-size:11px;
+  color:var(--dsw-alias-label-primary); }
+.dsr-stepper-label { flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dsr-stepper-btn { display:flex; align-items:center; justify-content:center; width:20px; height:20px; flex:none;
+  border:1px solid var(--dsw-alias-border-l1); background:transparent; border-radius:var(--dsw-radius-sm, 8px);
+  color:var(--dsw-alias-label-primary); font:inherit; line-height:1; cursor:pointer; }
+.dsr-stepper-btn:hover:not(:disabled) { background:var(--dsw-alias-interactive-bg-hover); }
+.dsr-stepper-btn:disabled { opacity:.4; cursor:default; }
+.dsr-stepper-value { min-width:1.6em; text-align:center; font-variant-numeric:tabular-nums; }
+/* Status markers: same shapes and tokens as the host's StateDot, so a session
+   reads the same in the rail and in the shipped sidebar. */
+.dsr-settings { display:flex; flex-direction:column; gap:2px; }
+.dsr-settings-title { margin:0 0 2px; font-size:13px; font-weight:600; color:var(--dsw-alias-label-primary); }
+.dsr-account-balance { display:flex; align-items:baseline; gap:8px; padding:6px 6px 2px; }
+.dsr-account-balance-label { font-size:11px; color:var(--dsw-alias-label-primary); }
+.dsr-account-balance-value { font-size:13px; font-weight:600; font-variant-numeric:tabular-nums;
+  color:var(--dsw-alias-label-primary); }
+.dsr-account-links { display:flex; gap:10px; padding:6px 6px 0; }
+.dsr-account-link { font-size:12px; color:var(--dsw-alias-brand-primary); text-decoration:none; }
+.dsr-account-link:hover { text-decoration:underline; }
+.dsr-dot { display:inline-flex; align-items:center; justify-content:center; width:10px; height:10px; flex:none; }
+.dsr-dot::after { content:''; width:6px; height:6px; border-radius:50%; background:currentColor; }
+.dsr-dot-done { color:var(--dsw-alias-state-success-primary); }
+.dsr-dot-warning { color:var(--dsw-alias-state-warn-primary); }
+.dsr-dot-ongoing { color:var(--dsw-alias-label-tertiary); }
+.dsr-dot-ongoing::after { content:none; }
+.dsr-ring-track, .dsr-ring-arc { fill:none; stroke:currentColor; stroke-width:2; }
+.dsr-ring-track { opacity:.25; }
+.dsr-ring-arc { stroke-linecap:round; stroke-dasharray:14 46; transform-origin:12px 12px;
+  animation:dsr-spin 1.5s linear infinite; }
+@keyframes dsr-spin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .dsr-ring-arc { animation:none; } }
 .dsr-section-title { padding:10px 6px 4px; font-size:11px; font-weight:600; letter-spacing:.04em;
   text-transform:uppercase; color:var(--dsw-alias-label-primary); }
 .dsr-row { display:flex; align-items:center; gap:6px; width:100%; min-height:30px; padding:4px 6px;
@@ -384,8 +450,10 @@ window.__ModuleLoader__.load({
         this.state = { failed: false }
       }
 
-      static getDerivedStateFromError() {
-        return { failed: true }
+      static getDerivedStateFromError(error) {
+        // Surfacing the message is the only way to diagnose a render crash from
+        // outside the app; it is behind the same fallback as before.
+        return { failed: true, message: error !== null && typeof error === 'object' ? String(error.message ?? error) : String(error) }
       }
 
       componentDidCatch(error) {
@@ -394,7 +462,9 @@ window.__ModuleLoader__.load({
 
       render() {
         return this.state.failed
-          ? h('div', { className: 'dsr-fallback', role: 'status' }, this.props.fallbackText)
+          ? h('div', { className: 'dsr-fallback', role: 'status' },
+            this.props.fallbackText,
+            this.state.message === undefined ? null : h('div', { style: { fontSize: '10px', opacity: 0.8 } }, this.state.message))
           : this.props.children
       }
     }
@@ -410,7 +480,7 @@ window.__ModuleLoader__.load({
      * @param props - Row content, click handler, pin affordance and current flag.
      * @returns The row element.
      */
-    function Row({ title, meta, onClick, onTogglePin, pinLabel, pinned, current }) {
+    function Row({ title, meta, onClick, onTogglePin, pinLabel, pinned, current, status, statusLabel }) {
       const main = h('button', {
         type: 'button',
         className: 'dsr-row',
@@ -424,7 +494,8 @@ window.__ModuleLoader__.load({
       },
       h('span', { className: 'dsr-row-main' },
         h('span', { className: 'dsr-row-title' }, title),
-        meta === undefined || meta === '' ? null : h('span', { className: 'dsr-row-meta' }, meta)))
+        meta === undefined || meta === '' ? null : h('span', { className: 'dsr-row-meta' }, meta)),
+      status === undefined ? null : h(StateMark, { status, label: statusLabel ?? '' }))
       if (onTogglePin === undefined) return main
       return h('div', { className: 'dsr-row-wrap', 'data-pinned': pinned === true ? 'true' : undefined },
         main,
@@ -468,6 +539,94 @@ window.__ModuleLoader__.load({
           : glyph)
     }
 
+    /**
+     * Session status marker, drawn to match the host's `StateDot`.
+     *
+     * The shapes are reimplemented rather than imported: this is a static module
+     * that may only require react/react-dom, so `@deepseek-ai/dsh-client-ui-
+     * primitives` is out of reach. Colours come from the same tokens the host
+     * uses, so the two surfaces read alike: ongoing is a rotating ring in the
+     * tertiary label colour, the rest are solid dots in the state tokens.
+     * @param props - Status from `sessionStatusOf` and an accessible label.
+     * @returns The marker element.
+     */
+    function StateMark({ status, label }) {
+      if (status === 'idle') return null
+      const title = label === '' ? undefined : label
+      if (status === 'ongoing') {
+        return h('span', { className: 'dsr-dot dsr-dot-ongoing', role: 'img', 'aria-label': label, title },
+          h('svg', { viewBox: '0 0 24 24', width: 14, height: 14, 'aria-hidden': true },
+            h('circle', { cx: 12, cy: 12, r: 9.5, className: 'dsr-ring-track' }),
+            h('circle', { cx: 12, cy: 12, r: 9.5, className: 'dsr-ring-arc' })))
+      }
+      return h('span', {
+        className: `dsr-dot dsr-dot-${status}`,
+        role: 'img',
+        'aria-label': label,
+        title,
+      })
+    }
+
+    /**
+     * Settings surface for the plugin's own detail page.
+     *
+     * Registered into `plugins.bundle.config`, the seat the plugin manager gives
+     * a bundle on its page (the host's cot-translation and voice-input bundles
+     * use the same one). The rail's flyout offers the same control, and both
+     * write one localStorage key, so the two cannot disagree.
+     * @param props - Host-provided locale face.
+     * @returns The settings block.
+     */
+    function RailSettings(props) {
+      const t = typeof props?.t === 'function' ? props.t : (key) => String(key)
+      const [count, setCount] = useState(() => readRecentCount(readStore().recentCount))
+      const change = (next) => {
+        const value = readRecentCount(next)
+        setCount(value)
+        writeStore({ recentCount: value })
+      }
+      return h('div', { className: 'dsr-settings' },
+        h('h4', { className: 'dsr-settings-title' }, t('settings.title')),
+        h(RecentCountRow, {
+          value: count,
+          label: t('settings.recentCount'),
+          onChange: change,
+          min: MIN_RECENT_COUNT,
+          max: MAX_RECENT_COUNT,
+        }),
+        h('p', { className: 'dsr-hint' }, t('settings.recentCountHint')))
+    }
+
+    /**
+     * One compact stepper row: the recent-session count preference.
+     *
+     * This is the second place the value can change (the plugin detail page is
+     * the other); both write the same localStorage key, so the rail's flyout
+     * offers the short path without owning the setting.
+     * @param props - Current value, label, change callback and bounds.
+     * @returns The stepper row.
+     */
+    function RecentCountRow({ value, label, onChange, min, max }) {
+      const step = (delta) => { onChange(value + delta) }
+      return h('div', { className: 'dsr-stepper' },
+        h('span', { className: 'dsr-stepper-label' }, label),
+        h('button', {
+          type: 'button',
+          className: 'dsr-stepper-btn',
+          'aria-label': `${label} −`,
+          disabled: value <= min,
+          onClick: () => step(-1),
+        }, '−'),
+        h('span', { className: 'dsr-stepper-value', 'aria-live': 'polite' }, String(value)),
+        h('button', {
+          type: 'button',
+          className: 'dsr-stepper-btn',
+          'aria-label': `${label} +`,
+          disabled: value >= max,
+          onClick: () => step(1),
+        }, '+'))
+    }
+
     /** Grouped heading inside a flyout body. */
     function Section({ title, children }) {
       return h('div', null, h('div', { className: 'dsr-section-title' }, title), children)
@@ -486,6 +645,178 @@ window.__ModuleLoader__.load({
 
     // ---------------------------------------------------------- data adapters --
     // #region pure-data
+    /**
+     * Format one wallet balance the way the host does.
+     *
+     * Mirrors ui-settings-account `formatBalance`: zero reads `¥0.00`, a positive
+     * amount below one cent reads `<¥0.01`, negatives keep a leading minus and
+     * never claim less than a cent, and everything else is truncated (not
+     * rounded) to two decimals with grouped digits. String math avoids the
+     * `Big` dependency this static module cannot load.
+     * @param amount - Decimal balance string from the wallet.
+     * @param symbol - Currency symbol.
+     * @returns Display text.
+     */
+    function formatWalletBalance(amount, symbol) {
+      const raw = typeof amount === 'string' ? amount.trim() : ''
+      if (raw === '') return ''
+      // Platform's wire schema allows exponent notation (details.ts accepts
+      // `0E-16`, `1e+3`), so expand it before doing fixed-point string math;
+      // rejecting it silently dropped whole wallet rows.
+      const text = expandExponent(raw)
+      if (text === null) return ''
+      const negative = text.startsWith('-')
+      const [whole, fraction = ''] = (negative ? text.slice(1) : text).split('.')
+      const cents = fraction.padEnd(3, '0')
+      const zero = /^0*$/.test(whole) && /^0*$/.test(fraction)
+      if (zero) return `${symbol}0.00`
+      const subCent = /^0*$/.test(whole) && cents.slice(0, 2) === '00'
+      if (subCent) return negative ? `-${symbol}0.01` : `<${symbol}0.01`
+      // The host truncates a positive balance but ROUNDS a negative one
+      // (formatBalance: roundDown for positives, toFixed for negatives), so a
+      // debit of 12.345 renders -¥12.35 there and must read the same here.
+      const truncated = fraction.padEnd(2, '0').slice(0, 2)
+      const nextDigit = fraction.length > 2 ? Number(fraction[2]) : 0
+      const roundedCents = negative && nextDigit >= 5
+        ? String(Number(truncated) + 1).padStart(2, '0')
+        : truncated
+      const grouped = Number(whole === '' ? '0' : whole).toLocaleString()
+      return `${negative ? '-' : ''}${symbol}${grouped}.${roundedCents}`
+    }
+
+    /**
+     * Pick the platform links an account view carries.
+     *
+     * `getState` always answers `links`, signed in or not (the host builds them
+     * from its platform origin). Only absolute http(s) URLs are accepted: a
+     * malformed value must hide the entry rather than open something else.
+     * @param view - `AccountView` from `remote.account.getState()`.
+     * @returns `{ usageUrl?, topUpUrl? }`, each omitted when unusable.
+     */
+    function accountLinks(view) {
+      const links = view !== null && typeof view === 'object' && 'value' in view ? view.value?.links : view?.links
+      if (links === null || typeof links !== 'object') return {}
+      const usable = (value) => (typeof value === 'string' && /^https?:\/\//i.test(value) ? value : undefined)
+      // Only carry keys that survived validation, so callers can test `=== undefined`
+      // without distinguishing "absent" from "present but unusable".
+      const usageUrl = usable(links.usageUrl)
+      const topUpUrl = usable(links.topUpUrl)
+      return {
+        ...(usageUrl === undefined ? {} : { usageUrl }),
+        ...(topUpUrl === undefined ? {} : { topUpUrl }),
+      }
+    }
+
+    /**
+     * Expand a decimal string that may use exponent notation.
+     *
+     * String math only: the amounts arrive as decimal strings carrying server
+     * precision, and Number would lose it. Returns null for anything that is not
+     * a plain or exponent decimal so the caller can drop the row.
+     * @param text - Candidate amount, e.g. `12.34`, `0E-16`, `1e+3`, `-0.000001`.
+     * @returns Fixed-point decimal text, or null when the input is not a number.
+     */
+    function expandExponent(text) {
+      const match = /^(-?)(\d+)?(?:\.(\d*))?(?:[eE]([+-]?\d+))?$/.exec(text)
+      if (match === null) return null
+      const sign = match[1] ?? ''
+      const wholeRaw = match[2] ?? ''
+      const fractionRaw = match[3] ?? ''
+      const expRaw = match[4]
+      if (wholeRaw === '' && fractionRaw === '') return null
+      const exponent = expRaw === undefined ? 0 : Number(expRaw)
+      if (!Number.isFinite(exponent) || Math.abs(exponent) > 100) return null
+      let digits = `${wholeRaw}${fractionRaw}`
+      let point = wholeRaw.length + exponent
+      if (point <= 0) {
+        digits = '0'.repeat(1 - point) + digits
+        point = 1
+      } else if (point > digits.length) {
+        digits += '0'.repeat(point - digits.length)
+      }
+      const whole = digits.slice(0, point).replace(/^0+(?=\d)/, '') || '0'
+      const fraction = digits.slice(point)
+      return `${sign}${whole}${fraction === '' ? '' : `.${fraction}`}`
+    }
+
+    /**
+     * Pick the wallet rows a person should see.
+     *
+     * `getBalance` answers `RemoteResult<AccountWallet[] | null>` where each
+     * wallet is `{ currency, balance }`. Only positive rows are worth a line:
+     * the host filters bonus wallets the same way before rendering them.
+     * @param answer - Whatever the balance remote returned.
+     * @returns Display rows `{ currency, text }`, newest first as given.
+     */
+    function balanceRows(answer) {
+      // Three layers on the wire: RemoteResult{ value: AccountDetails['balance'] },
+      // where that balance is `{ status:'ready', value: wallets, bonusWallets }`,
+      // `{ status:'failed' }`, or null. Reading `answer.value` as an array here
+      // made the real Host answer parse as "no wallets" while a hand-written
+      // array fixture kept the unit test green.
+      const remote = answer !== null && typeof answer === 'object' && 'value' in answer ? answer.value : answer
+      if (remote === null || typeof remote !== 'object' || remote.status !== 'ready') return { wallets: [], bonusWallets: [] }
+      const map = (list) => {
+        if (!Array.isArray(list)) return []
+        const out = []
+        for (const wallet of list) {
+          if (wallet === null || typeof wallet !== 'object') continue
+          const currency = wallet.currency === 'USD' ? 'USD' : wallet.currency === 'CNY' ? 'CNY' : undefined
+          if (currency === undefined) continue
+          const text = formatWalletBalance(wallet.balance, currency === 'CNY' ? '¥' : '$')
+          if (text === '') continue
+          // Zero is kept: the host renders every wallet it receives, so a ¥0.00
+          // row is part of "show what the host shows".
+          out.push({ currency, text })
+        }
+        return out
+      }
+      return { wallets: map(remote.value), bonusWallets: map(remote.bonusWallets) }
+    }
+
+    /**
+     * Resolve one session row's status marker.
+     *
+     * Mirrors the host's own precedence in ui-workspace `sessionStatuses`:
+     * a pending interaction outranks live activity, which outranks the
+     * unread-completion reminder, which is followed by plain idle. Keeping the
+     * same order means the rail and the shipped sidebar never label the same
+     * session differently.
+     * @param summary - The row's SessionSummary (for `running`).
+     * @param status - The SessionStatus entry from `useSessionStatus`, if any.
+     * @returns 'warning' | 'ongoing' | 'done' | 'idle'.
+     */
+    function sessionStatusOf(summary, status) {
+      const pending = status?.pendingInteraction
+      if (pending !== undefined && pending !== null) return 'warning'
+      const running = status?.running === undefined ? summary?.running : status.running
+      if (running === true) return 'ongoing'
+      if (status?.completionUnread === true || summary?.completed === true) return 'done'
+      return 'idle'
+    }
+
+    /**
+     * Clamp a stored recent-session count into its supported range.
+     *
+     * The value comes from localStorage, so it may be absent, a string (hand
+     * edited), a float or out of range. Anything unusable falls back to the
+     * default rather than rendering a surprise number of rows.
+     * @param raw - Whatever the store held for `recentCount`.
+     * @returns An integer between MIN_RECENT_COUNT and MAX_RECENT_COUNT.
+     */
+    function readRecentCount(raw) {
+      // An empty or whitespace string is "unset", not zero: Number('') is 0 and
+      // would clamp to 1, silently turning a cleared preference into "show one".
+      if (typeof raw === 'string') {
+        if (raw.trim() === '') return DEFAULT_RECENT_COUNT
+        const parsed = Number(raw)
+        if (!Number.isFinite(parsed)) return DEFAULT_RECENT_COUNT
+        return Math.min(MAX_RECENT_COUNT, Math.max(MIN_RECENT_COUNT, Math.round(parsed)))
+      }
+      if (!Number.isFinite(raw)) return DEFAULT_RECENT_COUNT
+      return Math.min(MAX_RECENT_COUNT, Math.max(MIN_RECENT_COUNT, Math.round(raw)))
+    }
+
     /**
      * Which session is the one shown in the main view.
      *
@@ -603,7 +934,7 @@ window.__ModuleLoader__.load({
      * @param panelCovering - True while a non-session panel covers the conversation.
      * @returns Pinned rows, normal rows and recent session rows.
      */
-    function deriveSections(items, sessions, archivedIds, pinnedIds, language, panelCovering) {
+    function deriveSections(items, sessions, archivedIds, pinnedIds, language, panelCovering, recentCount, statuses) {
       const list = Array.isArray(items) ? items : []
       const pinnedRank = new Map((Array.isArray(pinnedIds) ? pinnedIds : []).map((id, index) => [id, index]))
       const archived = new Set(Array.isArray(archivedIds) ? archivedIds : [])
@@ -638,7 +969,7 @@ window.__ModuleLoader__.load({
         })
       }
       recentRows.sort((a, b) => b.updatedAt - a.updatedAt)
-      return { pinnedRows, normalRows, recentRows: recentRows.slice(0, RECENT_LIMIT) }
+      return { pinnedRows, normalRows, recentRows: recentRows.slice(0, readRecentCount(recentCount)) }
     }
 
 
@@ -870,7 +1201,8 @@ window.__ModuleLoader__.load({
       const {
         toggleSidebar, selectPanel,
         panels, locale, openWorkspace, openSession, scheduleCatalog,
-        pluginInventory, useSessions, useWorkspaces, usePanelInfo, fallbackText, accountSeat: accountSeatLoader,
+        pluginInventory, useSessions, useWorkspaces, usePanelInfo, useSessionStatus, fallbackText,
+        accountSeat: accountSeatLoader,
       } = props
       /** Translator with a raw-key fallback when the locale face is absent. */
       const t = typeof props.t === 'function' ? props.t : (key) => String(key)
@@ -892,6 +1224,16 @@ window.__ModuleLoader__.load({
       // against null alone would hide the highlight while the session is visible.
       const panelCovering = activePanelId !== null && activePanelId !== undefined
         && activePanelId !== 'conversation'
+      // Host-owned per-session UI status. Optional: without the prop the rows
+      // fall back to SessionSummary.running alone.
+      const readStatuses = selectorHook(useSessionStatus, undefined)
+      // Declared before the derived sections: `useMemo` below reads both, and a
+      // later declaration would hit the temporal dead zone at render time.
+      const [accountSeat, setAccountSeat] = useState({ kind: 'unknown', avatarUrl: undefined })
+      // Persisted in this plugin's own store; the plugin detail page writes the
+      // same key, so both surfaces share one value.
+      const [recentCount, setRecentCount] = useState(() => readRecentCount(readStore().recentCount))
+      const statuses = readStatuses((snapshot) => snapshot)
       const panelEntries = useObservable(panels, identity)
       const language = useObservable(locale, (snapshot) => snapshot?.active ?? 'en')
 
@@ -910,8 +1252,8 @@ window.__ModuleLoader__.load({
       /** The flyout panel element, for moving focus into its list. */
       const panelRef = useRef(null)
       const sections = useMemo(
-        () => deriveSections(workspaceItems, sessions, archivedIds, pins, language, panelCovering),
-        [workspaceItems, sessions, archivedIds, pins, language, panelCovering],
+        () => deriveSections(workspaceItems, sessions, archivedIds, pins, language, panelCovering, recentCount, statuses),
+        [workspaceItems, sessions, archivedIds, pins, language, panelCovering, recentCount, statuses],
       )
 
       // Lazy remote data, loaded once per flyout opening. Two rules keep it
@@ -992,7 +1334,7 @@ window.__ModuleLoader__.load({
         setOpen(null)
         setRevealed(false)
       }, [])
-      const [accountSeat, setAccountSeat] = useState({ kind: 'unknown', avatarUrl: undefined })
+
       const avatarAsked = useRef(false)
       useEffect(() => {
         if (avatarAsked.current) return undefined
@@ -1119,6 +1461,17 @@ window.__ModuleLoader__.load({
         closeTimer.current = window.setTimeout(() => dismiss(), CLOSE_DELAY_MS)
       }, [clearTimers, dismiss])
 
+      /**
+       * Persist a new recent-session count and reflect it immediately.
+       * @param next - Requested count; clamped before it is written.
+       * @returns Nothing.
+       */
+      const changeRecentCount = useCallback((next) => {
+        const value = readRecentCount(next)
+        setRecentCount(value)
+        writeStore({ recentCount: value })
+      }, [])
+
       /** Toggle one workspace's pin and persist the new order. */
       const togglePin = useCallback((workspaceId) => {
         setPins((current) => {
@@ -1217,14 +1570,29 @@ window.__ModuleLoader__.load({
                   onTogglePin: () => togglePin(row.id),
                   onClick: () => openWorkspaceFromRail(row.id),
                 }))))
-          const foot = sections.recentRows.length === 0 ? undefined : h(Section, { title: t('section.recent') },
-            sections.recentRows.slice(0, 5).map((row) => h(Row, {
-              key: `recent-${row.id}`,
-              title: row.title,
-              meta: row.meta,
-              current: row.active === true,
-              onClick: () => openSessionFromRail(row.id),
-            })))
+          // Recent sessions live in their own scroller: the workspace list above
+          // can be long, and scrolling both from one box buried the recent block.
+          const foot = h('div', null,
+            sections.recentRows.length === 0
+              ? h('div', { className: 'dsr-section-title' }, t('section.recent'))
+              : h(Section, { title: t('section.recent') },
+                h('div', { className: 'dsr-recent-scroll' },
+                  sections.recentRows.map((row) => h(Row, {
+                    key: `recent-${row.id}`,
+                    title: row.title,
+                    meta: row.meta,
+                    current: row.active === true,
+                    status: row.status,
+                    statusLabel: t(`status.${row.status}`),
+                    onClick: () => openSessionFromRail(row.id),
+                  })))),
+            h(RecentCountRow, {
+              value: recentCount,
+              label: t('settings.recentCount'),
+              onChange: changeRecentCount,
+              min: MIN_RECENT_COUNT,
+              max: MAX_RECENT_COUNT,
+            }))
           return flyoutShell(t('rail.workspace'), body, foot)
         }
         if (open === 'tasks') {
@@ -1271,10 +1639,49 @@ window.__ModuleLoader__.load({
             h('div', { className: 'dsr-hint' }, t('account.hint')))
         }
         if (open === 'account') {
-          // Account and settings live in the host's expanded sidebar, so the
-          // only honest action here is to hand the column back to the host.
+          // Read-only mirror of the host's account menu, plus the wallet balance
+          // its sidebar row does not show. Sign-out and payments stay in the
+          // host's own menu: this surface must not perform irreversible actions.
+          const signedOut = accountSeat.kind === 'signed-out'
+          const balances = accountSeat.balances ?? { wallets: [], bonusWallets: [] }
+          const links = accountSeat.links ?? {}
+          /** One labelled balance line, or nothing when the list is empty. */
+          const balanceLine = (label, wallets) => (wallets.length === 0 ? null : h('div', {
+            className: 'dsr-account-balance',
+          },
+          h('span', { className: 'dsr-account-balance-label' }, label),
+          h('span', { className: 'dsr-account-balance-value' },
+            wallets.map((wallet) => h('span', { key: wallet.currency }, wallet.text)))))
           return flyoutShell(t('rail.account'),
             h('div', null,
+              signedOut
+                ? h('div', { className: 'dsr-hint' }, t('account.signedOut'))
+                : h('div', null,
+                  // Signed in but no positive wallet: the host shows the same
+                  // "unavailable" wording instead of omitting the line, so the
+                  // absence is not mistaken for a zero balance.
+                  balances.wallets.length === 0
+                    ? h('div', { className: 'dsr-hint' }, t('account.balanceUnavailable'))
+                    : balanceLine(t('account.balance'), balances.wallets),
+                  balanceLine(t('account.bonus'), balances.bonusWallets)),
+              // Platform destinations the host's account section links to. They
+              // open in the browser: the desktop bridge for an embedded page is
+              // not reachable from a third-party client module.
+              links.usageUrl === undefined && links.topUpUrl === undefined
+                ? null
+                : h('div', { className: 'dsr-account-links' },
+                  links.usageUrl === undefined ? null : h('a', {
+                    className: 'dsr-account-link',
+                    href: links.usageUrl,
+                    target: '_blank',
+                    rel: 'noopener noreferrer',
+                  }, t('account.usage')),
+                  links.topUpUrl === undefined ? null : h('a', {
+                    className: 'dsr-account-link',
+                    href: links.topUpUrl,
+                    target: '_blank',
+                    rel: 'noopener noreferrer',
+                  }, t('account.topUp'))),
               h('div', { className: 'dsr-hint' }, t('account.hint')),
               h(ActionRow, { onClick: () => { retract(); toggleSidebar() } }, t('rail.expand'))),
             undefined, true)
@@ -1480,12 +1887,22 @@ window.__ModuleLoader__.load({
               new Date().getTimezoneOffset(),
             )
             if (metadata === null) return { kind: 'signed-in', avatarUrl: undefined }
-            try {
-              return accountSeatState(view, await account.getProfile(metadata))
-            } catch (error) {
-              console.warn('[dsh-sidebar-rail] account profile unavailable', error)
-              return { kind: 'signed-in', avatarUrl: undefined }
-            }
+            // Profile and balance are independent queries on the host side, so one
+            // failing must not blank the other: each keeps its own fallback.
+            const [profile, balance] = await Promise.all([
+              account.getProfile(metadata).catch((error) => {
+                console.warn('[dsh-sidebar-rail] account profile unavailable', error)
+                return null
+              }),
+              typeof account.getBalance === 'function'
+                ? account.getBalance(metadata).catch((error) => {
+                  console.warn('[dsh-sidebar-rail] account balance unavailable', error)
+                  return null
+                })
+                : Promise.resolve(null),
+            ])
+            const seat = accountSeatState(view, profile)
+            return { ...seat, balances: balanceRows(balance), links: accountLinks(view) }
           },
           fallbackText: 'Sidebar rail unavailable',
         })
@@ -1503,6 +1920,16 @@ window.__ModuleLoader__.load({
         }, (props) => h(Boundary, { fallbackText: props.fallbackText }, h(RailOverlay, props))))
 
         ctx.effect(registerOverlay, 'dsh-sidebar-rail: rail overlay')
+
+        // The plugin detail page's configuration seat. `key` must be the package
+        // name, the same contract the host's own bundles use.
+        const registerSettings = () => ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
+          name: 'plugins.bundle.config',
+          key: '@skylerfee/dsh-sidebar-rail',
+          locale: NS,
+        }, RailSettings))
+
+        ctx.effect(registerSettings, 'dsh-sidebar-rail: settings panel')
         } catch (error) {
           console.error('[dsh-sidebar-rail] apply failed; the shipped sidebar is unaffected', error)
         }

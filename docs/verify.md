@@ -124,6 +124,62 @@
 - 问题 4 的键盘路径按实现核对，**未做完整 Tab/Escape 焦点遍历审计**。
 - 滑出动画的 160ms 手感、以及滑出状态与浮层交互（指针离开轨但浮层仍开）未逐帧验证。
 
+## 0.4.0 三项优化（2026-11-05，第 17 轮）
+
+### 1 最近会话条数设置 + 独立滚动
+
+- 新增偏好 `recentCount`（范围 1–20，默认 5），存在插件自己的 `localStorage['dsh.sidebar-rail.v1']`，保持纯 Client、不引入 host 半边。
+- **两个入口**：插件详情页（注册到 `plugins.bundle.config`，`key` 为包名，与宿主 cot-translation / voice-input 同槽）+ 工作区浮层底部的步进器。两处写同一个键，不会互相矛盾。
+- 最近会话改为**独立滚动容器**（`max-height:38vh`），工作区列表再长也不会把它挤没。
+- 修掉一处历史不一致：`RECENT_LIMIT` 曾固定 10，而浮层又 `slice(0,5)` 只渲染 5 条。
+
+### 2 会话状态标识（复用宿主样式）
+
+按宿主 `ui-workspace/Rows.tsx` 的 `sessionStatuses` 同优先级实现 `sessionStatusOf`：
+
+```
+pendingInteraction（approval / plan-review / question） → warning
+running                                               → ongoing
+completionUnread                                      → done
+否则                                                   → idle
+```
+
+视觉逐项对齐宿主 `StateDot`：`ongoing` 是 14px 旋转环（`--dsw-alias-label-tertiary`），其余是 10px 容器内的 6px 实心点（`--dsw-alias-state-success/warn/idle-primary`）。图标是**重绘**而非引入组件——静态模块只能 require react/react-dom。真机已见 `ongoing` 圆环出现在运行中的会话行上。
+
+### 3 账号浮层：宿主原有项 + 余额
+
+只读展示 + 跳转（不做退出登录/付款）。余额实现按调研报告修正了 **5 个真实缺陷**：
+
+| # | 缺陷 | 后果 | 修法 |
+| --- | --- | --- | --- |
+| 1 | `balanceRows` 把 `answer.value` 当数组 | **真机恒为空**（真实契约是 `{status, value, bonusWallets}`），而按数组写的 mock 让单测通过 | 按三层契约解析 |
+| 2 | 负数也截断 | `-12.345` 显示 `-¥12.34`，宿主是 `-¥12.35` | 负数 half-up 四舍五入，正数仍截断 |
+| 3 | 不支持指数记法 | `0E-16` / `1e+3` 整行丢弃 | 先展开指数再定点运算 |
+| 4 | 零余额被过滤 | 与宿主「渲染收到的全部钱包」不一致 | 保留 `¥0.00` |
+| 5 | 未用 `bonusWallets` / `links` | 赠金、查询用量、充值入口缺失 | 都接上；链接只接受绝对 http(s) |
+
+余额格式化与宿主 `formatBalance.ts` 的**官方 fixture 逐条对齐**（含 `0E-16`、`-12.345`、`1e+3`）。
+
+### 一个必须记录的教训
+
+本轮出现了两次「多处脚本改同一文件互相覆盖」，导致 `deriveSections` 的调用与签名不一致、`recentCount` 声明在 `useMemo` 之后（TDZ 崩溃，界面显示 `Sidebar rail unavailable`）。定位方式是**让 Boundary 把真实错误信息渲染出来**（`Cannot access 'recentCount' before initialization`），一步命中。该诊断能力已保留在 `Boundary` 里。
+
+### 真机验证
+
+| 项 | 结果 |
+| --- | --- |
+| 崩溃修复 | ✅ 无 `Sidebar rail unavailable`，界面正常 |
+| 会话状态标识 | ✅ 运行中的会话行出现 `ongoing` 圆环 |
+| 账号浮层赠金行 | ✅ 显示「赠金 ¥0.00」+ 真实头像 |
+| 设置页（插件详情） | ⏳ 未真机打开核对（需进入插件管理页→详情） |
+| 余额主行 | ⏳ 本轮窗口为展开态，未在折叠浮层上核对最终样子 |
+
+### 未验证
+
+- 插件详情页设置面板的**视觉与交互**未真机核对（仅确认注册未引发崩溃）。
+- `recentCount` 改动后需要重新挂载浮层才生效（值在组件挂载时读取），跨入口即时同步未验证。
+- 真实有余额的账号下的主余额行未验证（当前账号主钱包为空）。
+
 ## 0.3.0 发布（2026-11-05）
 
 | 项 | 结果 |

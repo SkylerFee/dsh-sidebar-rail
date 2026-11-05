@@ -1,6 +1,6 @@
 {
   "name": "@skylerfee/dsh-sidebar-rail",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Additive macOS Desktop icon rail for the DeepSeek Harness sidebar: a 56px rail with hover flyouts while the host column is collapsed, plus in-flyout workspace pinning.",
   "license": "MIT",
   "author": "SkylerFee",
