@@ -4,7 +4,7 @@
 
 给 DeepSeek Harness **macOS Desktop 折叠侧栏**补一条图标轨的**增量插件**。
 
-宿主在 macOS 桌面端把侧栏折到 0 宽时不留任何轨道（`AppFrame: collapsedWidth = darwin ? 0 : 56`，列上还有 `overflow: hidden`）。本插件只在这一种状态下，在窗口左侧渲染一条 56px 图标轨：工作区 / 定时任务 / 插件 / 更多 四个图标 + 底部账号座位；悬停 120ms 打开浮层，离开 200ms 关闭，`Escape` 关闭。
+宿主在 macOS 桌面端把侧栏折到 0 宽时不留任何轨道（`AppFrame: collapsedWidth = darwin ? 0 : 56`，列上还有 `overflow: hidden`）。本插件只在这一种状态下，在窗口左侧渲染一条 56px 图标轨（默认收起，指针靠近窗口左缘才滑出）：工作区 / 定时任务 / 插件 / 更多 四个图标 + 底部账号座位；悬停 120ms 打开浮层，离开 200ms 关闭，`Escape` 关闭。
 
 - **增量**：不替换宿主 `sidebar` 槽、不改宿主栅格列宽、不覆盖宿主样式
 - **其他所有状态都不渲染**：展开态与 Web 端完全交给宿主
@@ -75,7 +75,7 @@ dsh-sidebar-rail/
 
 ## 已知限制
 
-1. **浮轨浮在主内容之上**：宿主折叠列宽为 0 且 `overflow: hidden`，轨道只能以 `createPortal(document.body)` + `position: fixed` 浮在主内容上，无法嵌回宿主栅格。视口窄于 768px 时完全不渲染，因此不会压住正文。
+1. **轨默认隐藏，靠近才出现**。它平时滑出窗口之外，由 12px 的左边条热区或键盘焦点唤出。常驻显示会盖住会话页的首个「对话」标签——宿主折叠时不给标签行留左侧避让，只能靠不覆盖解决。原「浮轨浮在主内容之上」：宿主折叠列宽为 0 且 `overflow: hidden`，轨道只能以 `createPortal(document.body)` + `position: fixed` 浮在主内容上，无法嵌回宿主栅格。视口窄于 768px 时完全不渲染，因此不会压住正文。
 2. **顶部 48px 不渲染图标**：macOS 红绿灯（约 x 16–68）与宿主挂在 `shell.leading` 的重开 / 新会话控件（`left: 88px`）占着 `--dsh-frame-top-clearance` 那条窗口 chrome 带，浮轨从 48px 起排。
 3. **Windows / Linux 未验证**：不渲染，也不宣称支持。
 4. **置顶是插件本地概念**：宿主没有对应字段，换浏览器或清空 `localStorage` 会丢。
