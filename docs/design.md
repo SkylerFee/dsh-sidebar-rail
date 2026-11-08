@@ -73,7 +73,10 @@ transform: translateX(-100%);
   从 48px 起排就同时避开两者；`var(..., 48px)` 的 fallback 保证变量缺失时也不压 chrome。
 - **显式 `-webkit-app-region: no-drag`**：Electron 的 app-region 是**几何**而不是 stacking，浮轨盖住窗口拖拽带时必须自己 opt out（即便 body 级 portal 通常已继承 no-drag），否则点图标会拖窗口。
 - **窄窗口不渲染**：判定不是 CSS 媒体查询，而是纯函数 `shouldRenderRail(platform, collapsed, viewportWidth)`（阈值 `RAIL_MIN_VIEWPORT = 768`），`RailOverlay` 用 `window.innerWidth` + `resize` 监听驱动；不满足即 `return null`，组件整体卸载。768 = 680（宿主正文最小宽）+ 56（轨宽）+ 32（两侧安全）。为什么不用 CSS：阈值语义是「正文是否还放得下」，与轨自身盒模型无关；做成纯函数还能被单测覆盖边界（`test/data.test.mjs`）。为什么不是 900：旧实现的 900 是拍的，与宿主 drawer 断点（768）无对应关系；按 680 正文可读宽推导更可解释。
-- **浮层位置**：`.dsr-flyout` 也是 `position: fixed`（portal 到 body），宽 288px，`left = rect.right + 8`。`flyoutPlacement` 根据触发按钮与视口计算顶部或底部距离，并以内联 `maxHeight` 限制剩余可视高度；账号浮层从头像底边向上展开。工作区列表和最近会话分别滚动，最近会话区域上限为 `38vh`。
+- **浮层位置**：`.dsr-flyout` 也是 `position: fixed`（portal 到 body），宽 288px，`left = rect.right + 8`。`flyoutPlacement` 根据触发按钮与视口计算顶部或底部距离，并以内联 `maxHeight` 限制剩余可视高度；账号浮层从头像底边向上展开。
+- **工作区浮层定高**：该浮层内容长度差异最大（两条或二十条最近会话），因此改为**视口比例定高**——`workspaceFlyoutHeight(innerHeight, 预算)` 取 `0.7 × 视口` 且不超过 `flyoutPlacement` 的预算，再以内联 `height` 固定。这样调「最近会话条数」只改变列表是否滚动，不改浮动层高度。任务/插件/账号浮层列表短，仍保持内容自适应。
+- **两区分栏**：浮层 body 用 `.dsr-split-body`（flex 列）承载两个 `.dsr-pane`，各自 `flex:1 1 0` 平分扣除头部与步进器后的高度，因此两区大小基本一致（实测 314.5 / 351.0 px）。每个 pane 内再拆成固定标题 `.dsr-pane-head`（`flex:none`，不随内容滚动）与独立滚动区 `.dsr-pane-scroll`（`overflow-y:auto`）；`pane + pane` 之间的 `border-top` 用宿主 `--dsw-alias-border-l1`，即两区之间的分隔线。分栏用 flex 而非 JS 常数：真实 head/步进器高度只有 CSS 知道，常数估算会偏。
+- **必须跳过 `.dsr-flyout-body` 包装**：它本身是滚动容器，会把子元素压回内容高度，导致 flex 等分失效；`split` 模式下改为直接渲染 `.dsr-split-body`。
 
 ## 5. 为什么不改宿主列宽
 

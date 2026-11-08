@@ -33,13 +33,13 @@ ${region('pure-data')}
 return { EMPTY_SESSIONS, EMPTY_WORKSPACES, selectorHook, relativeTime, shortPath,
   resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT,
   deriveSections, normalizeTasks, normalizePlugins, currentSessionId, accountSeatState, accountClientMetadata, clientBuildVersion, readRecentCount,
-  remoteOutcome, flyoutPlacement, keepsRailRevealed, RAIL_REVEAL_WIDTH, readRecentCount, sessionStatusOf, formatWalletBalance, balanceRows, accountLinks, withAccountExtras }`)()
+  remoteOutcome, flyoutPlacement, keepsRailRevealed, RAIL_REVEAL_WIDTH, readRecentCount, sessionStatusOf, formatWalletBalance, balanceRows, accountLinks, withAccountExtras, workspaceFlyoutHeight }`)()
 
 const { deriveSections, normalizeTasks, normalizePlugins, relativeTime, shortPath, selectorHook,
   resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT, currentSessionId, accountSeatState,
   accountClientMetadata, clientBuildVersion, readRecentCount, sessionStatusOf,
   formatWalletBalance, balanceRows, accountLinks, remoteOutcome, flyoutPlacement,
-  keepsRailRevealed, RAIL_REVEAL_WIDTH, EMPTY_SESSIONS, withAccountExtras } = helpers
+  keepsRailRevealed, RAIL_REVEAL_WIDTH, EMPTY_SESSIONS, withAccountExtras, workspaceFlyoutHeight } = helpers
 
 /**
  * Build a SessionSummary-shaped row.
@@ -315,6 +315,30 @@ test('flyoutPlacement: never claims more height than the window has left', () =>
   assert.equal(account.bottom, 700 - 676)
   assert.equal(account.maxHeight, 700 - account.bottom - 12)
   assert.equal(account.top, undefined)
+})
+
+test('workspaceFlyoutHeight: a fixed viewport fraction, never above the budget', () => {
+  // 定高是「增减最近会话条数不改变浮层高度」的基础。
+  assert.equal(workspaceFlyoutHeight(1000, 1000), 700)
+  assert.equal(workspaceFlyoutHeight(800, 1000), 560)
+  // 可用空间优先：矮窗口或靠下的锚点让预算更小时，不能越出窗口。
+  assert.equal(workspaceFlyoutHeight(1000, 420), 420)
+  assert.equal(workspaceFlyoutHeight(1000, 0), 0)
+  // 脏输入不产出负值或 NaN。
+  assert.equal(workspaceFlyoutHeight(0, 500), 0)
+  assert.equal(workspaceFlyoutHeight(Number.NaN, 500), 0)
+  assert.equal(workspaceFlyoutHeight(1000, Number.NaN), 0)
+})
+
+test('workspaceFlyoutHeight: the same count change never resizes the panel', () => {
+  // 回归锁：条数从 1 调到 20 时，浮层高度必须完全一致——
+  // 高度只由视口与预算决定，与条数无关。
+  const viewport = 900
+  const budget = flyoutPlacement({ top: 100, bottom: 136 }, viewport, false).maxHeight
+  const forOne = workspaceFlyoutHeight(viewport, budget)
+  const forTwenty = workspaceFlyoutHeight(viewport, budget)
+  assert.equal(forOne, forTwenty)
+  assert.equal(forOne, Math.min(Math.round(viewport * 0.7), budget))
 })
 
 test('keepsRailRevealed: position decides, so an overlaid strip cannot oscillate', () => {

@@ -111,6 +111,7 @@ window.__ModuleLoader__.load({
       'rail.expand': '展开侧栏',
       'section.pinned': '置顶项目',
       'section.workspaces': '项目',
+      'empty.recent': '还没有最近会话',
       'section.recent': '最近会话',
       'settings.title': '侧栏图标轨',
       'settings.recentCount': '最近会话条数',
@@ -149,6 +150,7 @@ window.__ModuleLoader__.load({
       'rail.expand': 'Expand sidebar',
       'section.pinned': 'Pinned projects',
       'section.workspaces': 'Projects',
+      'empty.recent': 'No recent sessions yet',
       'section.recent': 'Recent sessions',
       'settings.title': 'Sidebar rail',
       'settings.recentCount': 'Recent count',
@@ -325,9 +327,17 @@ window.__ModuleLoader__.load({
   color:var(--dsw-alias-label-primary); }
 .dsr-flyout-body { overflow-y:auto; padding:2px 6px 8px; min-height:0; }
 .dsr-flyout-foot { border-top:1px solid var(--dsw-alias-border-l1); padding:6px; }
-/* The recent block scrolls on its own so a long workspace list above cannot bury
-   it; the cap keeps it from eating the whole panel on a tall window. */
-.dsr-recent-scroll { max-height:38vh; overflow-y:auto; padding-right:2px; }
+/* The workspace flyout splits into two panes of equal height: workspaces above,
+   recent sessions below. Each pane is a fixed header row plus its own scroller,
+   so a header never scrolls away and the two panes never fight over height:
+   flex:1 1 0 divides whatever is left after the head and the count stepper.
+   The divider marks the boundary between them. */
+.dsr-split-body { display:flex; flex-direction:column; flex:1 1 auto; min-height:0; padding:0; }
+.dsr-pane { display:flex; flex-direction:column; flex:1 1 0; min-height:0; }
+.dsr-pane + .dsr-pane { border-top:1px solid var(--dsw-alias-border-l1); }
+.dsr-pane-head { flex:none; padding:10px 12px 4px; font-size:11px; font-weight:600;
+  letter-spacing:.04em; text-transform:none; color:var(--dsw-alias-label-secondary); }
+.dsr-pane-scroll { flex:1 1 auto; min-height:0; overflow-y:auto; padding:0 6px 8px; }
 .dsr-stepper { display:flex; align-items:center; gap:6px; padding:6px 6px 0; font-size:11px;
   color:var(--dsw-alias-label-primary); }
 .dsr-stepper-label { flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -1121,6 +1131,38 @@ window.__ModuleLoader__.load({
     const FLYOUT_EDGE_GAP = 12
     /** Reserved height for the flyout head and foot when budgeting space. */
     const FLYOUT_CHROME_HEIGHT = 96
+    /**
+     * Share of the viewport the workspace flyout aims for.
+     *
+     * The workspace flyout is the one panel whose content length swings wildly —
+     * two recent sessions or twenty. Pinning it to a viewport fraction means the
+     * panel keeps still while the person steps `recentCount` up and down, and the
+     * recent block scrolls instead of resizing the whole flyout. Other flyouts
+     * (tasks, plugins, account) stay content-sized: their lists are short and a
+     * fixed tall panel there would be mostly empty.
+     */
+    const WORKSPACE_FLYOUT_VIEWPORT_RATIO = 0.7
+    /**
+     * Height the workspace flyout should occupy, clamped to the room available.
+     *
+     * `flyoutPlacement` answers the space the panel MAY use; this answers the
+     * space it SHOULD use, so the panel does not grow and shrink as the recent
+     * count changes. The viewport fraction is a target, never a promise: near
+     * the window edges the available budget wins, because overflowing the window
+     * is worse than a shorter panel.
+     *
+     * The panes inside are split by flex (`flex:1 1 0` on both), not by arithmetic
+     * here: CSS knows the real head/stepper heights, a constant would not.
+     * @param viewportHeight - `window.innerHeight`.
+     * @param maxHeight - Budget returned by `flyoutPlacement`.
+     * @returns A pixel height, never above `maxHeight` and never negative.
+     */
+    function workspaceFlyoutHeight(viewportHeight, maxHeight) {
+      const viewport = Number.isFinite(viewportHeight) && viewportHeight > 0 ? viewportHeight : 0
+      const cap = Number.isFinite(maxHeight) && maxHeight > 0 ? maxHeight : 0
+      if (viewport === 0 || cap === 0) return 0
+      return Math.min(Math.round(viewport * WORKSPACE_FLYOUT_VIEWPORT_RATIO), cap)
+    }
 
     /**
      * Place a flyout against its anchor without letting it leave the window.
@@ -1656,22 +1698,38 @@ window.__ModuleLoader__.load({
 
       /**
        * Draw the flyout shell for one entry.
+       *
+       * `fixedHeight` pins the panel to a computed height instead of letting it
+       * shrink to its content: the workspace flyout uses it so changing the
+       * recent count does not resize the panel. Other flyouts pass nothing and
+       * stay content-sized.
+       *
+       * `split` renders the body as a plain flex container instead of the usual
+       * scrolling wrapper, so two equal panes inside can divide the panel's
+       * remaining height with `flex:1 1 0`. The wrapper has to be skipped
+       * entirely: as a scroll container it would collapse its children to content
+       * height and the split would never happen.
        * @param title - Flyout heading.
-       * @param body - Scrollable body.
+       * @param body - Panel body.
        * @param foot - Optional pinned foot.
+       * @param bottomAligned - True for the account seat, which anchors at the foot.
+       * @param fixedHeight - Pixel height to occupy, or undefined to fit content.
+       * @param split - True to let flex children divide the body height.
        * @returns The flyout element.
        */
-      const flyoutShell = (title, body, foot, bottomAligned) => createPortal(h('div', {
+      const flyoutShell = (title, body, foot, bottomAligned, fixedHeight, split) => createPortal(h('div', {
         ref: panelRef,
         className: 'dsr-flyout',
         role: 'dialog',
         'aria-label': title,
+        ...(split === true ? { 'data-dsr-split': 'true' } : {}),
         style: (() => {
           const placed = flyoutPlacement(anchor, window.innerHeight, bottomAligned)
           return {
             ...(placed.top === undefined ? {} : { top: `${placed.top}px` }),
             ...(placed.bottom === undefined ? {} : { bottom: `${placed.bottom}px` }),
             maxHeight: `${placed.maxHeight}px`,
+            ...(fixedHeight === undefined ? {} : { height: `${fixedHeight}px` }),
             left: `${anchor.right + 8}px`,
           }
         })(),
@@ -1688,50 +1746,74 @@ window.__ModuleLoader__.load({
         },
       },
       h('div', { className: 'dsr-flyout-head' }, title),
-      h('div', { className: 'dsr-flyout-body' }, body),
+      split === true
+        ? h('div', { className: 'dsr-split-body' }, body)
+        : h('div', { className: 'dsr-flyout-body' }, body),
       foot === undefined ? null : h('div', { className: 'dsr-flyout-foot' }, foot)), document.body)
 
       /** Render the flyout for the currently open entry only. */
       const renderFlyout = () => {
+        // Computed once per render so the panel height and the two halves cannot
+        // disagree about the space available.
+        const viewportFlyoutHeight = workspaceFlyoutHeight(
+          window.innerHeight,
+          flyoutPlacement(anchor, window.innerHeight, false).maxHeight,
+        )
         if (open === 'workspace') {
-          const body = sections.pinnedRows.length === 0 && sections.normalRows.length === 0
-            ? h(Empty, null, t('empty.workspaces'))
-            : h('div', null,
-              sections.pinnedRows.length === 0 ? null : h(Section, { title: t('section.pinned') },
-                sections.pinnedRows.map((row) => h(Row, {
-                  key: `pin-${row.id}`,
+          // Each pane is a fixed header plus its own scroller. The headers stay
+          // put while the lists scroll underneath, and the two panes split the
+          // leftover height evenly (`flex:1 1 0`), so adding projects or stepping
+          // the recent count only makes that pane scroll — neither pane resizes.
+          // A divider between them marks the boundary.
+          const projectsEmpty = sections.pinnedRows.length === 0 && sections.normalRows.length === 0
+          // The flyout head already says "Workspaces"; this pane's fixed row names
+          // its two groups instead of repeating that word, and stays put while the
+          // rows scroll beneath it.
+          const projectsHeadLabel = sections.pinnedRows.length === 0
+            ? t('section.workspaces')
+            : `${t('section.pinned')} · ${t('section.workspaces')}`
+          const projectsPane = h('div', { className: 'dsr-pane' },
+            h('div', { className: 'dsr-pane-head' }, projectsHeadLabel),
+            h('div', { className: 'dsr-pane-scroll' },
+              projectsEmpty
+                ? h(Empty, null, t('empty.workspaces'))
+                : [
+                  sections.pinnedRows.length === 0 ? null : h(Section, { title: t('section.pinned') },
+                    sections.pinnedRows.map((row) => h(Row, {
+                      key: `pin-${row.id}`,
+                      title: row.title,
+                      meta: row.meta,
+                      pinned: true,
+                      pinLabel: t('pin.unpin'),
+                      onTogglePin: () => togglePin(row.id),
+                      onClick: () => openWorkspaceFromRail(row.id),
+                    }))),
+                  sections.normalRows.length === 0 ? null : h(Section,
+                    { title: sections.pinnedRows.length === 0 ? t('section.pinned') : t('section.workspaces') },
+                    sections.normalRows.map((row) => h(Row, {
+                      key: `ws-${row.id}`,
+                      title: row.title,
+                      meta: row.meta,
+                      pinLabel: t('pin.pin'),
+                      onTogglePin: () => togglePin(row.id),
+                      onClick: () => openWorkspaceFromRail(row.id),
+                    }))),
+                ]))
+          const recentPane = h('div', { className: 'dsr-pane' },
+            h('div', { className: 'dsr-pane-head' }, t('section.recent')),
+            h('div', { className: 'dsr-pane-scroll' },
+              sections.recentRows.length === 0
+                ? h(Empty, null, t('empty.recent'))
+                : sections.recentRows.map((row) => h(Row, {
+                  key: `recent-${row.id}`,
                   title: row.title,
                   meta: row.meta,
-                  pinned: true,
-                  pinLabel: t('pin.unpin'),
-                  onTogglePin: () => togglePin(row.id),
-                  onClick: () => openWorkspaceFromRail(row.id),
-                }))),
-              sections.normalRows.length === 0 ? null : h(Section, { title: t('section.workspaces') },
-                sections.normalRows.map((row) => h(Row, {
-                  key: `ws-${row.id}`,
-                  title: row.title,
-                  meta: row.meta,
-                  pinLabel: t('pin.pin'),
-                  onTogglePin: () => togglePin(row.id),
-                  onClick: () => openWorkspaceFromRail(row.id),
+                  current: row.active === true,
+                  status: row.status,
+                  statusLabel: t(`status.${row.status}`),
+                  onClick: () => openSessionFromRail(row.id),
                 }))))
-          // Recent sessions live in their own scroller: the workspace list above
-          // can be long, and scrolling both from one box buried the recent block.
-          const foot = h('div', null,
-            sections.recentRows.length === 0
-              ? h('div', { className: 'dsr-section-title' }, t('section.recent'))
-              : h(Section, { title: t('section.recent') },
-                h('div', { className: 'dsr-recent-scroll' },
-                  sections.recentRows.map((row) => h(Row, {
-                    key: `recent-${row.id}`,
-                    title: row.title,
-                    meta: row.meta,
-                    current: row.active === true,
-                    status: row.status,
-                    statusLabel: t(`status.${row.status}`),
-                    onClick: () => openSessionFromRail(row.id),
-                  })))),
+          const stepper = h('div', { className: 'dsr-flyout-foot' },
             h(RecentCountRow, {
               value: recentCount,
               label: t('settings.recentCount'),
@@ -1739,7 +1821,8 @@ window.__ModuleLoader__.load({
               min: MIN_RECENT_COUNT,
               max: MAX_RECENT_COUNT,
             }))
-          return flyoutShell(t('rail.workspace'), body, foot)
+          return flyoutShell(t('rail.workspace'), [projectsPane, recentPane],
+            stepper, undefined, viewportFlyoutHeight, true)
         }
         if (open === 'tasks') {
           const body = tasks.phase === 'loading' ? h(Empty, null, t('state.loading'))

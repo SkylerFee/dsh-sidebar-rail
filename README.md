@@ -111,7 +111,9 @@ Keyboard: `Tab` to an icon reveals the rail. On a top-row function icon, press `
 <a id="preferences"></a>
 ## Preferences and local data
 
-Recent count defaults to **5**, with a range of **1–20**. Adjust it with the stepper at the foot of the workspace flyout or on the plugin detail page. Recent sessions scroll independently when they exceed the visible height.
+Recent count defaults to **5**, with a range of **1–20**. Adjust it with the stepper at the foot of the workspace flyout or on the plugin detail page.
+
+The workspace flyout keeps a fixed height (about 70% of the viewport): projects on top, recent sessions below, roughly equal panes with their own fixed header rows. Changing the count only changes whether the recent list scrolls, never the panel height.
 
 ![Recent count setting on the plugin detail page, showing 9 with decrease and increase buttons](docs/images/plugin-settings.png)
 
