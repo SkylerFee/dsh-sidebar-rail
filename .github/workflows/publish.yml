@@ -65,16 +65,21 @@ jobs:
       - name: Publish
         run: npm publish --ignore-scripts --provenance --tag "${{ steps.dist.outputs.tag }}"
 
+      # The publish itself already succeeded above; a slow registry index used to
+      # fail this check and mark a perfectly good release red (0.3.3). Wait longer,
+      # and treat a still-missing version as a warning that names the dist-tag we
+      # pushed, not as a failed publish.
       - name: Confirm the version is visible
         run: |
           set -euo pipefail
           version="$(node -p "require('./package.json').version")"
-          for attempt in $(seq 1 12); do
+          for attempt in $(seq 1 30); do
             if npm view "@skylerfee/dsh-sidebar-rail@${version}" version > /dev/null 2>&1; then
               echo "visible: ${version}"
               exit 0
             fi
+            echo "attempt ${attempt}/30: ${version} not indexed yet"
             sleep 10
           done
-          echo "::error::${version} did not appear in the registry"
-          exit 1
+          echo "::warning::${version} published successfully but has not been indexed by the registry yet; verify with curl before announcing"
+          npm view "@skylerfee/dsh-sidebar-rail" dist-tags 2>&1 || true
