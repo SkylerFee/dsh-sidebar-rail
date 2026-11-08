@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Sidebar Rail",
-    "description": "An additive macOS Desktop icon rail for DeepSeek Harness: while the host sidebar is collapsed it draws a persistent 56px rail (workspaces, tasks, plugins, More and the account seat) with hover flyouts; the expanded sidebar stays entirely the host's."
+    "description": "A macOS Desktop plugin for DeepSeek Harness: when the sidebar is collapsed, hovering the left edge reveals an icon rail for switching projects, browsing recent sessions, managing scheduled tasks and plugins, and opening the account seat. It retracts on its own, and the expanded sidebar stays entirely the host native one."
   }
 }
