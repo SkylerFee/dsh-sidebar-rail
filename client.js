@@ -113,6 +113,9 @@ window.__ModuleLoader__.load({
       'section.workspaces': '项目',
       'empty.recent': '还没有最近会话',
       'empty.pinned': '还没有置顶项目',
+      'empty.projectSessions': '这个项目还没有会话',
+      'action.newSession': '新建会话',
+      'status.archived': '已归档',
       'section.recent': '最近会话',
       'settings.title': '侧栏图标轨',
       'settings.recentCount': '最近会话条数',
@@ -153,6 +156,9 @@ window.__ModuleLoader__.load({
       'section.workspaces': 'Projects',
       'empty.recent': 'No recent sessions yet',
       'empty.pinned': 'No pinned projects yet',
+      'empty.projectSessions': 'No sessions in this project yet',
+      'action.newSession': 'New session',
+      'status.archived': 'Archived',
       'section.recent': 'Recent sessions',
       'settings.title': 'Sidebar rail',
       'settings.recentCount': 'Recent count',
@@ -408,6 +414,27 @@ window.__ModuleLoader__.load({
 .dsr-row-action:hover { background:var(--dsw-alias-interactive-bg-active);
   color:var(--dsw-alias-label-primary); }
 .dsr-row-wrap[data-pinned="true"] .dsr-row-action { opacity:1; }
+/* Project rows (0.4.0). The caret is always present, unlike the pin, because a
+   project's "can I open this?" answer must not depend on the pointer being over
+   it. The two trailing actions sit beside the name and stop propagation so they
+   never fold the row as a side effect. */
+.dsr-project-row { display:flex; flex-direction:column; }
+.dsr-project-main { gap:4px; }
+.dsr-project-caret { flex:none; display:flex; align-items:center; justify-content:center;
+  width:10px; height:10px; color:var(--dsw-alias-label-secondary);
+  transition:transform 120ms ease; }
+.dsr-project-main[aria-expanded="false"] .dsr-project-caret { transform:rotate(-90deg); }
+.dsr-project-action { display:flex; align-items:center; justify-content:center; width:22px; height:22px; flex:none;
+  border:none; background:transparent; border-radius:var(--dsw-radius-sm, 8px);
+  cursor:pointer; color:var(--dsw-alias-label-primary); opacity:0; }
+.dsr-row-wrap:hover .dsr-project-action,
+.dsr-project-action:focus-visible,
+.dsr-project-row[data-pinned="true"] .dsr-project-action { opacity:1; }
+.dsr-project-action:hover { background:var(--dsw-alias-interactive-bg-active); }
+/* The expanded session list is indented under its project: the extra leading
+   space is what reads as "these belong to the row above". */
+.dsr-project-sessions { display:flex; flex-direction:column; padding-left:14px; }
+@media (prefers-reduced-motion: reduce) { .dsr-project-caret { transition:none; } }
 .dsr-empty { padding:14px 8px; font-size:12px; color:var(--dsw-alias-label-primary); text-align:center; }
 .dsr-hint { padding:4px 6px 8px; font-size:11px; line-height:1.5;
   color:var(--dsw-alias-label-primary); }
@@ -454,6 +481,17 @@ window.__ModuleLoader__.load({
       viewBox: '0 0 24 24', width: 13, height: 13, fill: 'none', stroke: 'currentColor',
       strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true,
     }, h('path', { d: 'M9 4.5h6l-.8 5.2 3.3 3.3v1.5H6.5V13l3.3-3.3z' }), h('path', { d: 'M12 14.5V20' }))
+
+    /**
+     * Plus glyph for the project row's new-session action.
+     *
+     * Its own icon rather than a text label: the row is narrow and the button
+     * sits beside the pin, so a label would push the project name out.
+     */
+    const IconPlus = () => h('svg', {
+      viewBox: '0 0 24 24', width: 13, height: 13, fill: 'none', stroke: 'currentColor',
+      strokeWidth: 2, strokeLinecap: 'round', 'aria-hidden': true,
+    }, h('path', { d: 'M12 5v14M5 12h14' }))
 
     /**
      * Disclosure caret for a foldable section header.
@@ -610,6 +648,58 @@ window.__ModuleLoader__.load({
           title: pinLabel,
           onClick: (event) => { event.stopPropagation(); onTogglePin() },
         }, h(IconPin)))
+    }
+
+    /**
+     * One project row: disclosure caret, name, pin, and new-session action.
+     *
+     * Separate from `Row` on purpose. A project row carries three affordances
+     * that no session row has, and the caret must stay visible even while the
+     * pointer is elsewhere (a session row's pin only appears on hover), so
+     * folding it into `Row` would mean a pile of `undefined`-checks in every
+     * other list.
+     *
+     * The caret and the name are one button: clicking either folds, which is what
+     * a disclosure row conventionally does. The pin and the new-session buttons
+     * stop propagation so they do not also fold the row.
+     * @param props - Row content, fold state, and the three callbacks.
+     * @returns The project row element.
+     */
+    function ProjectRow({ title, meta, open, onToggleOpen, pinned, pinLabel, onTogglePin, newSessionLabel, onNewSession, onClick }) {
+      return h('div', { className: 'dsr-project-row', 'data-pinned': pinned === true ? 'true' : undefined },
+        h('div', { className: 'dsr-row-wrap' },
+          h('button', {
+            type: 'button',
+            className: 'dsr-row dsr-project-main',
+            style: { flex: '1 1 auto', minWidth: 0 },
+            'aria-expanded': open === true,
+            'data-dsr-project-toggle': title,
+            onClick: onToggleOpen,
+          },
+          h('span', {
+            className: 'dsr-project-caret',
+            'data-dsr-open': open === true ? 'true' : 'false',
+          }, h(IconChevron)),
+          h('span', { className: 'dsr-row-main' },
+            h('span', { className: 'dsr-row-title' }, title),
+            meta === undefined || meta === '' ? null : h('span', { className: 'dsr-row-meta' }, meta))),
+          h('button', {
+            type: 'button',
+            className: 'dsr-project-action',
+            'aria-label': newSessionLabel,
+            title: newSessionLabel,
+            onClick: (event) => { event.stopPropagation(); onNewSession() },
+          }, h(IconPlus)),
+          h('button', {
+            type: 'button',
+            className: 'dsr-project-action',
+            'aria-label': pinLabel,
+            title: pinLabel,
+            onClick: (event) => { event.stopPropagation(); onTogglePin() },
+          }, h(IconPin))),
+        open === true
+          ? h('div', { className: 'dsr-project-sessions' }, onClick)
+          : null)
     }
 
     /**
@@ -1000,6 +1090,55 @@ window.__ModuleLoader__.load({
       }
       if (!Number.isFinite(raw)) return DEFAULT_RECENT_COUNT
       return Math.min(MAX_RECENT_COUNT, Math.max(MIN_RECENT_COUNT, Math.round(raw)))
+    }
+
+    /**
+     * Build the rows one project expands into.
+     *
+     * Deliberately the opposite policy from the recent-sessions section: this
+     * list answers "what is in this project", so nothing is filtered out — an
+     * archived or blank session is still a session of that project and stays
+     * listed, only flagged so the renderer can mark it. Order is the host's own
+     * `sessionIds` order, never re-sorted by time, and there is no count cap.
+     *
+     * Subagent children never appear here, but that is the host's doing rather
+     * than a filter: its `attachSession` has no subagent call site, so those
+     * sessions never join `sessionIds`. Filtering by `origin` again would only
+     * risk hiding a real session once the host changes its mind.
+     *
+     * A member missing from the session snapshot still gets a row built from the
+     * id: `sessionIds` comes from the workspace registry and `byId` from the
+     * session snapshot, and the two can be a frame apart during a rename or a
+     * delete. Dropping the row would make a session vanish from its own project.
+     * @param sessionIds - `WorkspaceView.sessionIds`, in host order.
+     * @param byId - Session summaries from `useSessions`, keyed by id.
+     * @param language - Active locale id, for the relative-time meta.
+     * @param archivedIds - Archived session ids, used only to mark rows.
+     * @param shownSessionId - The session the main view shows, used only to mark.
+     * @returns Rows `{ id, title, meta, archived, current }`, unsorted and unfiltered.
+     */
+    function projectSessionRows(sessionIds, byId, language, archivedIds, shownSessionId) {
+      if (!Array.isArray(sessionIds)) return []
+      const summaries = byId !== null && typeof byId === 'object' ? byId : {}
+      const archived = new Set(Array.isArray(archivedIds) ? archivedIds : [])
+      const rows = []
+      for (const raw of sessionIds) {
+        if (raw === null || raw === undefined) continue
+        const id = String(raw)
+        const entry = summaries[id]
+        if (entry === null || typeof entry !== 'object') {
+          rows.push({ id, title: id, meta: '', archived: archived.has(id), current: id === shownSessionId })
+          continue
+        }
+        rows.push({
+          id,
+          title: entry.displayTitle ?? entry.title ?? id,
+          meta: relativeTime(entry.updatedAt, language),
+          archived: archived.has(id),
+          current: id === shownSessionId,
+        })
+      }
+      return rows
     }
 
     /**
@@ -1494,7 +1633,7 @@ window.__ModuleLoader__.load({
     function RailColumn(props) {
       const {
         toggleSidebar, selectPanel,
-        panels, locale, openWorkspace, openSession, scheduleCatalog,
+        panels, locale, openWorkspace, openSession, startSession, scheduleCatalog,
         pluginInventory, useSessions, useWorkspaces, usePanelInfo, useSessionStatus, fallbackText,
         accountSeat: accountSeatLoader,
       } = props
@@ -1560,6 +1699,18 @@ window.__ModuleLoader__.load({
       const toggleSection = useCallback((id) => {
         setFoldedSections((current) => ({ ...current, [id]: current[id] !== true }))
       }, [])
+      /**
+       * Projects whose session list is expanded, keyed by workspace id.
+       *
+       * Component state only, like the section folds: the spec says expansion is
+       * never persisted, so every flyout opening starts from "all collapsed".
+       * Multiple projects may be open at once and are independent.
+       */
+      const [expandedProjects, setExpandedProjects] = useState({})
+      /** Expand or collapse one project's session list. */
+      const toggleProject = useCallback((workspaceId) => {
+        setExpandedProjects((current) => ({ ...current, [workspaceId]: current[workspaceId] !== true }))
+      }, [])
       const openTimer = useRef(undefined)
       const closeTimer = useRef(undefined)
       /** The rail button that opened the flyout, for Escape focus return. */
@@ -1569,6 +1720,12 @@ window.__ModuleLoader__.load({
       const sections = useMemo(
         () => deriveSections(workspaceItems, sessions, archivedIds, pins, language, panelCovering, recentCount, statuses),
         [workspaceItems, sessions, archivedIds, pins, language, panelCovering, recentCount, statuses],
+      )
+      // The session the main view shows, for the expanded project lists. Read from
+      // the same helper the recent section uses, so both mark the same row.
+      const shownSessionId = useMemo(
+        () => currentSessionId(sessions, panelCovering),
+        [sessions, panelCovering],
       )
 
       // Lazy remote data, loaded once per flyout opening. Two rules keep it
@@ -1803,6 +1960,27 @@ window.__ModuleLoader__.load({
         })
       }, [])
 
+      /**
+       * Start a new session in one project, then leave the flyout.
+       *
+       * `startSession` is the host's own public verb and takes the workspace id;
+       * it returns void, so there is no id to act on here — the host switches the
+       * main view itself. The call is synchronous-throwing on an unknown id, and
+       * the navigation it starts is a promise internally, hence the catch: a
+       * failure must not take the rail down with it.
+       * @param workspaceId - Project to create the session in.
+       */
+      const startSessionInProject = useCallback((workspaceId) => {
+        retract()
+        try {
+          Promise.resolve(startSession(workspaceId)).catch((error) => {
+            console.warn('[dsh-sidebar-rail] start session failed', error)
+          })
+        } catch (error) {
+          console.warn('[dsh-sidebar-rail] start session failed', error)
+        }
+      }, [startSession, retract])
+
       /** Open a workspace and dismiss the flyout. */
       const openWorkspaceFromRail = useCallback((workspaceId) => {
         retract()
@@ -1949,32 +2127,57 @@ window.__ModuleLoader__.load({
           }, children)
         }
         if (open === 'workspace') {
-          // Three fixed sections, in this order: pinned projects, the remaining
+          // Three fixed sections in this order: pinned projects, the remaining
           // projects, then recent sessions. A project lives in exactly one of the
           // first two — `deriveSections` already partitions them, so the renderer
-          // only has to draw each list in its own section. All three open by
-          // default and none of that is persisted (spec section 3.1).
+          // only draws each list in its own section. All three open by default and
+          // none of that is persisted (spec 3.1).
+          //
+          // Each project row expands in place into its own session list. The list
+          // is deliberately unfiltered (see projectSessionRows), which is the
+          // opposite policy from the recent section below it.
+          /**
+           * One project row plus its expanded session list.
+           * @param row - `{ id, title }` from deriveSections.
+           * @returns The project row element.
+           */
+          const projectRow = (row) => {
+            const openProjects = expandedProjects[row.id] === true
+            const sessions = projectSessionRows(
+              row.sessionIds, sessions.byId, language, archivedIds, shownSessionId,
+            )
+            const body = openProjects
+              ? (sessions.length === 0
+                ? h(Empty, null, t('empty.projectSessions'))
+                : sessions.map((entry) => h(Row, {
+                  key: `ps-${row.id}-${entry.id}`,
+                  title: entry.title,
+                  // Archived rows stay listed but say so, so a session that no
+                  // longer appears in the recent section is not read as missing.
+                  meta: [entry.meta, entry.archived ? t('status.archived') : ''].filter(Boolean).join(' · '),
+                  current: entry.current === true,
+                  onClick: () => openSessionFromRail(entry.id),
+                })))
+              : null
+            return h(ProjectRow, {
+              key: `p-${row.id}`,
+              title: row.title,
+              open: openProjects,
+              onToggleOpen: () => toggleProject(row.id),
+              pinned: row.pinned === true,
+              pinLabel: row.pinned === true ? t('pin.unpin') : t('pin.pin'),
+              onTogglePin: () => togglePin(row.id),
+              newSessionLabel: t('action.newSession'),
+              onNewSession: () => startSessionInProject(row.id),
+              onClick: body,
+            })
+          }
           const pinned = sections.pinnedRows.length === 0
             ? h(Empty, null, t('empty.pinned'))
-            : sections.pinnedRows.map((row) => h(Row, {
-              key: `pin-${row.id}`,
-              title: row.title,
-              meta: row.meta,
-              pinned: true,
-              pinLabel: t('pin.unpin'),
-              onTogglePin: () => togglePin(row.id),
-              onClick: () => openWorkspaceFromRail(row.id),
-            }))
+            : sections.pinnedRows.map((row) => projectRow({ ...row, pinned: true }))
           const projects = sections.normalRows.length === 0
             ? h(Empty, null, t('empty.workspaces'))
-            : sections.normalRows.map((row) => h(Row, {
-              key: `ws-${row.id}`,
-              title: row.title,
-              meta: row.meta,
-              pinLabel: t('pin.pin'),
-              onTogglePin: () => togglePin(row.id),
-              onClick: () => openWorkspaceFromRail(row.id),
-            }))
+            : sections.normalRows.map((row) => projectRow({ ...row, pinned: false }))
           const recent = sections.recentRows.length === 0
             ? h(Empty, null, t('empty.recent'))
             : sections.recentRows.map((row) => h(Row, {
@@ -2260,6 +2463,9 @@ window.__ModuleLoader__.load({
           selectPanel: (id) => { ctx.layout.selectPanel(id) },
           openWorkspace: (workspaceId) => ctx.uiWorkspace.openWorkspace(workspaceId),
           openSession: (target) => { ctx.uiWorkspace.openSession(target) },
+          // New session in one project (ticket #3). The host's own verb returns
+          // void: it switches the main view itself, so there is no id to carry.
+          startSession: (workspaceId) => { ctx.uiWorkspace.startSession(workspaceId) },
           panels: panelSource,
           locale: localeSource,
           scheduleCatalog: async () => {

@@ -33,13 +33,13 @@ ${region('pure-data')}
 return { EMPTY_SESSIONS, EMPTY_WORKSPACES, selectorHook, relativeTime, shortPath,
   resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT,
   deriveSections, normalizeTasks, normalizePlugins, currentSessionId, accountSeatState, accountClientMetadata, clientBuildVersion, readRecentCount,
-  remoteOutcome, flyoutPlacement, keepsRailRevealed, RAIL_REVEAL_WIDTH, readRecentCount, sessionStatusOf, formatWalletBalance, balanceRows, accountLinks, withAccountExtras, flyoutSectionedHeight, sectionMaxHeight, sectionIsOpen }`)()
+  remoteOutcome, flyoutPlacement, keepsRailRevealed, RAIL_REVEAL_WIDTH, readRecentCount, sessionStatusOf, formatWalletBalance, balanceRows, accountLinks, withAccountExtras, flyoutSectionedHeight, sectionMaxHeight, sectionIsOpen, projectSessionRows }`)()
 
 const { deriveSections, normalizeTasks, normalizePlugins, relativeTime, shortPath, selectorHook,
   resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT, currentSessionId, accountSeatState,
   accountClientMetadata, clientBuildVersion, readRecentCount, sessionStatusOf,
   formatWalletBalance, balanceRows, accountLinks, remoteOutcome, flyoutPlacement,
-  keepsRailRevealed, RAIL_REVEAL_WIDTH, EMPTY_SESSIONS, withAccountExtras, flyoutSectionedHeight, sectionMaxHeight, sectionIsOpen } = helpers
+  keepsRailRevealed, RAIL_REVEAL_WIDTH, EMPTY_SESSIONS, withAccountExtras, flyoutSectionedHeight, sectionMaxHeight, sectionIsOpen, projectSessionRows } = helpers
 
 /**
  * Build a SessionSummary-shaped row.
@@ -64,6 +64,41 @@ test('deriveSections: pinned workspaces lead, in pin order', () => {
   const sections = deriveSections(WORKSPACES, { byId: {} }, [], ['ws3', 'ws1'], 'en')
   assert.deepEqual(sections.pinnedRows.map((r) => r.id), ['ws3', 'ws1'])
   assert.deepEqual(sections.normalRows.map((r) => r.id), ['ws2'])
+})
+
+test('projectSessionRows: lists every member unfiltered, in host order', () => {
+  // 项目展开要回答「这个项目里到底有什么」：不按 archived/blank/origin 再筛一遍，
+  // 也不截条数，顺序照抄 sessionIds（spec 3.2）。子代理会话本就不在 sessionIds 里。
+  const byId = {
+    s1: session('s1', { displayTitle: 'first', updatedAt: 10 }),
+    s2: session('s2', { updatedAt: 30 }),
+    s3: session('s3', { blank: true, updatedAt: 20 }),
+  }
+  const rows = projectSessionRows(['s1', 's3', 's2'], byId, 'en')
+  assert.deepEqual(rows.map((r) => r.id), ['s1', 's3', 's2'], 'host order, not sorted by time')
+  assert.equal(rows.length, 3, 'nothing is filtered out')
+  assert.equal(rows[1].title, 'title-s3', 'a blank session is listed, under its own title')
+})
+
+test('projectSessionRows: archived members stay listed and are marked', () => {
+  const byId = { s1: session('s1'), s2: session('s2') }
+  const rows = projectSessionRows(['s1', 's2'], byId, 'en', ['s2'])
+  assert.deepEqual(rows.map((r) => r.id), ['s1', 's2'])
+  assert.equal(rows[0].archived, false)
+  assert.equal(rows[1].archived, true, 'the renderer needs to tell the two apart')
+})
+
+test('projectSessionRows: unknown members degrade to an id-only row', () => {
+  // sessionIds 是宿主 registry 的结果，byId 是宿主会话快照：两者可能短暂不同步。
+  // 缺条目时给一行占位，而不是整段消失。
+  const rows = projectSessionRows(['ghost'], { s1: session('s1') }, 'en')
+  assert.deepEqual(rows, [{ id: 'ghost', title: 'ghost', meta: '', archived: false, current: false }])
+})
+
+test('projectSessionRows: a missing or junk session list is empty, not a throw', () => {
+  assert.deepEqual(projectSessionRows(undefined, {}, 'en'), [])
+  assert.deepEqual(projectSessionRows(null, {}, 'en'), [])
+  assert.deepEqual(projectSessionRows([], { s1: session('s1') }, 'en'), [])
 })
 
 test('deriveSections: a pinned project lives in exactly one of the three sections', () => {
