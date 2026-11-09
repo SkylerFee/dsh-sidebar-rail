@@ -6,6 +6,7 @@
 [![npm version](https://img.shields.io/npm/v/%40skylerfee%2Fdsh-sidebar-rail?style=flat-square&logo=npm)](https://www.npmjs.com/package/@skylerfee/dsh-sidebar-rail)
 [![macOS Desktop](https://img.shields.io/badge/platform-macOS_Desktop-000000?style=flat-square&logo=apple&logoColor=white)](#support)
 [![MIT license](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+[![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 [![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
 
 Reach workspaces, recent sessions, scheduled tasks, plugins and your account while the DeepSeek Harness sidebar is collapsed on macOS Desktop.
