@@ -2,12 +2,7 @@
 
 # dsh-sidebar-rail
 
-[![CI](https://img.shields.io/github/actions/workflow/status/SkylerFee/dsh-sidebar-rail/ci.yml?branch=main&style=flat-square&label=CI&logo=githubactions&logoColor=white)](https://github.com/SkylerFee/dsh-sidebar-rail/actions/workflows/ci.yml)
-[![npm 版本](https://img.shields.io/npm/v/%40skylerfee%2Fdsh-sidebar-rail?style=flat-square&logo=npm)](https://www.npmjs.com/package/@skylerfee/dsh-sidebar-rail)
-[![macOS Desktop](https://img.shields.io/badge/platform-macOS_Desktop-000000?style=flat-square&logo=apple&logoColor=white)](#support)
-[![MIT 许可证](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
-[![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
-[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
+[![CI](https://github.com/SkylerFee/dsh-sidebar-rail/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/SkylerFee/dsh-sidebar-rail/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Node: >=22.19](https://img.shields.io/badge/Node-%3E%3D22.19-brightgreen.svg)](https://nodejs.org) [![Release: v0.3.3](https://img.shields.io/badge/release-v0.3.3-orange.svg)](https://github.com/SkylerFee/dsh-sidebar-rail/releases) [![npm downloads](https://img.shields.io/npm/dt/@skylerfee/dsh-sidebar-rail.svg?label=npm%20downloads)](https://www.npmjs.com/package/@skylerfee/dsh-sidebar-rail) [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 
 给 DeepSeek Harness 的 macOS Desktop 折叠侧栏补充工作区、最近会话、定时任务、插件和账号入口。
 
