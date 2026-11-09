@@ -115,6 +115,10 @@ window.__ModuleLoader__.load({
       'empty.pinned': '还没有置顶项目',
       'empty.projectSessions': '这个项目还没有会话',
       'action.newSession': '新建会话',
+      'action.addProject': '添加项目',
+      'state.picking': '选择中…',
+      'state.addProjectFailed': '添加项目失败，可展开侧栏用宿主的添加按钮重试',
+      'state.addProjectUnavailable': '当前宿主不提供添加项目能力',
       'status.archived': '已归档',
       'section.recent': '最近会话',
       'settings.title': '侧栏图标轨',
@@ -158,6 +162,10 @@ window.__ModuleLoader__.load({
       'empty.pinned': 'No pinned projects yet',
       'empty.projectSessions': 'No sessions in this project yet',
       'action.newSession': 'New session',
+      'action.addProject': 'Add project',
+      'state.picking': 'Choosing…',
+      'state.addProjectFailed': 'Could not add the project; expand the sidebar and use the host Add button',
+      'state.addProjectUnavailable': 'This host does not offer project adding',
       'status.archived': 'Archived',
       'section.recent': 'Recent sessions',
       'settings.title': 'Sidebar rail',
@@ -435,6 +443,14 @@ window.__ModuleLoader__.load({
    space is what reads as "these belong to the row above". */
 .dsr-project-sessions { display:flex; flex-direction:column; padding-left:14px; }
 @media (prefers-reduced-motion: reduce) { .dsr-project-caret { transition:none; } }
+/* Section-header action (the projects section's Add button). It sits beside the
+   fold button, so its click must not also fold the section it belongs to. */
+.dsr-section-action { flex:none; max-width:96px; padding:3px 8px; border:1px solid var(--dsw-alias-border-l1);
+  border-radius:var(--dsw-radius-sm, 8px); background:transparent; color:var(--dsw-alias-label-primary);
+  font:inherit; font-size:11px; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dsr-section-action:hover:not(:disabled) { background:var(--dsw-alias-interactive-bg-hover); }
+.dsr-section-action:disabled { opacity:.6; cursor:default; }
+.dsr-project-error { color:var(--dsw-alias-state-warn-primary); text-align:left; }
 .dsr-empty { padding:14px 8px; font-size:12px; color:var(--dsw-alias-label-primary); text-align:center; }
 .dsr-hint { padding:4px 6px 8px; font-size:11px; line-height:1.5;
   color:var(--dsw-alias-label-primary); }
@@ -1093,6 +1109,38 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Flatten one directory-picker outcome into the three cases a caller renders.
+     *
+     * The host's `pickDirectory` answers a path, or `null` when the operator
+     * cancelled, and throws when the composed backend cannot serve the verb at
+     * all (the `browse` backend has no `native` capability, see ADR-0005). The
+     * caller must not have to know which of those it got, so this maps them onto
+     * one shape: `picked` carries the path, `cancelled` is the silent case, and
+     * `failed` carries text a person can act on.
+     *
+     * A relative path is a failure rather than a picked directory: the host's
+     * registry keys projects by absolute path, so registering `repo/alpha` would
+     * create a row that never resolves to the real directory.
+     * @param value - Whatever the pick call resolved to, or the rejection it threw.
+     * @returns `{ kind: 'picked', path }`, `{ kind: 'cancelled' }` or `{ kind: 'failed', message }`.
+     */
+    function pickedDirectory(value) {
+      if (value instanceof Error) {
+        return { kind: 'failed', message: value.message === '' ? 'directory picker failed' : value.message }
+      }
+      // A non-null, non-string, non-Error value is a malformed answer, not a path.
+      if (typeof value !== 'string') {
+        return value === null || value === undefined ? { kind: 'cancelled' } : { kind: 'failed', message: 'directory picker returned no usable path' }
+      }
+      const path = value.trim()
+      if (path === '') return { kind: 'cancelled' }
+      if (!path.startsWith('/')) {
+        return { kind: 'failed', message: `directory picker returned a relative path: ${path}` }
+      }
+      return { kind: 'picked', path }
+    }
+
+    /**
      * Build the rows one project expands into.
      *
      * Deliberately the opposite policy from the recent-sessions section: this
@@ -1634,7 +1682,7 @@ window.__ModuleLoader__.load({
       const {
         toggleSidebar, selectPanel,
         panels, locale, openWorkspace, openSession, startSession, scheduleCatalog,
-        pluginInventory, useSessions, useWorkspaces, usePanelInfo, useSessionStatus, fallbackText,
+        pluginInventory, pickDirectory, createWorkspace, useSessions, useWorkspaces, usePanelInfo, useSessionStatus, fallbackText,
         accountSeat: accountSeatLoader,
       } = props
       /** Translator with a raw-key fallback when the locale face is absent. */
@@ -1711,6 +1759,15 @@ window.__ModuleLoader__.load({
       const toggleProject = useCallback((workspaceId) => {
         setExpandedProjects((current) => ({ ...current, [workspaceId]: current[workspaceId] !== true }))
       }, [])
+      /**
+       * The add-project action's own state: idle, busy, or failed with a message.
+       *
+       * Kept separate from the tasks/plugins remote state because it is a
+       * write action, not a list: the panel must show progress while the native
+       * chooser is open and a visible reason when the backend refuses, and it
+       * must not stay "busy" forever (AGENTS.md hard rule 8).
+       */
+      const [projectAction, setProjectAction] = useState({ phase: 'idle' })
       const openTimer = useRef(undefined)
       const closeTimer = useRef(undefined)
       /** The rail button that opened the flyout, for Escape focus return. */
@@ -1961,6 +2018,57 @@ window.__ModuleLoader__.load({
       }, [])
 
       /**
+       * Pick a directory and register it as a project, staying in the flyout.
+       *
+       * Three outcomes, per spec 3.3: a chosen directory is registered and the
+       * flyout stays put (no navigation, no new session); a cancelled picker
+       * returns silently; a failure surfaces in the projects section so the
+       * person is not left guessing. The host itself is idempotent here — its
+       * `create` resolves an existing workspace instead of duplicating it — so
+       * picking an already-registered directory simply re-lists it.
+       *
+       * `pickDirectory` can reject when the mounted backend serves the in-app
+       * browser rather than the native chooser (ADR-0005), which is exactly why
+       * the failure state is a first-class branch rather than a catch-all log.
+       */
+      const addProject = useCallback(() => {
+        setProjectAction({ phase: 'busy' })
+        Promise.resolve()
+          .then(() => (typeof pickDirectory === 'function' ? pickDirectory() : null))
+          .then((picked) => {
+            const outcome = pickedDirectory(picked)
+            if (outcome.kind === 'cancelled') {
+              setProjectAction({ phase: 'idle' })
+              return undefined
+            }
+            if (outcome.kind === 'failed') {
+              console.warn('[dsh-sidebar-rail] directory pick failed:', outcome.message)
+              setProjectAction({ phase: 'failed', message: outcome.message })
+              return undefined
+            }
+            if (typeof createWorkspace !== 'function') {
+              setProjectAction({ phase: 'failed', message: t('state.addProjectUnavailable') })
+              return undefined
+            }
+            return Promise.resolve(createWorkspace(outcome.path)).then(
+              () => { setProjectAction({ phase: 'idle' }) },
+              (error) => {
+                console.warn('[dsh-sidebar-rail] add project failed', error)
+                setProjectAction({ phase: 'failed', message: t('state.addProjectFailed') })
+              },
+            )
+          })
+          .catch((error) => {
+            console.warn('[dsh-sidebar-rail] add project failed', error)
+            setProjectAction({ phase: 'failed', message: t('state.addProjectFailed') })
+          })
+        // `t` is deliberately not a dependency: the host hands a fresh translator
+        // every render, so listing it would rebuild this callback each time for no
+        // benefit. It only maps keys to the current locale's strings, so a stale
+        // closure still reads correct copy.
+      }, [pickDirectory, createWorkspace])
+
+      /**
        * Start a new session in one project, then leave the flyout.
        *
        * `startSession` is the host's own public verb and takes the workspace id;
@@ -2175,9 +2283,27 @@ window.__ModuleLoader__.load({
           const pinned = sections.pinnedRows.length === 0
             ? h(Empty, null, t('empty.pinned'))
             : sections.pinnedRows.map((row) => projectRow({ ...row, pinned: true }))
-          const projects = sections.normalRows.length === 0
-            ? h(Empty, null, t('empty.workspaces'))
-            : sections.normalRows.map((row) => projectRow({ ...row, pinned: false }))
+          const projectsBusy = projectAction.phase === 'busy'
+          const projectsFailed = projectAction.phase === 'failed'
+          const projects = [
+            projectsFailed
+              ? h('div', { className: 'dsr-hint dsr-project-error', role: 'status' }, projectAction.message)
+              : null,
+            sections.normalRows.length === 0
+              ? h(Empty, null, t('empty.workspaces'))
+              : sections.normalRows.map((row) => projectRow({ ...row, pinned: false })),
+          ]
+          // Sits in the projects section header, per spec 3.3. Busy is a real
+          // state rather than a silent no-op: the native chooser takes the focus
+          // away, so the button must at least show that the click registered.
+          const addProjectAction = h('button', {
+            type: 'button',
+            className: 'dsr-section-action',
+            'aria-label': t('action.addProject'),
+            title: t('action.addProject'),
+            disabled: projectsBusy,
+            onClick: addProject,
+          }, projectsBusy ? t('state.picking') : t('action.addProject'))
           const recent = sections.recentRows.length === 0
             ? h(Empty, null, t('empty.recent'))
             : sections.recentRows.map((row) => h(Row, {
@@ -2199,7 +2325,7 @@ window.__ModuleLoader__.load({
             }))
           return flyoutShell(t('rail.workspace'), [
             section('workspace', 'pinned', t('section.pinned'), true, pinned),
-            section('workspace', 'projects', t('section.workspaces'), true, projects),
+            section('workspace', 'projects', t('section.workspaces'), true, projects, addProjectAction),
             section('workspace', 'recent', t('section.recent'), true, recent),
           ], stepper, undefined, undefined, true, true)
         }
@@ -2394,7 +2520,7 @@ window.__ModuleLoader__.load({
 
     // ------------------------------------------------------------------ apply --
     return {
-      inject: ['slots', 'locale', 'layout', 'uiWorkspace', 'remote'],
+      inject: ['slots', 'locale', 'layout', 'uiWorkspace', 'workspaces', 'remote'],
 
       /**
        * Register the rail shell, its dictionary and its style sheet.
@@ -2466,6 +2592,19 @@ window.__ModuleLoader__.load({
           // New session in one project (ticket #3). The host's own verb returns
           // void: it switches the main view itself, so there is no id to carry.
           startSession: (workspaceId) => { ctx.uiWorkspace.startSession(workspaceId) },
+          // Directory picking and project registration (ticket #4). Two different
+          // services on purpose: `pickDirectory` lives on `uiWorkspace`, while
+          // `create` is a command on the separate `workspaces` service. Reading
+          // `ctx.get` rather than destructuring keeps a host without one of them
+          // from throwing at registration time.
+          pickDirectory: () => ctx.uiWorkspace.pickDirectory(),
+          createWorkspace: (path) => {
+            const workspaces = ctx.get('workspaces')
+            if (workspaces === undefined || typeof workspaces.create !== 'function') {
+              throw new Error('workspace service unavailable')
+            }
+            return workspaces.create({ path })
+          },
           panels: panelSource,
           locale: localeSource,
           scheduleCatalog: async () => {

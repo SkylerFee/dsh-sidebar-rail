@@ -33,13 +33,13 @@ ${region('pure-data')}
 return { EMPTY_SESSIONS, EMPTY_WORKSPACES, selectorHook, relativeTime, shortPath,
   resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT,
   deriveSections, normalizeTasks, normalizePlugins, currentSessionId, accountSeatState, accountClientMetadata, clientBuildVersion, readRecentCount,
-  remoteOutcome, flyoutPlacement, keepsRailRevealed, RAIL_REVEAL_WIDTH, readRecentCount, sessionStatusOf, formatWalletBalance, balanceRows, accountLinks, withAccountExtras, flyoutSectionedHeight, sectionMaxHeight, sectionIsOpen, projectSessionRows }`)()
+  remoteOutcome, flyoutPlacement, keepsRailRevealed, RAIL_REVEAL_WIDTH, readRecentCount, sessionStatusOf, formatWalletBalance, balanceRows, accountLinks, withAccountExtras, flyoutSectionedHeight, sectionMaxHeight, sectionIsOpen, projectSessionRows, pickedDirectory }`)()
 
 const { deriveSections, normalizeTasks, normalizePlugins, relativeTime, shortPath, selectorHook,
   resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT, currentSessionId, accountSeatState,
   accountClientMetadata, clientBuildVersion, readRecentCount, sessionStatusOf,
   formatWalletBalance, balanceRows, accountLinks, remoteOutcome, flyoutPlacement,
-  keepsRailRevealed, RAIL_REVEAL_WIDTH, EMPTY_SESSIONS, withAccountExtras, flyoutSectionedHeight, sectionMaxHeight, sectionIsOpen, projectSessionRows } = helpers
+  keepsRailRevealed, RAIL_REVEAL_WIDTH, EMPTY_SESSIONS, withAccountExtras, flyoutSectionedHeight, sectionMaxHeight, sectionIsOpen, projectSessionRows, pickedDirectory } = helpers
 
 /**
  * Build a SessionSummary-shaped row.
@@ -64,6 +64,33 @@ test('deriveSections: pinned workspaces lead, in pin order', () => {
   const sections = deriveSections(WORKSPACES, { byId: {} }, [], ['ws3', 'ws1'], 'en')
   assert.deepEqual(sections.pinnedRows.map((r) => r.id), ['ws3', 'ws1'])
   assert.deepEqual(sections.normalRows.map((r) => r.id), ['ws2'])
+})
+
+test('pickedDirectory: one shape for "chosen", "cancelled" and "failed"', () => {
+  // 目录选择器有三条结局，调用方只该看到一个扁平结果（spec 3.3）。
+  assert.deepEqual(pickedDirectory('/repo/alpha'), { kind: 'picked', path: '/repo/alpha' })
+  // 取消是最常见的一条，且必须静默：不是错误，也不该弹提示。
+  assert.deepEqual(pickedDirectory(null), { kind: 'cancelled' })
+  // 选择器拒绝（backend 缺能力、用户中止、RPC 失败）走失败态，要有可见结果。
+  assert.equal(pickedDirectory(undefined).kind, 'cancelled')
+  // 空白字符串不是一条可用路径。
+  assert.equal(pickedDirectory('').kind, 'cancelled')
+  assert.equal(pickedDirectory('   ').kind, 'cancelled')
+  const failed = pickedDirectory(new Error('directory picker failed'))
+  assert.equal(failed.kind, 'failed')
+  assert.equal(failed.message, 'directory picker failed')
+  // 非 Error 的拒绝也要有可读文案，不能渲染成 "undefined"。
+  const weird = pickedDirectory('boom')
+  assert.equal(weird.kind, 'failed')
+  assert.equal(typeof weird.message, 'string')
+  assert.ok(weird.message.length > 0)
+})
+
+test('pickedDirectory: an absolute path is required, a relative one is a failure', () => {
+  // 宿主的 create 接受任何字符串但其 registry 需要绝对路径；相对路径要在这里
+  // 挡掉并给出失败态，而不是登记出一个不可用的项目。
+  assert.equal(pickedDirectory('repo/alpha').kind, 'failed')
+  assert.equal(pickedDirectory('/repo/alpha').kind, 'picked')
 })
 
 test('projectSessionRows: lists every member unfiltered, in host order', () => {
