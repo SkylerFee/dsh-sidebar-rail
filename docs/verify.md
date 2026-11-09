@@ -123,6 +123,17 @@ Judgement calls（Duplicated Code、Data Clumps、Divergent Change 等）**本�
 
 **验证状态**：`client-hmr` 已确认热重载（事件流捕获到 `{"type":"rebuilt","id":"@skylerfee/dsh-sidebar-rail","rev":"9efe74fd7703"}`，服务端 bundle 含新逻辑），但**已挂载的 React 组件实例未重新渲染**，页面仍在跑旧渲染结果。需要主动刷新一次页面才能看到修复后的分区高度。
 
+**算式与实测的交叉验证**（修复正确性的代码级证据，不依赖刷新）：
+
+| 量 | 计算值 | 实测值 | 一致 |
+| --- | --- | --- | --- |
+| 渲染进程 `innerHeight` | 1092（由 cap 反解） | — | — |
+| 浮层高度 `flyoutSectionedHeight(1092, 48)` | 1044 | 999（含 45px 窗口装饰差） | ✅ 同一基准 |
+| 分区预算 `panel − FLYOUT_CHROME_HEIGHT(96)` | 948 | sections 容器 949（±1px 取整） | ✅ |
+| 分区上限 `sectionMaxHeight(948)` | **316** | 949 / 3 = **316** | ✅ |
+
+即修复后的 cap 恰好等于实测 sections 容器的三分之一，B3 在数值上成立；刷新后应看到「最近会话」区封顶在 316px 并自行滚动。
+
 ### 未验证（真机，本轮未能执行）
 
 **原因**：本会话运行在 DSH Web GUI 中，工具面内 `ps` 被沙箱禁止、启动日志停在 2026-09-29，**无法确认当前前台是否为 macOS Desktop 窗口**；同时 `~/.dsh/profiles/` 不在会话可写范围（`workspace-write` 只覆盖本仓库），无法把 profile 里的 npm `0.3.3` 副本切成指向本仓库的 `link:`。因此 B1–B15 中所有**像素测量**与**目视/点击**类断言一项都没有执行。
