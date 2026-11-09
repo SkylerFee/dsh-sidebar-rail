@@ -33,13 +33,13 @@ ${region('pure-data')}
 return { EMPTY_SESSIONS, EMPTY_WORKSPACES, selectorHook, relativeTime, shortPath,
   resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT,
   deriveSections, normalizeTasks, normalizePlugins, currentSessionId, accountSeatState, accountClientMetadata, clientBuildVersion, readRecentCount,
-  remoteOutcome, flyoutPlacement, keepsRailRevealed, RAIL_REVEAL_WIDTH, readRecentCount, sessionStatusOf, formatWalletBalance, balanceRows, accountLinks, withAccountExtras, flyoutSectionedHeight, sectionMaxHeight, sectionIsOpen, projectSessionRows, pickedDirectory }`)()
+  remoteOutcome, flyoutPlacement, keepsRailRevealed, RAIL_REVEAL_WIDTH, readRecentCount, sessionStatusOf, formatWalletBalance, balanceRows, accountLinks, withAccountExtras, flyoutSectionedHeight, sectionMaxHeight, sectionIsOpen, projectSessionRows, pickedDirectory, groupTasksByStatus, groupPluginsByState }`)()
 
 const { deriveSections, normalizeTasks, normalizePlugins, relativeTime, shortPath, selectorHook,
   resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT, currentSessionId, accountSeatState,
   accountClientMetadata, clientBuildVersion, readRecentCount, sessionStatusOf,
   formatWalletBalance, balanceRows, accountLinks, remoteOutcome, flyoutPlacement,
-  keepsRailRevealed, RAIL_REVEAL_WIDTH, EMPTY_SESSIONS, withAccountExtras, flyoutSectionedHeight, sectionMaxHeight, sectionIsOpen, projectSessionRows, pickedDirectory } = helpers
+  keepsRailRevealed, RAIL_REVEAL_WIDTH, EMPTY_SESSIONS, withAccountExtras, flyoutSectionedHeight, sectionMaxHeight, sectionIsOpen, projectSessionRows, pickedDirectory, groupTasksByStatus, groupPluginsByState } = helpers
 
 /**
  * Build a SessionSummary-shaped row.
@@ -64,6 +64,78 @@ test('deriveSections: pinned workspaces lead, in pin order', () => {
   const sections = deriveSections(WORKSPACES, { byId: {} }, [], ['ws3', 'ws1'], 'en')
   assert.deepEqual(sections.pinnedRows.map((r) => r.id), ['ws3', 'ws1'])
   assert.deepEqual(sections.normalRows.map((r) => r.id), ['ws2'])
+})
+
+test('groupTasksByStatus: every host status lands in its own group', () => {
+  // spec 4：进行中 active / 已暂停 paused / 已结束 ended，一区不漏。
+  const rows = [
+    { id: 'a1', title: 'a1', meta: 'm', status: 'active' },
+    { id: 'p1', title: 'p1', meta: 'm', status: 'paused' },
+    { id: 'e1', title: 'e1', meta: 'm', status: 'ended' },
+    { id: 'a2', title: 'a2', meta: 'm', status: 'active' },
+  ]
+  const groups = groupTasksByStatus(rows)
+  assert.deepEqual(groups.active.map((r) => r.id), ['a1', 'a2'])
+  assert.deepEqual(groups.paused.map((r) => r.id), ['p1'])
+  assert.deepEqual(groups.ended.map((r) => r.id), ['e1'])
+})
+
+test('groupTasksByStatus: all three keys exist even when empty', () => {
+  // 空分区也要保留标题 + 空态，所以这里返回的必须是完整三键而不是缺键。
+  const empty = groupTasksByStatus([])
+  assert.deepEqual(Object.keys(empty).sort(), ['active', 'ended', 'paused'])
+  assert.deepEqual(empty.active, [])
+  assert.deepEqual(empty.paused, [])
+  assert.deepEqual(empty.ended, [])
+})
+
+test('groupTasksByStatus: an unknown status is dropped, not silently made active', () => {
+  // 宿主枚举目前只有这三种；未来多一个值时宁可少列一条，也不要把它塞进「进行中」
+  // 让人以为任务还在跑。
+  const groups = groupTasksByStatus([{ id: 'x', title: 'x', meta: '', status: 'future-state' }])
+  assert.deepEqual([...groups.active, ...groups.paused, ...groups.ended], [])
+  assert.deepEqual(groupTasksByStatus(undefined).active, [])
+})
+
+test('normalizeTasks: keeps every status instead of filtering to active', () => {
+  // 0.3.x 在这里就把 paused/ended 丢掉了；0.4.0 的任务浮层要分三区，
+  // 所以适配层必须带出状态而不是过筛。catalog() 本来就返回全部状态。
+  const answer = { ok: true, value: [
+    { id: 'a', title: 'a', status: 'active' },
+    { id: 'p', title: 'p', status: 'paused' },
+    { id: 'e', title: 'e', status: 'ended' },
+    { id: 'i', title: 'i', status: 'inactive' },
+    { id: 'l', title: 'l', active: false },
+    { id: 'u', title: 'u', status: 'future-state' },
+  ] }
+  const rows = normalizeTasks(answer)
+  assert.deepEqual(rows.map((r) => r.id), ['a', 'p', 'e', 'i', 'l', 'u'], 'nothing is filtered out')
+  assert.deepEqual(rows.map((r) => r.status), ['active', 'paused', 'ended', 'ended', 'paused', ''])
+  // 端到端：归一化后再分区，三种状态各归各位。
+  const groups = groupTasksByStatus(rows)
+  assert.deepEqual(groups.active.map((r) => r.id), ['a'])
+  assert.deepEqual(groups.paused.map((r) => r.id), ['p', 'l'])
+  assert.deepEqual(groups.ended.map((r) => r.id), ['e', 'i'])
+})
+
+test('groupPluginsByState: enabled and installed-but-off are separated', () => {
+  // spec 5：「未启用」只含 installed && !enabled，未安装的官方按需插件不进来。
+  // 归一化层已经挡掉了未安装项与宿主自带项，这里只做两分。
+  const rows = [
+    { name: 'on', meta: 'v1', enabled: true, installed: true },
+    { name: 'off', meta: 'v2', enabled: false, installed: true },
+    { name: 'missing', meta: 'v3', enabled: false, installed: false },
+    { name: 'on-but-not-installed', meta: 'v4', enabled: true, installed: false },
+  ]
+  const groups = groupPluginsByState(rows)
+  assert.deepEqual(groups.enabled.map((r) => r.name), ['on', 'on-but-not-installed'])
+  assert.deepEqual(groups.disabled.map((r) => r.name), ['off', 'missing'])
+})
+
+test('groupPluginsByState: both keys exist when empty', () => {
+  const empty = groupPluginsByState([])
+  assert.deepEqual(Object.keys(empty).sort(), ['disabled', 'enabled'])
+  assert.deepEqual(groupPluginsByState(undefined).enabled, [])
 })
 
 test('pickedDirectory: one shape for "chosen", "cancelled" and "failed"', () => {
@@ -253,7 +325,7 @@ test('deriveSections: workspace rows carry no path subtitle', () => {
   }
 })
 
-test('normalizeTasks: unwraps RemoteResult, keeps only active tasks, reads fallback fields', () => {
+test('normalizeTasks: unwraps RemoteResult, keeps every status, reads fallback fields', () => {
   const answer = {
     ok: true,
     value: [
@@ -265,7 +337,9 @@ test('normalizeTasks: unwraps RemoteResult, keeps only active tasks, reads fallb
     ],
   }
   const rows = normalizeTasks(answer)
-  assert.deepEqual(rows.map((r) => r.id), ['t1', 't2'])
+  // 0.3.x 只留 active；0.4.0 的浮层要分三区，所以每条都留下并带上状态。
+  assert.deepEqual(rows.map((r) => r.id), ['t1', 't2', 't3', 't4', 't5'])
+  assert.deepEqual(rows.map((r) => r.status), ['active', 'active', 'ended', 'paused', 'paused'])
   assert.equal(rows[1].title, 'Check CI every hour')
   assert.ok(rows[0].meta.includes('2026'))
 })
@@ -291,8 +365,11 @@ test('normalizePlugins: keeps only enabled, installed, non-official bundles', ()
     },
   }
   const rows = normalizePlugins(answer)
-  assert.deepEqual(rows.map((r) => r.name), ['dsh-mcp-connector', 'dsh-notify-me'])
-  assert.equal(rows[0].meta, 'v0.2.93')
+  // 宿主自带项（official）与未安装项（installed:false）都不进来；用户装了但关掉
+  // 的 dsh-better-sidebar 要留下，它属于「未启用」分区。
+  assert.deepEqual(rows.map((r) => r.name), ['dsh-better-sidebar', 'dsh-mcp-connector', 'dsh-notify-me'])
+  assert.deepEqual(rows.map((r) => r.enabled), [false, true, true])
+  assert.equal(rows[1].meta, 'v0.2.93')
 })
 
 test('normalizePlugins: returns nothing for a null answer', () => {

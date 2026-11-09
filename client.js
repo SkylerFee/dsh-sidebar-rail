@@ -119,6 +119,13 @@ window.__ModuleLoader__.load({
       'state.picking': '选择中…',
       'state.addProjectFailed': '添加项目失败，可展开侧栏用宿主的添加按钮重试',
       'state.addProjectUnavailable': '当前宿主不提供添加项目能力',
+      'section.activeTasks': '进行中',
+      'section.pausedTasks': '已暂停',
+      'section.endedTasks': '已结束',
+      'section.enabledPlugins': '已启用',
+      'section.disabledPlugins': '未启用',
+      'empty.tasksStatus': '这一状态没有定时任务',
+      'empty.pluginsState': '这一分类没有插件',
       'status.archived': '已归档',
       'section.recent': '最近会话',
       'settings.title': '侧栏图标轨',
@@ -166,6 +173,13 @@ window.__ModuleLoader__.load({
       'state.picking': 'Choosing…',
       'state.addProjectFailed': 'Could not add the project; expand the sidebar and use the host Add button',
       'state.addProjectUnavailable': 'This host does not offer project adding',
+      'section.activeTasks': 'Running',
+      'section.pausedTasks': 'Paused',
+      'section.endedTasks': 'Ended',
+      'section.enabledPlugins': 'Enabled',
+      'section.disabledPlugins': 'Disabled',
+      'empty.tasksStatus': 'No scheduled tasks in this state',
+      'empty.pluginsState': 'No plugins in this group',
       'status.archived': 'Archived',
       'section.recent': 'Recent sessions',
       'settings.title': 'Sidebar rail',
@@ -1555,11 +1569,55 @@ window.__ModuleLoader__.load({
         const next = task.nextRunAt ?? task.next ?? task.scheduledAt ?? task.runAt
         const meta = typeof next === 'string' ? next
           : Number.isFinite(next) ? new Date(next).toLocaleString() : ''
-        if (task.status !== undefined) { if (task.status === 'ended' || task.status === 'paused') continue }
-        else if (task.active === false || task.enabled === false) continue
-        rows.push({ id: String(id), title: String(title).slice(0, 120), meta })
+        rows.push({ id: String(id), title: String(title).slice(0, 120), meta, status: taskStatusOf(task) })
       }
       return rows
+    }
+
+    /**
+     * Resolve one host task's lifecycle status.
+     *
+     * The host's `catalog()` returns every task in every state, so the plugin no
+     * longer filters by status — it groups instead. Only the three states the
+     * spec names are carried through; a fourth value the host might add later is
+     * dropped rather than folded into "active", because listing a stopped task as
+     * running is worse than not listing it.
+     *
+     * Older rows carry no `status` and encode the same fact with an `active`
+     * boolean, so that pair is translated rather than guessed.
+     * @param task - One catalog entry.
+     * @returns 'active' | 'paused' | 'ended' | '' when unrecognised.
+     */
+    function taskStatusOf(task) {
+      if (task === null || typeof task !== 'object') return ''
+      if (task.status === 'active' || task.status === 'paused' || task.status === 'ended') return task.status
+      // The host folds the legacy 'inactive' spelling into 'ended' on read, so a
+      // value still carrying it means "stopped".
+      if (task.status === 'inactive') return 'ended'
+      if (task.status !== undefined) return ''
+      if (task.active === false || task.enabled === false) return 'paused'
+      return 'active'
+    }
+
+    /**
+     * Split task rows into the spec's three sections.
+     *
+     * All three keys are always present, including when their list is empty: an
+     * empty section still renders its header and its empty-state line, so a
+     * missing key would silently drop a heading the spec requires.
+     * @param rows - Rows from `normalizeTasks`.
+     * @returns `{ active, paused, ended }`, each an array in the host's order.
+     */
+    function groupTasksByStatus(rows) {
+      const groups = { active: [], paused: [], ended: [] }
+      if (!Array.isArray(rows)) return groups
+      for (const row of rows) {
+        if (row === null || typeof row !== 'object') continue
+        const bucket = groups[row.status]
+        if (bucket === undefined) continue
+        bucket.push(row)
+      }
+      return groups
     }
 
     /**
@@ -1583,7 +1641,6 @@ window.__ModuleLoader__.load({
       const rows = []
       for (const bundle of list) {
         if (bundle == null || typeof bundle !== 'object') continue
-        if (bundle.enabled !== true) continue
         if (bundle.official === true) continue
         if (bundle.installed === false) continue
         // `official` alone is not enough: the host's own base bundles
@@ -1596,10 +1653,35 @@ window.__ModuleLoader__.load({
         // Belt and braces against an availability value that shifts meaning.
         if (String(name).startsWith('@deepseek-ai/')) continue
         const meta = bundle.version === undefined ? '' : `v${bundle.version}`
-        rows.push({ name: String(name), meta })
+        // Both states are carried out; the flyout splits them into its two
+        // sections. Keeping `enabled` on the row rather than pre-filtering means
+        // one listing answers both sections without a second remote read.
+        rows.push({ name: String(name), meta, enabled: bundle.enabled === true })
       }
       rows.sort((a, b) => a.name.localeCompare(b.name))
       return rows
+    }
+
+    /**
+     * Split plugin rows into the spec's two sections.
+     *
+     * "Disabled" means installed but switched off — the plugin is present on
+     * disk and the person can turn it back on. A bundle that is not installed at
+     * all (an official on-demand plugin) is a different thing: choosing it starts
+     * an install flow, which this flyout deliberately does not offer. `normalizePlugins`
+     * already drops those, so the split here only needs the `enabled` flag.
+     * @param rows - Rows from `normalizePlugins`.
+     * @returns `{ enabled, disabled }`, each an array in name order.
+     */
+    function groupPluginsByState(rows) {
+      const groups = { enabled: [], disabled: [] }
+      if (!Array.isArray(rows)) return groups
+      for (const row of rows) {
+        if (row === null || typeof row !== 'object') continue
+        if (row.enabled === true) groups.enabled.push(row)
+        else groups.disabled.push(row)
+      }
+      return groups
     }
 
     // #endregion pure-data
@@ -1784,6 +1866,10 @@ window.__ModuleLoader__.load({
         () => currentSessionId(sessions, panelCovering),
         [sessions, panelCovering],
       )
+      // Task and plugin rows arrive flat from their normalize step; the flyouts
+      // split them at render time so one remote read feeds every section.
+      const taskGroups = useMemo(() => groupTasksByStatus(tasks.rows), [tasks.rows])
+      const pluginGroups = useMemo(() => groupPluginsByState(plugins.rows), [plugins.rows])
 
       // Lazy remote data, loaded once per flyout opening. Two rules keep it
       // working, and both were learned the hard way:
@@ -2330,36 +2416,63 @@ window.__ModuleLoader__.load({
           ], stepper, undefined, undefined, true, true)
         }
         if (open === 'tasks') {
-          const body = tasks.phase === 'loading' ? h(Empty, null, t('state.loading'))
-            : tasks.phase === 'failed' ? h(Empty, null, t('state.failed'))
-              : tasks.rows.length === 0 ? h(Empty, null, t('empty.tasks'))
-                : tasks.rows.map((row) => h(Row, {
-                  key: `task-${row.id}`,
-                  title: row.title,
-                  meta: row.meta,
-                  onClick: () => { retract(); selectPanel('schedules') },
-                }))
-          return flyoutShell(t('rail.tasks'),
-            [section('tasks', 'all', t('section.tasks'), true, body)],
-            h(ActionRow, {
-              onClick: () => { retract(); selectPanel('schedules') },
-            }, t('action.openPanel')), undefined, undefined, true, true)
+          // Three sections mapped onto the host's own lifecycle states. Only
+          // "active" opens by default: paused and ended tasks are historical, and
+          // a flyout that opens all three buries the ones still running.
+          const openAction = () => { retract(); selectPanel('schedules') }
+          /**
+           * Render one task section body.
+           *
+           * A loading or failed read has no per-section meaning, so the same line
+           * goes in every section rather than repeating the fetch three times; an
+           * empty section keeps its header and says so (spec 4).
+           * @param rows - Rows for this section.
+           * @returns The section body.
+           */
+          const taskSectionBody = (rows) => {
+            if (tasks.phase === 'loading') return h(Empty, null, t('state.loading'))
+            if (tasks.phase === 'failed') return h(Empty, null, t('state.failed'))
+            if (rows.length === 0) return h(Empty, null, t('empty.tasksStatus'))
+            return rows.map((row) => h(Row, {
+              key: `task-${row.id}`,
+              title: row.title,
+              meta: row.meta,
+              onClick: openAction,
+            }))
+          }
+          return flyoutShell(t('rail.tasks'), [
+            section('tasks', 'active', t('section.activeTasks'), true, taskSectionBody(taskGroups.active)),
+            section('tasks', 'paused', t('section.pausedTasks'), false, taskSectionBody(taskGroups.paused)),
+            section('tasks', 'ended', t('section.endedTasks'), false, taskSectionBody(taskGroups.ended)),
+          ], h(ActionRow, { onClick: openAction }, t('action.openPanel')), undefined, undefined, true, true)
         }
         if (open === 'plugins') {
-          const body = plugins.phase === 'loading' ? h(Empty, null, t('state.loading'))
-            : plugins.phase === 'failed' ? h(Empty, null, t('state.failed'))
-              : plugins.rows.length === 0 ? h(Empty, null, t('empty.plugins'))
-                : plugins.rows.map((row) => h(Row, {
-                  key: `plugin-${row.name}`,
-                  title: row.name,
-                  meta: row.meta,
-                  onClick: () => { retract(); selectPanel('plugins') },
-                }))
-          return flyoutShell(t('rail.plugins'),
-            [section('plugins', 'all', t('section.plugins'), true, body)],
-            h(ActionRow, {
-              onClick: () => { retract(); selectPanel('plugins') },
-            }, t('action.openPanel')), undefined, undefined, true, true)
+          // Two sections: on, and installed-but-off. The latter deliberately
+          // excludes official on-demand plugins that are not installed at all —
+          // choosing one of those starts an install flow, which this surface does
+          // not offer (spec 5, ADR-0005). No enable/disable switch either: the
+          // host's plugin page owns that, with its approval and restart handling.
+          const openPanel = () => { retract(); selectPanel('plugins') }
+          /**
+           * Render one plugin section body.
+           * @param rows - Rows for this section.
+           * @returns The section body.
+           */
+          const pluginSectionBody = (rows) => {
+            if (plugins.phase === 'loading') return h(Empty, null, t('state.loading'))
+            if (plugins.phase === 'failed') return h(Empty, null, t('state.failed'))
+            if (rows.length === 0) return h(Empty, null, t('empty.pluginsState'))
+            return rows.map((row) => h(Row, {
+              key: `plugin-${row.name}`,
+              title: row.name,
+              meta: row.meta,
+              onClick: openPanel,
+            }))
+          }
+          return flyoutShell(t('rail.plugins'), [
+            section('plugins', 'enabled', t('section.enabledPlugins'), true, pluginSectionBody(pluginGroups.enabled)),
+            section('plugins', 'disabled', t('section.disabledPlugins'), true, pluginSectionBody(pluginGroups.disabled)),
+          ], h(ActionRow, { onClick: openPanel }, t('action.openPanel')), undefined, undefined, true, true)
         }
         if (open === 'more') {
           const extras = panelEntries.filter((panel) => panel.id !== 'schedules' && panel.id !== 'plugins')
