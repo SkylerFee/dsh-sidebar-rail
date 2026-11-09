@@ -47,6 +47,28 @@
 | `SessionSummary` 无 `workspaceId`；`archivedSessionIds` 在 `WorkspaceSnapshot` 顶层 | 反查只走 `WorkspaceView.sessionIds`；`archivedIds` 从 `readWorkspaces(state => state.archivedSessionIds)` 读 |
 | `workspaces.create({path})` 只登记已存在目录、幂等、不建目录 | 添加项目不调用任何 `mkdir`/`createDirectory`；重复选同一目录不产生重复行 |
 
+### spec §9 不做什么（逐条核实）
+
+| 非目标 | 核实方式 | 结果 |
+| --- | --- | --- |
+| 不做 TypeScript 化 | 仓库内无 `.ts` 文件 | ✅ 仍为零构建手写 JS（ADR-0002） |
+| 不做会话级置顶 | `grep pinSession` 无命中 | ✅ 只用插件自己的 `pinnedWorkspaceIds` |
+| 不做任务详情定位 | `grep openTaskDetail\|selectedId` 无命中 | ✅ 点条目只调 `selectPanel('schedules')` |
+| 不做浮层内插件开关 | 唯一的 `setPlugins` 是 `useState` setter（存列表），非开关操作 | ✅ 没有写插件的调用 |
+| 不持久化展开状态 | 全文件只有三处存储写入：`writeStore` 定义、`recentCount`、`pinnedWorkspaceIds`；`foldedSections` 与 `expandedProjects` 不碰存储 | ✅ 每次打开回到默认 |
+
+### 高度算式在真机视口下的取值（供验收对照）
+
+以 `docs/verify.md` 早前记录过的 macOS Desktop 视口逻辑高度 982 为例：
+
+| 量 | 值 | 推导 |
+| --- | --- | --- |
+| 浮层高度 | **934 px** | `flyoutSectionedHeight(982, 48)` = 982 − 48 |
+| 每区上限 | **311 px** | `sectionMaxHeight(934)` = ⌊934 / 3⌋ |
+| 三区满额合计 | 933 px | 311 × 3，**不超过**面板 934 |
+
+真机验收时可直接比对：浮层顶边应 ≈ 48（chrome 带下沿），底边应 ≈ 982，高度 ≈ 934；某区内容超过约 311px 后应开始自己滚动。
+
 ### 未验证（真机，本轮未能执行）
 
 **原因**：本会话运行在 DSH Web GUI 中，工具面内 `ps` 被沙箱禁止、启动日志停在 2026-09-29，**无法确认当前前台是否为 macOS Desktop 窗口**；同时 `~/.dsh/profiles/` 不在会话可写范围（`workspace-write` 只覆盖本仓库），无法把 profile 里的 npm `0.3.3` 副本切成指向本仓库的 `link:`。因此 B1–B15 中所有**像素测量**与**目视/点击**类断言一项都没有执行。
