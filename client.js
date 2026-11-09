@@ -1551,9 +1551,38 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Normalize an unknown schedule catalog answer into active task rows.
+     * Resolve the instant a scheduled task will next fire.
+     *
+     * `ScheduleCatalogEntry` carries `scheduledAt` plus an optional
+     * `deliveryFloorEndsAt` — there is no `nextRunAt` (ADR-0005). The host's own
+     * `ui-schedule` reads it as "the delivery floor if it is later than the
+     * scheduled time, otherwise the scheduled time". This plugin reproduces that
+     * formula instead of inventing a field: the previous code asked for
+     * `nextRunAt`/`next`, neither of which exists, so it only ever displayed
+     * anything because it happened to fall through to `scheduledAt`.
+     * @param task - One catalog entry.
+     * @returns An ISO-8601 string, or '' when the entry carries no usable time.
+     */
+    function taskNextRun(task) {
+      if (task === null || typeof task !== 'object') return ''
+      const scheduled = typeof task.scheduledAt === 'string' ? task.scheduledAt : ''
+      if (scheduled === '') return ''
+      // Compare as instants: the two fields are ISO strings, and a malformed one
+      // must not silently reorder the comparison.
+      const floor = typeof task.deliveryFloorEndsAt === 'string' ? task.deliveryFloorEndsAt : ''
+      if (floor !== '') {
+        const floorAt = Date.parse(floor)
+        const scheduledAt = Date.parse(scheduled)
+        if (Number.isFinite(floorAt) && Number.isFinite(scheduledAt) && floorAt > scheduledAt) return floor
+        if (!Number.isFinite(scheduledAt)) return ''
+      }
+      return Number.isFinite(Date.parse(scheduled)) ? scheduled : ''
+    }
+
+    /**
+     * Normalize an unknown schedule catalog answer into task rows.
      * @param answer - Whatever the schedule remote returned.
-     * @returns Task rows.
+     * @returns Task rows, every lifecycle state included, in the host's order.
      */
     function normalizeTasks(answer) {
       const value = answer !== null && typeof answer === 'object' && 'value' in answer ? answer.value : answer
@@ -1566,9 +1595,9 @@ window.__ModuleLoader__.load({
         if (task == null) continue
         const id = task.id ?? task.taskId ?? task.key ?? ''
         const title = task.title ?? task.name ?? task.instruction ?? task.prompt ?? String(id)
-        const next = task.nextRunAt ?? task.next ?? task.scheduledAt ?? task.runAt
-        const meta = typeof next === 'string' ? next
-          : Number.isFinite(next) ? new Date(next).toLocaleString() : ''
+        // The host's own formula (see taskNextRun); no nextRunAt field exists.
+        const next = taskNextRun(task)
+        const meta = next === '' ? '' : new Date(next).toLocaleString()
         rows.push({ id: String(id), title: String(title).slice(0, 120), meta, status: taskStatusOf(task) })
       }
       return rows
@@ -2119,8 +2148,19 @@ window.__ModuleLoader__.load({
        */
       const addProject = useCallback(() => {
         setProjectAction({ phase: 'busy' })
+        // The pick call is wrapped so its rejection reaches `pickedDirectory`
+        // instead of the outer catch: a refused backend is a specific, expected
+        // outcome (ADR-0005), not a generic failure, and the caller should see
+        // "use the host's own Add button" rather than "add project failed".
         Promise.resolve()
-          .then(() => (typeof pickDirectory === 'function' ? pickDirectory() : null))
+          // A host without the pick verb must not read as "the operator cancelled":
+          // that would swallow the reason silently. Hand `pickedDirectory` a
+          // failure so the section shows where to go instead.
+          .then(() => {
+            if (typeof pickDirectory !== 'function') throw new Error('directory picker unavailable')
+            return pickDirectory()
+          })
+          .then((picked) => undefined, (error) => error)
           .then((picked) => {
             const outcome = pickedDirectory(picked)
             if (outcome.kind === 'cancelled') {
@@ -2129,7 +2169,10 @@ window.__ModuleLoader__.load({
             }
             if (outcome.kind === 'failed') {
               console.warn('[dsh-sidebar-rail] directory pick failed:', outcome.message)
-              setProjectAction({ phase: 'failed', message: outcome.message })
+              // A refused picker is the one case worth naming precisely: the
+              // person can still add the project, just through the host's own
+              // sidebar, so point there instead of reporting a dead end.
+              setProjectAction({ phase: 'failed', message: t('state.addProjectFailed') })
               return undefined
             }
             if (typeof createWorkspace !== 'function') {

@@ -33,13 +33,13 @@ ${region('pure-data')}
 return { EMPTY_SESSIONS, EMPTY_WORKSPACES, selectorHook, relativeTime, shortPath,
   resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT,
   deriveSections, normalizeTasks, normalizePlugins, currentSessionId, accountSeatState, accountClientMetadata, clientBuildVersion, readRecentCount,
-  remoteOutcome, flyoutPlacement, keepsRailRevealed, RAIL_REVEAL_WIDTH, readRecentCount, sessionStatusOf, formatWalletBalance, balanceRows, accountLinks, withAccountExtras, flyoutSectionedHeight, sectionMaxHeight, sectionIsOpen, projectSessionRows, pickedDirectory, groupTasksByStatus, groupPluginsByState }`)()
+  remoteOutcome, flyoutPlacement, keepsRailRevealed, RAIL_REVEAL_WIDTH, readRecentCount, sessionStatusOf, formatWalletBalance, balanceRows, accountLinks, withAccountExtras, flyoutSectionedHeight, sectionMaxHeight, sectionIsOpen, projectSessionRows, pickedDirectory, groupTasksByStatus, groupPluginsByState, taskNextRun }`)()
 
 const { deriveSections, normalizeTasks, normalizePlugins, relativeTime, shortPath, selectorHook,
   resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT, currentSessionId, accountSeatState,
   accountClientMetadata, clientBuildVersion, readRecentCount, sessionStatusOf,
   formatWalletBalance, balanceRows, accountLinks, remoteOutcome, flyoutPlacement,
-  keepsRailRevealed, RAIL_REVEAL_WIDTH, EMPTY_SESSIONS, withAccountExtras, flyoutSectionedHeight, sectionMaxHeight, sectionIsOpen, projectSessionRows, pickedDirectory, groupTasksByStatus, groupPluginsByState } = helpers
+  keepsRailRevealed, RAIL_REVEAL_WIDTH, EMPTY_SESSIONS, withAccountExtras, flyoutSectionedHeight, sectionMaxHeight, sectionIsOpen, projectSessionRows, pickedDirectory, groupTasksByStatus, groupPluginsByState, taskNextRun } = helpers
 
 /**
  * Build a SessionSummary-shaped row.
@@ -64,6 +64,46 @@ test('deriveSections: pinned workspaces lead, in pin order', () => {
   const sections = deriveSections(WORKSPACES, { byId: {} }, [], ['ws3', 'ws1'], 'en')
   assert.deepEqual(sections.pinnedRows.map((r) => r.id), ['ws3', 'ws1'])
   assert.deepEqual(sections.normalRows.map((r) => r.id), ['ws2'])
+})
+
+test('taskNextRun: the host formula, not a nextRunAt field', () => {
+  // ScheduleCatalogEntry 只有 scheduledAt 与可选 deliveryFloorEndsAt；nextRunAt 与
+  // next 在契约里都不存在（ADR-0005）。宿主的算法是「底限结束时间晚于计划时间时
+  // 用它，否则用计划时间」——照抄，不要发明字段。
+  assert.equal(
+    taskNextRun({ scheduledAt: '2026-11-10T09:00:00Z', deliveryFloorEndsAt: '2026-11-10T10:00:00Z' }),
+    '2026-11-10T10:00:00Z',
+    'a delivery floor past the scheduled time wins',
+  )
+  assert.equal(
+    taskNextRun({ scheduledAt: '2026-11-10T09:00:00Z', deliveryFloorEndsAt: '2026-11-10T08:00:00Z' }),
+    '2026-11-10T09:00:00Z',
+    'a floor before the scheduled time is ignored',
+  )
+  assert.equal(taskNextRun({ scheduledAt: '2026-11-10T09:00:00Z' }), '2026-11-10T09:00:00Z')
+  // 相等时取 scheduledAt，不改变显示。
+  assert.equal(
+    taskNextRun({ scheduledAt: '2026-11-10T09:00:00Z', deliveryFloorEndsAt: '2026-11-10T09:00:00Z' }),
+    '2026-11-10T09:00:00Z',
+  )
+  // 脏输入返回空串，由调用方决定不显示 meta。
+  assert.equal(taskNextRun({}), '')
+  assert.equal(taskNextRun(null), '')
+  assert.equal(taskNextRun({ scheduledAt: 'not-a-date' }), '')
+})
+
+test('normalizeTasks: meta comes from taskNextRun, never from a nextRunAt field', () => {
+  // 回归锁：旧实现写 task.nextRunAt ?? task.next ?? scheduledAt，前两个键不存在。
+  // 即使送进来一个 nextRunAt，也不该被采用——契约里没有这个字段。
+  const rows = normalizeTasks({ ok: true, value: [
+    { id: 'a', title: 'a', scheduledAt: '2026-11-10T09:00:00Z', nextRunAt: '2020-01-01T00:00:00Z' },
+    { id: 'b', title: 'b', scheduledAt: '2026-11-10T09:00:00Z', deliveryFloorEndsAt: '2026-11-10T11:00:00Z' },
+    { id: 'c', title: 'c' },
+  ] })
+  // 用时间戳比较，避免断言依赖运行环境的时区。
+  assert.equal(Date.parse(rows[0].meta), Date.parse('2026-11-10T09:00:00Z'), 'a stray nextRunAt must not win')
+  assert.equal(Date.parse(rows[1].meta), Date.parse('2026-11-10T11:00:00Z'), 'the delivery floor is what the host would show')
+  assert.equal(rows[2].meta, '')
 })
 
 test('groupTasksByStatus: every host status lands in its own group', () => {
@@ -156,6 +196,16 @@ test('pickedDirectory: one shape for "chosen", "cancelled" and "failed"', () => 
   assert.equal(weird.kind, 'failed')
   assert.equal(typeof weird.message, 'string')
   assert.ok(weird.message.length > 0)
+})
+
+test('pickedDirectory: a refused backend is a failure, never a silent cancel', () => {
+  // ADR-0005：browse 后端没有 native 能力时 pick 会被 directory-picker/unavailable
+  // 拒绝。这条与「用户按了取消」必须在类型上分开——取消要静默，拒绝要有提示。
+  const refused = pickedDirectory(new Error('directoryPicker.pick needs the native capability; the composed picker serves "browse"'))
+  assert.equal(refused.kind, 'failed')
+  assert.ok(refused.message.length > 0)
+  // 取消只有一种表示：null。
+  assert.equal(pickedDirectory(null).kind, 'cancelled')
 })
 
 test('pickedDirectory: an absolute path is required, a relative one is a failure', () => {
@@ -329,7 +379,7 @@ test('normalizeTasks: unwraps RemoteResult, keeps every status, reads fallback f
   const answer = {
     ok: true,
     value: [
-      { id: 't1', title: 'Morning brief', nextRunAt: '2026-11-05T09:00:00Z' },
+      { id: 't1', title: 'Morning brief', scheduledAt: '2026-11-05T09:00:00Z' },
       { id: 't2', instruction: 'Check CI every hour', status: 'active' },
       { id: 't3', title: 'Ended', status: 'ended' },
       { id: 't4', title: 'Paused', status: 'paused' },
