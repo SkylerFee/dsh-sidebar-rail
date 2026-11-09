@@ -1,5 +1,79 @@
 # 验证记录
 
+## 0.4.0 浮层分区化（2026-11-09，第 21 轮）
+
+规格：[spec-0.4.0-sectioned-flyout.md](spec-0.4.0-sectioned-flyout.md)。票：#1 骨架、#2 工作区三分区、#3 项目行展开、#4 新建会话与添加项目、#5 任务三分区、#6 插件两分区、#7 验收（GitHub #1–#7）。
+
+### 改动
+
+- **占满高度**：`flyoutSectionedHeight(viewportHeight, topClearance)` 取代 `workspaceFlyoutHeight`。浮层从 `--dsh-frame-top-clearance` 之下（读宿主 token，读不到退回 48px）占到窗口底；`flyoutShell` 新增 `topFlush` 走这条路径。三个浮层全部改用它，不再有内容自适应的浮层。
+- **分区原语**：`.dsr-section` = 固定 `.dsr-section-head`（`flex:none`）+ 独立滚动 `.dsr-section-body`；分区之间 `--dsw-alias-border-l1` 分隔。上限由 JS 算出 `--dsr-section-cap`（`sectionMaxHeight` = 可用高度 1/3 向下取整），CSS 里 `max-height:var(--dsr-section-cap, 33.3333%)` 兜底；`flex:0 1 auto` 让内容少的分区保持自然高度而不撑满。
+- **收起**：`FlyoutSection` 的标题是按钮，带 `aria-expanded`；收起时**卸载** body（避免下次展开回到旧滚动位置）。折叠表是组件 state，不写存储，默认值由 `sectionIsOpen` 给出（B14）。
+- **工作区三分区**：置顶 / 项目 / 最近会话，全默认展开。置顶项目不在项目区重复——`deriveSections` 本就分区，新增回归测试锁住。
+- **项目行**：`ProjectRow` = 始终可见的展开箭头 + 名称 + 新建会话 + 图钉。展开后列出该项目**全部** `sessionIds` 成员（`projectSessionRows`：不过滤、不排序、不限条数），归档行标注「已归档」，缺条目降级为 id 行。
+- **新建会话 / 添加项目**：`startSession(workspaceId)` 与 `pickDirectory()` + `workspaces.create({ path })`。`pickedDirectory` 把「选定 / 取消 / 失败」收成一个形状；相对路径判为失败（宿主按绝对路径登记项目）。`inject` 增加了 `workspaces` 服务。
+- **任务三分区**：`normalizeTasks` 不再过滤 paused/ended，改为带出 `status`；`taskStatusOf` 把 legacy `inactive` 折成 `ended`、无 status 时按 `active` 布尔翻译、未知状态返回空串（宁可少列也不错列）。`groupTasksByStatus` 恒返回三键。只默认展开「进行中」。
+- **插件两分区**：`normalizePlugins` 不再只留 enabled，保留 `enabled` 布尔并由 `groupPluginsByState` 二分；未安装（`installed:false`）仍在归一化阶段被剔除，所以官方按需插件不会落进「未启用」。
+
+### 已完成验证（可在本机复跑）
+
+跑法：`cd dsh-sidebar-rail && npm run check`
+
+| 项 | 结果 |
+| --- | --- |
+| 仓库规则 4 条（regions / manifest / banned / i18n） | ✅ 全过；i18n **52 key** 中英对齐 |
+| 两入口语法（`node --check client.js` / `index.js`） | ✅ |
+| 纯逻辑单测 | ✅ **50 项全过**（0.3.3 为 35 项） |
+| `flyoutSectionedHeight` | ✅ 1000/48→952、900/48→852；矮于 chrome 带→0；clearance 不可用退回 48 |
+| `sectionMaxHeight` | ✅ 900→300、852→284；极小值→0，不产出负值/小数 |
+| 高度不随内容变化（0.3.2 性质） | ✅ 单测锁住：同一视口下条数 1 与 20 得到同一高度 |
+| `sectionIsOpen` 默认值 | ✅ 三区全展开 / 任务仅「进行中」/ 手动收起覆盖默认 |
+| 置顶项目不重复 | ✅ `pinnedRows` 与 `normalRows` 的 id 集合互斥且并集等于全部项目 |
+| `projectSessionRows` 不过滤 | ✅ host 顺序（不按时间重排）、归档与空白都保留、未知成员降级、脏输入为空 |
+| 任务三状态分组 | ✅ `active`/`paused`/`ended` 各归各位；空输入返回完整三键；未知状态被丢弃 |
+| 插件二分 | ✅ enabled 与 installed-but-off 分开；未安装与宿主自带项不进入 |
+| 目录选择三结局 | ✅ picked / cancelled（静默）/ failed；相对路径判失败；非 Error 拒绝有可读文案 |
+
+### 未验证（真机，本轮未能执行）
+
+**原因**：本会话运行在 DSH Web GUI 中，工具面内 `ps` 被沙箱禁止、启动日志停在 2026-09-29，**无法确认当前前台是否为 macOS Desktop 窗口**；同时 `~/.dsh/profiles/` 不在会话可写范围（`workspace-write` 只覆盖本仓库），无法把 profile 里的 npm `0.3.3` 副本切成指向本仓库的 `link:`。因此 B1–B15 中所有**像素测量**与**目视/点击**类断言一项都没有执行。
+
+| 项 | 状态 |
+| --- | --- |
+| B1 三分区 + 各有固定标题 + 占满高度且不盖红绿灯 | ❌ 未执行（需 Desktop 窗口内像素测量） |
+| B2 滚动任一分区，标题与其他区不动 | ❌ 未执行 |
+| B3 内容少的分区不高过 1/3、不撑满 | ❌ 未执行（公式已单测，渲染未核） |
+| B4 收起/展开分区不改浮层总高度 | ❌ 未执行（结构上成立，需实测） |
+| B5 展开项目显示全部成员、宿主顺序、不限条数 | ❌ 未执行（纯函数已验证，渲染未核） |
+| B6 空项目显示空态 | ❌ 未执行 |
+| B7 点项目下会话跳转并收起浮层 | ❌ 未执行 |
+| B8 新建会话后跳转并收起 | ❌ 未执行 |
+| B9 添加项目后留在浮层；取消无变化 | ❌ 未执行；**`pickDirectory` 的 native 后端从未在真机跑过**（ADR-0005 记录其有两条路径） |
+| B10 置顶在两区之间移动、刷新后保持 | ⚠️ 持久化沿用 0.3.x 已验证路径；本轮分区移动未目视 |
+| B11 任务三区、仅「进行中」展开、空区有文案 | ❌ 未执行 |
+| B12 点任务条目打开面板 | ❌ 未执行 |
+| B13 插件两区、未启用只含已安装但关闭 | ❌ 未执行 |
+| B14 关闭重开回到默认展开 | ❌ 未执行（state 不落盘，结构上成立） |
+| B15 窄窗/展开态/Web 不渲染轨 | ❌ 未执行（`shouldRenderRail` 单测仍在，但本轮未真机复核） |
+
+### 下一步（人工，在 macOS Desktop 里）
+
+1. 把 profile 里的掉包换成本地 link，重启应用（client module 不会热更新，`Cmd+R` 不够）：
+   ```sh
+   # 在 ~/.dsh/profiles/desktop 下把 @skylerfee/dsh-sidebar-rail 换成 file:/Users/liufei/Projects/deepseek-harness-plugins/dsh-sidebar-rail
+   ```
+   或用 `plugin_manager`：`remove_bundle` 后 `install_bundle` 指向本目录。
+2. 收起侧栏，悬浮「工作区」图标，按上表 B1–B10 逐条核对；任务/插件浮层核对 B11–B13。
+3. 每条的**可核对的量**记进本文件：浮层顶/底 y 坐标、分区标题在滚动前后的 y 坐标、分区实际高度与 `sectionMaxHeight(可用高度)` 的比值、收起前后浮层总高度。
+4. 特别确认 B1 的顶部：浮层顶边应等于 `--dsh-frame-top-clearance`（macOS 下 48），红绿灯与宿主重开按钮不被覆盖。
+5. 记录 B9 走的是 native 还是 browse 后端（失败态文案会出现在「项目」区顶部）。
+
+### 本轮结束时的仓库状态
+
+- 6 张内容票的代码、单测、i18n、README 均已落地；`package.json` 版本 **0.4.0**。
+- `npm run check` 通过。
+- **本插件尚未在 0.4.0 上做过任何真机验收**，因此这一版不具备发布条件，直到上表 B1–B15 补齐。
+
 ## 工作区浮层定高与两区等分（2026-11-08，第 20 轮）
 
 用户反馈：调整最近会话条数会改变浮层高度，且希望项目区与最近会话区大小基本一致、各自标题行固定、两区之间有明确分隔线。

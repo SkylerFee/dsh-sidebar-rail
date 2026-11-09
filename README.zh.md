@@ -2,7 +2,7 @@
 
 # dsh-sidebar-rail
 
-[![CI](https://github.com/SkylerFee/dsh-sidebar-rail/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/SkylerFee/dsh-sidebar-rail/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Node: >=22.19](https://img.shields.io/badge/Node-%3E%3D22.19-brightgreen.svg)](https://nodejs.org) [![Release: v0.3.3](https://img.shields.io/badge/release-v0.3.3-orange.svg)](https://github.com/SkylerFee/dsh-sidebar-rail/releases) [![npm downloads](https://img.shields.io/npm/dt/@skylerfee/dsh-sidebar-rail.svg?label=npm%20downloads)](https://www.npmjs.com/package/@skylerfee/dsh-sidebar-rail) [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
+[![CI](https://github.com/SkylerFee/dsh-sidebar-rail/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/SkylerFee/dsh-sidebar-rail/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Node: >=22.19](https://img.shields.io/badge/Node-%3E%3D22.19-brightgreen.svg)](https://nodejs.org) [![Release: v0.4.0](https://img.shields.io/badge/release-v0.4.0-orange.svg)](https://github.com/SkylerFee/dsh-sidebar-rail/releases) [![npm downloads](https://img.shields.io/npm/dt/@skylerfee/dsh-sidebar-rail.svg?label=npm%20downloads)](https://www.npmjs.com/package/@skylerfee/dsh-sidebar-rail) [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 
 给 DeepSeek Harness 的 macOS Desktop 折叠侧栏补充工作区、最近会话、定时任务、插件和账号入口。
 
@@ -95,10 +95,10 @@ dsh plugin --profile desktop add @skylerfee/dsh-sidebar-rail
 
 | 入口 | 可执行的操作 |
 | --- | --- |
-| 工作区 | 按「置顶项目 / 项目」查看工作区，行内只显示名称；点击名称切换工作区，点击图钉置顶或取消置顶 |
+| 工作区 | 三个分区——置顶项目 / 项目 / 最近会话。项目行可展开它的会话列表（不过滤、宿主顺序），并可新建会话；「添加项目」登记目录但不跳转 |
 | 最近会话 | 在工作区浮层底部独立滚动，按更新时间倒序显示，排除归档、空白与子代理会话；点击打开已有会话，显示相对时间及宿主提供的会话状态标识 |
-| 定时任务 | 查看未结束、未暂停的任务；点击条目或「打开面板」进入任务面板 |
-| 我的插件 | 查看自己安装并启用的插件组合包，过滤宿主内置包；点击进入插件管理面板 |
+| 定时任务 | 三个分区——进行中 / 已暂停 / 已结束，只默认展开「进行中」；点击条目或「打开面板」进入任务面板 |
+| 我的插件 | 两个分区——已启用 / 未启用（已安装但关闭的），过滤宿主内置包，不提供开关；点击进入插件管理面板 |
 | 更多 | 查看宿主其他面板入口，或展开原生侧栏 |
 | 账号与设置 | 显示宿主账号头像，以及可用的余额、赠金、「查询用量」「充值」链接；未登录时显示提示；并给出「展开侧栏后点左下角设置」的路径说明；登录、退出和付款由宿主或目标网页处理 |
 
@@ -109,7 +109,7 @@ dsh plugin --profile desktop add @skylerfee/dsh-sidebar-rail
 
 「最近会话条数」默认 **5**，可设置为 **1–20**。工作区浮层底部提供加减按钮，插件详情页也提供同一设置。
 
-工作区浮层高度固定（约视口 70%），上方是项目区、下方是最近会话区，两区大小基本一致且各有固定标题行；调条数只改变最近会话是否需要滚动，不改浮层高度。
+每个浮层都从窗口 chrome 带之下占满到窗口底，并按分区组织：一行不随内容滚动的标题，加上一块独立滚动的列表。每个分区最高可长到可用高度的 1/3，超出后自己滚动，内容少时保持自然高度而不强行撑满。分区可以收起，收起不会改变浮层总高度。
 
 ![插件详情页的最近会话条数设置，示例值为 9，可用加减按钮调整](docs/images/plugin-settings.png)
 

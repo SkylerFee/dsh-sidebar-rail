@@ -1,6 +1,6 @@
 {
   "name": "@skylerfee/dsh-sidebar-rail",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "description": "侧栏收起后也能快速切换项目、查看最近会话、管理定时任务和插件；鼠标靠近窗口左缘就会滑出图标轨。Keep quick access to your projects, recent sessions, scheduled tasks and plugins after the sidebar is collapsed.",
   "license": "MIT",
   "author": "SkylerFee",

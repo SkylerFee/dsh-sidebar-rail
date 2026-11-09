@@ -2,7 +2,7 @@
 
 # dsh-sidebar-rail
 
-[![CI](https://github.com/SkylerFee/dsh-sidebar-rail/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/SkylerFee/dsh-sidebar-rail/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Node: >=22.19](https://img.shields.io/badge/Node-%3E%3D22.19-brightgreen.svg)](https://nodejs.org) [![Release: v0.3.3](https://img.shields.io/badge/release-v0.3.3-orange.svg)](https://github.com/SkylerFee/dsh-sidebar-rail/releases) [![npm downloads](https://img.shields.io/npm/dt/@skylerfee/dsh-sidebar-rail.svg?label=npm%20downloads)](https://www.npmjs.com/package/@skylerfee/dsh-sidebar-rail) [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
+[![CI](https://github.com/SkylerFee/dsh-sidebar-rail/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/SkylerFee/dsh-sidebar-rail/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Node: >=22.19](https://img.shields.io/badge/Node-%3E%3D22.19-brightgreen.svg)](https://nodejs.org) [![Release: v0.4.0](https://img.shields.io/badge/release-v0.4.0-orange.svg)](https://github.com/SkylerFee/dsh-sidebar-rail/releases) [![npm downloads](https://img.shields.io/npm/dt/@skylerfee/dsh-sidebar-rail.svg?label=npm%20downloads)](https://www.npmjs.com/package/@skylerfee/dsh-sidebar-rail) [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 
 Reach workspaces, recent sessions, scheduled tasks, plugins and your account while the DeepSeek Harness sidebar is collapsed on macOS Desktop.
 
@@ -95,10 +95,10 @@ The assistant can also call `plugin_manager` with `set_bundle` (enable/disable) 
 
 | Entry | Available actions |
 | --- | --- |
-| Workspaces | Browse pinned projects and projects by name; choose a name to switch workspace or use the pin button to pin or unpin it |
+| Workspaces | Three sections — pinned projects, projects, recent sessions. A project row expands to its own session list (unfiltered, in host order) and can start a new session; Add project registers a directory without navigating |
 | Recent sessions | Scroll independently at the foot of the workspace flyout, newest first, excluding archived, blank and subagent sessions; open an existing session and see its relative time and host-provided status mark |
-| Scheduled tasks | Browse tasks that have not ended or paused; choose a row or Open panel to enter the task panel |
-| My plugins | Browse bundles you installed and enabled, excluding host bundles; choose a row to enter the plugin manager |
+| Scheduled tasks | Three sections — running, paused, ended; only running opens by default. Choose a row or Open panel to enter the task panel |
+| My plugins | Two sections — enabled, and installed but switched off; host bundles are excluded and no switch is offered. Choose a row to enter the plugin manager |
 | More | Open other host panels or expand the native sidebar |
 | Account and settings | See the host avatar and available balances, bonuses, View usage and Top up links; signed-out accounts get a hint; the flyout also names the path to the host Settings panel (expand the sidebar, then Settings at its foot); sign-in, sign-out and payment remain in the host or destination page |
 
@@ -109,7 +109,7 @@ Keyboard: `Tab` to an icon reveals the rail. On a top-row function icon, press `
 
 Recent count defaults to **5**, with a range of **1–20**. Adjust it with the stepper at the foot of the workspace flyout or on the plugin detail page.
 
-The workspace flyout keeps a fixed height (about 70% of the viewport): projects on top, recent sessions below, roughly equal panes with their own fixed header rows. Changing the count only changes whether the recent list scrolls, never the panel height.
+Every flyout fills the column from below the window chrome to the bottom edge, and is organised in sections: a header that never scrolls plus its own scrolling list. Each section may grow to a third of the available height and scrolls past that, so a short section keeps its natural height instead of stretching. Sections fold, and folding never changes the panel height.
 
 ![Recent count setting on the plugin detail page, showing 9 with decrease and increase buttons](docs/images/plugin-settings.png)
 
