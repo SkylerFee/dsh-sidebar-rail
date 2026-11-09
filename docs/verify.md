@@ -82,6 +82,7 @@
 | `flyoutShell` 的 JSDoc 因插入 `frameTopClearance` 而失联 | ✅ 属实 | 重排为「`frameTopClearance` 自带 doc → `flyoutShell` 的 doc 紧贴其定义」 |
 | 丢弃未知任务状态 / 未安装插件时无日志 | ⚠️ 部分成立 | 纯函数区不允许副作用（§2），改为在 `writer` 归一化边界记录「保留 N / 收到 M」并带 `[dsh-sidebar-rail]` 前缀 |
 | 4 个 i18n 键已成死键（`section.tasks`、`section.plugins`、`empty.tasks`、`empty.plugins`） | ✅ 属实 | 删除；`check.mjs` 只校验中英对齐，不校验使用，所以此前没报 |
+| 新建会话按钮默认 `opacity:0`，只在悬停时出现，而 spec §3.2 要求「始终显示」 | ✅ 属实（Spec 自查发现） | 改为常显（图钉与新建会话都常显），悬停只加背景 |
 
 Judgement calls（Duplicated Code、Data Clumps、Divergent Change 等）**本轮不处理**：
 它们描述的是可读性取舍，改动面覆盖 `renderFlyout` 全部五个分支，风险高于收益。

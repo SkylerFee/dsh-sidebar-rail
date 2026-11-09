@@ -438,13 +438,14 @@ window.__ModuleLoader__.load({
   width:10px; height:10px; color:var(--dsw-alias-label-secondary);
   transition:transform 120ms ease; }
 .dsr-project-main[aria-expanded="false"] .dsr-project-caret { transform:rotate(-90deg); }
+/* Both actions stay visible, unlike a session row's pin which appears on hover:
+   spec 3.2 says the caret AND the new-session button are always shown, so their
+   discoverability must not depend on the pointer resting on the row. */
 .dsr-project-action { display:flex; align-items:center; justify-content:center; width:22px; height:22px; flex:none;
   border:none; background:transparent; border-radius:var(--dsw-radius-sm, 8px);
-  cursor:pointer; color:var(--dsw-alias-label-primary); opacity:0; }
-.dsr-row-wrap:hover .dsr-project-action,
-.dsr-project-action:focus-visible,
-.dsr-project-row[data-pinned="true"] .dsr-project-action { opacity:1; }
-.dsr-project-action:hover { background:var(--dsw-alias-interactive-bg-active); }
+  cursor:pointer; color:var(--dsw-alias-label-secondary); }
+.dsr-project-action:hover, .dsr-project-action:focus-visible {
+  background:var(--dsw-alias-interactive-bg-active); color:var(--dsw-alias-label-primary); }
 /* The expanded session list is indented under its project: the extra leading
    space is what reads as "these belong to the row above". */
 .dsr-project-sessions { display:flex; flex-direction:column; padding-left:14px; }
