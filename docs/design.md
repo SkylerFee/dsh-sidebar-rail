@@ -120,7 +120,7 @@ transform: translateX(-100%);
 | Escape | `open !== null` 时挂 `window` keydown，关闭浮层 | effect cleanup 摘除监听 |
 | 键盘进入 | 顶部功能图标上按 `↓` / `→`，打开浮层并聚焦首个按钮；浮层内 Escape 关闭并返回触发图标 | 焦点只移到当前浮层节点 |
 | 定时任务 / 插件数据 | 每次打开拉取（`idle → loading → ready/failed`），5s 超时或服务不可用进入失败态；Promise resolve 后仍判断 `RemoteResult.ok` | `live` 标记隔离过期结果，清理超时并重置请求标记，切回入口可重试 |
-| 账号数据 | 组件挂载后读取登录态；登录时并行读取 profile 与余额，各自保留失败占位，不保证实时更新 | 清理后忽略晚到结果 |
+| 账号数据 | 组件挂载后读取登录态；登录时并行读取 profile 与余额，各自保留失败占位。**按 PRD 非目标，不订阅 `account/watch`**，挂载期间切换登录态不会自动刷新，完整信息以宿主账号页为准 | 清理后忽略晚到结果 |
 | 槽注册与订阅 | `ctx.effect(...)` 包裹 overlay 注册、locale 字典、panel 条目订阅、locale 订阅 | effect dispose 自动回收 |
 | 样式 | `<style data-dsh-sidebar-rail>` 注入 `head` | 卸载时 `style.remove()` |
 | 折叠订阅 | 属性限定 MutationObserver | `observer.disconnect()` |

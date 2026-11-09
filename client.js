@@ -900,8 +900,12 @@ window.__ModuleLoader__.load({
      *   - `running` falls back to the SessionSummary when the status snapshot has
      *     no entry yet, which is how the tree resolves it (`status?.running ??
      *     s.running`).
-     * Running subagents are NOT folded in: that needs `subagentCatalog` from
-     * `projectionsBySession`, which this row projection does not carry.
+     * Running subagents are deliberately not folded in. The host counts them as
+     * `ongoing` too, but that needs `subagentCatalog` from `projectionsBySession`,
+     * which this row projection does not carry. The PRD lists it as a non-goal:
+     * the session's own running / pending / unread states already cover the
+     * cases the rail is for, and reading the projection just for this is not
+     * worth it.
      * @param summary - The row's SessionSummary (for the `running` fallback).
      * @param status - The SessionStatus entry from `useSessionStatus`, if any.
      * @returns 'warning' | 'ongoing' | 'done' | 'idle'.
@@ -1523,6 +1527,11 @@ window.__ModuleLoader__.load({
         setRevealed(false)
       }, [])
 
+      // The account seat is read once per mount. Per the PRD's non-goals this
+      // does not subscribe to `account/watch`, so signing in or out while the
+      // plugin stays mounted leaves the seat as it was; the host's own account
+      // page is the authoritative view. Skipping the subscription also keeps the
+      // plugin free of a long-lived listener it would have to tear down.
       const avatarAsked = useRef(false)
       useEffect(() => {
         if (avatarAsked.current) return undefined

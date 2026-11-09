@@ -31,6 +31,8 @@
 - 不实现 Codex 的活动视图、自定义分区、永久删除。
 - 不动右侧栏（right sidebar）。
 - 不承诺 Windows / Linux 支持（未验证）。
+- **不展示子代理运行状态**（`runningSubagentCount > 0` 时的 ongoing）。宿主的 `sessionStatuses` 会把运行中的子代理也算 ongoing，但那需要 `projectionsBySession.subagentCatalog`，当前行投影不携带；为了这一条去额外读取会话投影不划算。会话自身的运行/待处理/完成未读状态已覆盖主要场景。
+- **不订阅账号变化做实时刷新**。账号头像与余额在组件挂载时读取一次，挂载期间切换登录态不会自动更新；完整账号信息以宿主账号页为准。这是有意的取舍，不是待办。
 
 ## 3. 支持范围
 
