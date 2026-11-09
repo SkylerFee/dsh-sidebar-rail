@@ -91,6 +91,38 @@ Judgement calls（Duplicated Code、Data Clumps、Divergent Change 等）**本�
 渲染层零单测覆盖，所以「同名 `const` 自引用」「只在打开态执行的路径」「新增 state 谁重置」
 这三类错误必须靠 review 与规范约束，不能指望 `npm run check`。
 
+### 真机验收（2026-11-09，macOS Desktop 0.2.2-rc.1，外接屏 1920×1080，DPR=1）
+
+**环境突破**：此前判定"无法截图"是错的。机器有 3 个显示器（内建 3024×1964 + 两个 1920×1080），
+`screencapture -x` 默认只截主屏（上面是别的应用）；加 `-D 2` 即可截到 DSH 所在的外接屏。
+同时 profile 已从 npm `0.3.3` 副本切成本地 link（`cmp` 验证 `client.js` 与本仓库字节一致）。
+
+**渲染进程 `innerHeight` = 1092**（比屏幕 1080 高，含窗口装饰差）。
+
+#### 已实测通过
+
+| # | 用例 | 实测 | 判定 |
+| --- | --- | --- | --- |
+| B1 | 浮层占满可用高度 | 顶边 y=80（chrome 带下沿），底边 y=1078=屏底，总高 **999px** | ✅ |
+| B1 | 三个分区各带固定标题 | 分隔线在 y=237 / 540 / 1029；标题「置顶项目」「项目」「最近会话」齐全 | ✅ |
+| B1 | 不覆盖顶部 48px chrome 带 | 浮层顶 80 > chrome 带下沿，红绿灯可见 | ✅ |
+| B1 | 「添加项目」在「项目」区标题行右侧 | 可见，文案正确 | ✅ |
+| B1 | 项目行 `+` 与图钉常显 | 每行两个按钮都常显（本轮修掉的 `opacity:0` 悬停问题已生效） | ✅ |
+| B4 | 底部条数步进器 | 「最近会话条数 − 8 +」，可点 | ✅ |
+| B5 | 项目展开列出会话 | `home` 项目展开后列出 3 条会话（含相对时间），宿主顺序 | ✅ |
+
+#### 实测发现 1 个缺陷（B3 违规）
+
+| # | 用例 | 实测 | 判定 |
+| --- | --- | --- | --- |
+| B3 | 每区 ≤ 可用高度 1/3 | 「最近会话」区 **566px**，而 sections 容器 949px 的三分之一是 **316px** | ❌ 违规 |
+
+**根因**：`max-height: var(--dsr-section-cap, 33.3333%)` 里，百分比 `max-height` 在**高度由内容决定的 flex 项**上不生效（百分比需要父容器有确定高度），所以回退值等于没有；同时 React 的 inline `--dsr-section-cap` 自定义属性也未可靠落到计算样式上。结果最后一个分区撑满了面板剩余空间。
+
+**修复**：改由 JS 内联下发像素值——`sectionBudget = flyoutSectionedHeight(innerHeight, clearance) − FLYOUT_CHROME_HEIGHT`，再 `sectionMaxHeight()` 取三分之一，直接写进每个分区的 `style.maxHeight`。已同步到 profile，`npm run check` 通过。
+
+**验证状态**：`client-hmr` 已确认热重载（事件流捕获到 `{"type":"rebuilt","id":"@skylerfee/dsh-sidebar-rail","rev":"9efe74fd7703"}`，服务端 bundle 含新逻辑），但**已挂载的 React 组件实例未重新渲染**，页面仍在跑旧渲染结果。需要主动刷新一次页面才能看到修复后的分区高度。
+
 ### 未验证（真机，本轮未能执行）
 
 **原因**：本会话运行在 DSH Web GUI 中，工具面内 `ps` 被沙箱禁止、启动日志停在 2026-09-29，**无法确认当前前台是否为 macOS Desktop 窗口**；同时 `~/.dsh/profiles/` 不在会话可写范围（`workspace-write` 只覆盖本仓库），无法把 profile 里的 npm `0.3.3` 副本切成指向本仓库的 `link:`。因此 B1–B15 中所有**像素测量**与**目视/点击**类断言一项都没有执行。

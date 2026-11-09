@@ -855,11 +855,17 @@ window.__ModuleLoader__.load({
      * @param props - 标题、展开标志、收起回调、可选的行内操作、分区内容。
      * @returns 分区元素。
      */
-    function FlyoutSection({ title, open, onToggle, actions, children }) {
+    function FlyoutSection({ title, open, onToggle, actions, maxHeight, children }) {
       return h('div', {
         className: 'dsr-section',
         'data-dsr-section': title,
         'data-dsr-open': open === true ? 'true' : 'false',
+        // The cap is inline rather than a CSS custom property on the panel: a
+        // percentage max-height needs a definite parent height and these items
+        // are content-sized, so the fallback silently did nothing and the last
+        // section stretched to fill the panel instead of capping and scrolling
+        // (acceptance B3, measured 566px against a 316px third).
+        style: maxHeight === undefined ? undefined : { maxHeight: `${maxHeight}px` },
       },
       h('div', { className: 'dsr-section-head' },
         h('button', {
@@ -2360,6 +2366,11 @@ window.__ModuleLoader__.load({
 
       /** Render the flyout for the currently open entry only. */
       const renderFlyout = () => {
+        // The height every section is measured against: the panel's usable height
+        // minus the panel's own head, computed once so all sections in every
+        // flyout read the same third. Reading it here (rather than deriving it
+        // inside the CSS) is what makes the cap a number instead of a percentage.
+        const sectionBudget = Math.max(0, flyoutSectionedHeight(window.innerHeight, frameTopClearance()) - FLYOUT_CHROME_HEIGHT)
         /**
          * Build one foldable section with its fold state bound.
          *
@@ -2381,6 +2392,7 @@ window.__ModuleLoader__.load({
             open: sectionIsOpen(foldedSections, id, defaultOpen),
             onToggle: () => toggleSection(id),
             actions,
+            maxHeight: sectionMaxHeight(sectionBudget),
           }, children)
         }
         if (open === 'workspace') {
