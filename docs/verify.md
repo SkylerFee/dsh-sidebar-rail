@@ -121,7 +121,7 @@ Judgement calls（Duplicated Code、Data Clumps、Divergent Change 等）**本�
 
 **修复**：改由 JS 内联下发像素值——`sectionBudget = flyoutSectionedHeight(innerHeight, clearance) − FLYOUT_CHROME_HEIGHT`，再 `sectionMaxHeight()` 取三分之一，直接写进每个分区的 `style.maxHeight`。已同步到 profile，`npm run check` 通过。
 
-**验证状态**：`client-hmr` 已确认热重载（事件流捕获到 `{"type":"rebuilt","id":"@skylerfee/dsh-sidebar-rail","rev":"9efe74fd7703"}`，服务端 bundle 含新逻辑），但**已挂载的 React 组件实例未重新渲染**，页面仍在跑旧渲染结果。需要主动刷新一次页面才能看到修复后的分区高度。
+**验证状态（重要）**：`client-hmr` 只重建 client 模块，**不替换已插入的 `<style>` 节点**（样式由 `apply()` 里的 `ctx.effect` 一次性写入 `document.head`）。因此 CSS 相关改动（包括本次 B3 修复的百分比兜底规则）在 HMR 之后**仍是旧值**，必须手动刷新页面（`Cmd+R`）才生效。上一轮据此误判过「修复未生效」，实际是样式表没更新。`client-hmr` 已确认热重载（事件流捕获到 `{"type":"rebuilt","id":"@skylerfee/dsh-sidebar-rail","rev":"9efe74fd7703"}`，服务端 bundle 含新逻辑），但**已挂载的 React 组件实例未重新渲染**，页面仍在跑旧渲染结果。需要主动刷新一次页面才能看到修复后的分区高度。
 
 **算式与实测的交叉验证**（修复正确性的代码级证据，不依赖刷新）：
 

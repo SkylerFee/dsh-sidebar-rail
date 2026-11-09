@@ -349,16 +349,19 @@ window.__ModuleLoader__.load({
   color:var(--dsw-alias-label-primary); }
 .dsr-flyout-body { overflow-y:auto; padding:2px 6px 8px; min-height:0; }
 .dsr-flyout-foot { border-top:1px solid var(--dsw-alias-border-l1); padding:6px; }
-/* Sections (0.4.0). Each section is a header that never scrolls plus a body
-   that scrolls on its own, so folding or scrolling one leaves the others put.
-   The cap comes from JS as --dsr-section-cap (a third of the usable height,
-   computed by sectionMaxHeight); the percentage is only the fallback when that
-   custom property is missing, and it resolves against this container's definite
-   height. flex:0 1 auto rather than flex:1 keeps a short section at its natural
-   height instead of stretching it to the cap. */
+/* Sections (0.4.0). Each section is a header that never scrolls plus a body that
+   scrolls on its own, so folding or scrolling one leaves the others put.
+   flex:0 1 auto keeps a short section at its content height instead of stretching
+   it; without the cap below, one long list fills the whole panel -- that was
+   acceptance B3's failure (566px against a 316px third).
+   The cap is applied twice on purpose: a pixel value from sectionBudgetFor() lands
+   inline per section and outranks this rule, while the percentage here is the
+   fallback that still bounds a section if the inline value ever goes missing. The
+   container is a definite-height flex column, which is what that percentage
+   resolves against. */
 .dsr-sections { display:flex; flex-direction:column; flex:1 1 auto; min-height:0; overflow:hidden; }
 .dsr-section { display:flex; flex-direction:column; flex:0 1 auto; min-height:0;
-  max-height:var(--dsr-section-cap, 33.3333%); }
+  max-height:33.3333%; }
 .dsr-section + .dsr-section { border-top:1px solid var(--dsw-alias-border-l1); }
 .dsr-section-head { flex:none; display:flex; align-items:center; gap:4px; padding:8px 8px 5px 10px; }
 .dsr-section-toggle { display:flex; align-items:center; gap:6px; flex:1 1 auto; min-width:0;
