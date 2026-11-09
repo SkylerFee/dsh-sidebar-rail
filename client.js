@@ -135,14 +135,10 @@ window.__ModuleLoader__.load({
       'status.warning': '等待你的操作',
       'status.done': '已完成，未查看',
       'status.idle': '空闲',
-      'section.tasks': '已创建的任务',
-      'section.plugins': '我的插件',
       'section.panels': '其他面板',
       'pin.pin': '置顶项目',
       'pin.unpin': '取消置顶',
       'empty.workspaces': '还没有工作区',
-      'empty.tasks': '还没有定时任务',
-      'empty.plugins': '还没有安装自己的插件',
       'state.loading': '加载中…',
       'state.failed': '加载失败，可打开面板查看',
       'action.openPanel': '打开面板',
@@ -189,14 +185,10 @@ window.__ModuleLoader__.load({
       'status.warning': 'Waiting for you',
       'status.done': 'Finished, unread',
       'status.idle': 'Idle',
-      'section.tasks': 'Scheduled tasks',
-      'section.plugins': 'My plugins',
       'section.panels': 'Other panels',
       'pin.pin': 'Pin project',
       'pin.unpin': 'Unpin project',
       'empty.workspaces': 'No workspaces yet',
-      'empty.tasks': 'No scheduled tasks',
-      'empty.plugins': 'No plugins of your own yet',
       'state.loading': 'Loading…',
       'state.failed': 'Could not load; open the panel instead',
       'action.openPanel': 'Open panel',
@@ -681,19 +673,16 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * One project row: disclosure caret, name, pin, and new-session action.
+     * 一个项目行：展开箭头、名称、图钉、新建会话。
      *
-     * Separate from `Row` on purpose. A project row carries three affordances
-     * that no session row has, and the caret must stay visible even while the
-     * pointer is elsewhere (a session row's pin only appears on hover), so
-     * folding it into `Row` would mean a pile of `undefined`-checks in every
-     * other list.
+     * **刻意不复用 `Row`**：项目行有三个任何会话行都没有的操作，且展开箭头必须
+     * 常显（会话行的图钉只在悬停时出现）。并进 `Row` 会让其余每个列表都要做一堆
+     * `undefined` 判断。
      *
-     * The caret and the name are one button: clicking either folds, which is what
-     * a disclosure row conventionally does. The pin and the new-session buttons
-     * stop propagation so they do not also fold the row.
-     * @param props - Row content, fold state, and the three callbacks.
-     * @returns The project row element.
+     * 箭头与名称是同一个按钮：点哪个都收起/展开，符合 disclosure 行的惯例。
+     * 图钉与新建会话按钮阻止冒泡，避免顺带把行折起来。
+     * @param props - 行内容、展开态与三个回调。
+     * @returns 项目行元素。
      */
     function ProjectRow({ title, meta, open, onToggleOpen, pinned, pinLabel, onTogglePin, newSessionLabel, onNewSession, onClick }) {
       return h('div', { className: 'dsr-project-row', 'data-pinned': pinned === true ? 'true' : undefined },
@@ -855,19 +844,15 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * One foldable section: a header that never scrolls, plus its own scroller.
+     * 一个可收起的分区：不随内容滚动的标题行 + 自己的滚动区。
      *
-     * The header is a button so the fold is reachable by keyboard, and it carries
-     * `aria-expanded` so the state is announced. The body unmounts when folded
-     * rather than hiding with CSS: a folded section must not keep its list
-     * mounted, or the next open would resume at a stale scroll offset.
+     * 标题是按钮，键盘可达，并带 `aria-expanded` 让状态可被朗读。收起时**卸载**
+     * 内容区而不是用 CSS 隐藏——留着挂载会让下次展开回到旧的滚动位置。
      *
-     * The height cap arrives as the `--dsr-section-cap` custom property from the
-     * panel, so all sections share one computed third of the usable height
-     * instead of each guessing at the room it has.
-     * @param props - Title, open flag, fold callback, optional header actions and
-     *   the section body.
-     * @returns The section element.
+     * 高度上限由面板通过 `--dsr-section-cap` 下发，所有分区共享同一个「可用高度
+     * 的三分之一」，而不是各自猜自己有多少空间。
+     * @param props - 标题、展开标志、收起回调、可选的行内操作、分区内容。
+     * @returns 分区元素。
      */
     function FlyoutSection({ title, open, onToggle, actions, children }) {
       return h('div', {
@@ -1123,20 +1108,17 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Flatten one directory-picker outcome into the three cases a caller renders.
+     * 把目录选择器的三种结局收敛成调用方唯一需要处理的形状。
      *
-     * The host's `pickDirectory` answers a path, or `null` when the operator
-     * cancelled, and throws when the composed backend cannot serve the verb at
-     * all (the `browse` backend has no `native` capability, see ADR-0005). The
-     * caller must not have to know which of those it got, so this maps them onto
-     * one shape: `picked` carries the path, `cancelled` is the silent case, and
-     * `failed` carries text a person can act on.
+     * 宿主的 `pickDirectory` 有三条出路：给出路径、用户取消时返回 `null`、
+     * 后端不具备 `native` 能力时抛错（`browse` 后端即如此，见 ADR-0005）。
+     * 调用方不该关心自己拿到的是哪一种，所以这里统一成：`picked` 带路径、
+     * `cancelled` 是静默分支、`failed` 带一句人能照做的提示。
      *
-     * A relative path is a failure rather than a picked directory: the host's
-     * registry keys projects by absolute path, so registering `repo/alpha` would
-     * create a row that never resolves to the real directory.
-     * @param value - Whatever the pick call resolved to, or the rejection it threw.
-     * @returns `{ kind: 'picked', path }`, `{ kind: 'cancelled' }` or `{ kind: 'failed', message }`.
+     * 相对路径判为失败而非选中：宿主按绝对路径登记项目，登记 `repo/alpha`
+     * 只会得到一条永远解析不到真实目录的记录。
+     * @param value - pick 调用 resolve 出的值，或它抛出的拒绝原因。
+     * @returns `{ kind: 'picked', path }`、`{ kind: 'cancelled' }` 或 `{ kind: 'failed', message }`。
      */
     function pickedDirectory(value) {
       if (value instanceof Error) {
@@ -1155,29 +1137,26 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Build the rows one project expands into.
+     * 构造一个项目展开后要显示的会话行。
      *
-     * Deliberately the opposite policy from the recent-sessions section: this
-     * list answers "what is in this project", so nothing is filtered out — an
-     * archived or blank session is still a session of that project and stays
-     * listed, only flagged so the renderer can mark it. Order is the host's own
-     * `sessionIds` order, never re-sorted by time, and there is no count cap.
+     * 策略**刻意与「最近会话」区相反**：这份列表回答「这个项目里有什么」，
+     * 所以一条都不筛——归档或空白会话仍是该项目的会话，照列，只用标记位
+     * 让渲染层标注。顺序沿用宿主 `sessionIds` 的成员顺序，绝不按时间重排，
+     * 也不设条数上限。
      *
-     * Subagent children never appear here, but that is the host's doing rather
-     * than a filter: its `attachSession` has no subagent call site, so those
-     * sessions never join `sessionIds`. Filtering by `origin` again would only
-     * risk hiding a real session once the host changes its mind.
+     * 子代理子会话不会出现在这里，但这是宿主的行为而非本函数过滤：宿主
+     * `attachSession` 没有 subagent 调用点，那些会话根本不进 `sessionIds`。
+     * 再按 `origin` 筛一遍，只会在宿主改变行为时误伤真实会话。
      *
-     * A member missing from the session snapshot still gets a row built from the
-     * id: `sessionIds` comes from the workspace registry and `byId` from the
-     * session snapshot, and the two can be a frame apart during a rename or a
-     * delete. Dropping the row would make a session vanish from its own project.
-     * @param sessionIds - `WorkspaceView.sessionIds`, in host order.
-     * @param byId - Session summaries from `useSessions`, keyed by id.
-     * @param language - Active locale id, for the relative-time meta.
-     * @param archivedIds - Archived session ids, used only to mark rows.
-     * @param shownSessionId - The session the main view shows, used only to mark.
-     * @returns Rows `{ id, title, meta, archived, current }`, unsorted and unfiltered.
+     * 快照里缺失的成员仍会产出一行（标题退化为 id）：`sessionIds` 来自工作区
+     * registry，`byId` 来自会话快照，重命名或删除的瞬间两者可能差一帧。
+     * 丢掉该行会让一个会话从它自己的项目里凭空消失。
+     * @param sessionIds - `WorkspaceView.sessionIds`，宿主顺序。
+     * @param byId - `useSessions` 提供的会话摘要，按 id 索引。
+     * @param language - 当前 locale id，用于相对时间。
+     * @param archivedIds - 归档会话 id，只用于打标记。
+     * @param shownSessionId - 主视图正在显示的会话，只用于打标记。
+     * @returns 行数组 `{ id, title, meta, archived, current }`，不排序、不过滤。
      */
     function projectSessionRows(sessionIds, byId, language, archivedIds, shownSessionId) {
       if (!Array.isArray(sessionIds)) return []
@@ -1417,20 +1396,16 @@ window.__ModuleLoader__.load({
      */
     const SECTION_HEIGHT_RATIO = 1 / 3
     /**
-     * Height a sectioned flyout occupies: everything below the window chrome.
+     * 分区浮层应占的高度：窗口 chrome 带之下到底边的全部空间。
      *
-     * The 0.3.x flyout used a share of the viewport, which left a gap above and
-     * below it once sections arrived. 0.4.0 pins the panel from
-     * `--dsh-frame-top-clearance` (the 48px strip holding the traffic lights and
-     * the host's reopen controls) down to the window bottom. Deliberately NOT
-     * derived from the content: the panel must not resize as rows arrive, as the
-     * recent count steps, or as a section is folded — that property is the whole
-     * reason the height is computed rather than fitted.
-     * @param viewportHeight - `window.innerHeight`.
-     * @param topClearance - Height of the window-chrome strip to stay below. An
-     *   unusable value falls back to the documented 48px rather than 0: drawing
-     *   over the traffic lights is worse than losing 48px to the chrome.
-     * @returns A pixel height, never negative and never NaN.
+     * 0.3.x 用视口比例定高，分区化之后上下都会留出空隙。0.4.0 把浮层顶边钉在
+     * `--dsh-frame-top-clearance`（承载 macOS 红绿灯与宿主重开按钮的那 48px）
+     * 之下，底边贴住窗口底。**刻意不按内容推导**：条数变化、条目增减、分区
+     * 收起都不能改变面板高度——这正是「算出来」而不是「撑出来」的原因。
+     * @param viewportHeight - `window.innerHeight`。
+     * @param topClearance - 需避开的 chrome 带高度。取不到时回退到文档里的
+     *   48px 而不是 0：盖住红绿灯比少用 48px 更糟。
+     * @returns 像素高度，不为负、不为 NaN。
      */
     function flyoutSectionedHeight(viewportHeight, topClearance) {
       const viewport = Number.isFinite(viewportHeight) && viewportHeight > 0 ? viewportHeight : 0
@@ -1440,14 +1415,13 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Maximum height one section may claim before it starts scrolling.
+     * 单个分区在开始自身滚动前可占的最大高度。
      *
-     * A third of the usable height, floored to a whole pixel so three sections
-     * cannot add up to more than the available room. The caller still applies
-     * `min(...)` against the section's own content height via flex: this is a
-     * ceiling, never a target.
-     * @param availableHeight - Height the flyout body may use.
-     * @returns A pixel ceiling, never negative and never NaN.
+     * 取可用高度的三分之一并向下取整，保证三个满额分区加起来不超过可用空间。
+     * 调用方仍通过 flex 与分区自身内容高度取 min：这是**上限**，不是目标值
+     * ——内容少的分区保持自然高度，不强行撑满。
+     * @param availableHeight - 浮层体可用的高度。
+     * @returns 像素上限，不为负、不为 NaN。
      */
     function sectionMaxHeight(availableHeight) {
       const available = Number.isFinite(availableHeight) && availableHeight > 0 ? availableHeight : 0
@@ -1456,16 +1430,15 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Whether one section renders open.
+     * 判断某个分区是否以展开态渲染。
      *
-     * The defaults are part of the spec: the workspace flyout opens every
-     * section, the task flyout opens only "进行中", the plugin flyout opens both.
-     * A section the person folded wins over the default; there is no persisted
-     * state, so every flyout opening starts from `defaultOpen`.
-     * @param folded - Map of section id to folded flag (component state).
-     * @param id - Section id, namespaced by flyout.
-     * @param defaultOpen - Whether the spec opens this section by default.
-     * @returns True when the section body should render.
+     * 默认值由 spec 规定：工作区浮层三区全展开，任务浮层只展开「进行中」，
+     * 插件浮层两区都展开。用户手动收起的结果覆盖默认值；展开状态不落盘，
+     * 所以每次打开浮层都从 `defaultOpen` 开始。
+     * @param folded - 分区 id → 是否已收起 的映射（组件 state）。
+     * @param id - 分区 id，已按浮层命名空间化。
+     * @param defaultOpen - spec 规定的默认展开态。
+     * @returns 该分区的内容区是否应渲染。
      */
     function sectionIsOpen(folded, id, defaultOpen) {
       const entry = folded !== null && typeof folded === 'object' ? folded[id] : undefined
@@ -1551,17 +1524,15 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Resolve the instant a scheduled task will next fire.
+     * 求一个定时任务的下次执行时刻。
      *
-     * `ScheduleCatalogEntry` carries `scheduledAt` plus an optional
-     * `deliveryFloorEndsAt` — there is no `nextRunAt` (ADR-0005). The host's own
-     * `ui-schedule` reads it as "the delivery floor if it is later than the
-     * scheduled time, otherwise the scheduled time". This plugin reproduces that
-     * formula instead of inventing a field: the previous code asked for
-     * `nextRunAt`/`next`, neither of which exists, so it only ever displayed
-     * anything because it happened to fall through to `scheduledAt`.
-     * @param task - One catalog entry.
-     * @returns An ISO-8601 string, or '' when the entry carries no usable time.
+     * `ScheduleCatalogEntry` 只有 `scheduledAt` 与可选的 `deliveryFloorEndsAt`，
+     * **没有 `nextRunAt`**（ADR-0005）。宿主 `ui-schedule` 的算法是「投递底限
+     * 晚于计划时间就用底限，否则用计划时间」。这里照抄该公式而不是发明字段：
+     * 旧实现去找 `nextRunAt`/`next`，两个键都不存在，能显示出时间纯属最后
+     * 回退到 `scheduledAt` 的巧合。
+     * @param task - 一条 catalog 条目。
+     * @returns ISO-8601 字符串；条目没有可用时间时返回空串。
      */
     function taskNextRun(task) {
       if (task === null || typeof task !== 'object') return ''
@@ -1604,18 +1575,16 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Resolve one host task's lifecycle status.
+     * 解析一个宿主任务的生命周期状态。
      *
-     * The host's `catalog()` returns every task in every state, so the plugin no
-     * longer filters by status — it groups instead. Only the three states the
-     * spec names are carried through; a fourth value the host might add later is
-     * dropped rather than folded into "active", because listing a stopped task as
-     * running is worse than not listing it.
+     * 宿主 `catalog()` 返回全部状态的任务，所以插件不再按状态过滤，改为分组。
+     * 只透传 spec 点名的三种状态；宿主日后可能新增的第四种值宁可丢弃，也不
+     * 塞进「进行中」——把已停止的任务显示成在运行，比不显示更糟。
      *
-     * Older rows carry no `status` and encode the same fact with an `active`
-     * boolean, so that pair is translated rather than guessed.
-     * @param task - One catalog entry.
-     * @returns 'active' | 'paused' | 'ended' | '' when unrecognised.
+     * 旧形状没有 `status`，用 `active` 布尔表达同一件事，这里做等价翻译而不
+     * 靠猜。
+     * @param task - 一条 catalog 条目。
+     * @returns 'active' | 'paused' | 'ended'；无法识别时返回空串。
      */
     function taskStatusOf(task) {
       if (task === null || typeof task !== 'object') return ''
@@ -1629,13 +1598,12 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Split task rows into the spec's three sections.
+     * 把任务行拆成 spec 规定的三个分区。
      *
-     * All three keys are always present, including when their list is empty: an
-     * empty section still renders its header and its empty-state line, so a
-     * missing key would silently drop a heading the spec requires.
-     * @param rows - Rows from `normalizeTasks`.
-     * @returns `{ active, paused, ended }`, each an array in the host's order.
+     * 三个键**恒存在**，空列表也一样：空分区仍要渲染标题与空态文案，缺键会
+     * 让 spec 要求的标题静默消失。
+     * @param rows - `normalizeTasks` 产出的行。
+     * @returns `{ active, paused, ended }`，各自保持宿主顺序。
      */
     function groupTasksByStatus(rows) {
       const groups = { active: [], paused: [], ended: [] }
@@ -1702,15 +1670,14 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Split plugin rows into the spec's two sections.
+     * 把插件行拆成 spec 规定的两个分区。
      *
-     * "Disabled" means installed but switched off — the plugin is present on
-     * disk and the person can turn it back on. A bundle that is not installed at
-     * all (an official on-demand plugin) is a different thing: choosing it starts
-     * an install flow, which this flyout deliberately does not offer. `normalizePlugins`
-     * already drops those, so the split here only needs the `enabled` flag.
-     * @param rows - Rows from `normalizePlugins`.
-     * @returns `{ enabled, disabled }`, each an array in name order.
+     * 「未启用」指**已安装但被关闭**——插件就在磁盘上，用户随时能再打开。
+     * 完全没安装的（官方按需插件）是另一回事：点它会触发安装流程，而本浮层
+     * 刻意不提供该流程。两侧都校验 `installed`，因为一条「未安装却声称
+     * enabled」的行是畸形数据，不该被当成「已启用」。
+     * @param rows - `normalizePlugins` 产出的行。
+     * @returns `{ enabled, disabled }`，各自按名称排序。
      */
     function groupPluginsByState(rows) {
       const groups = { enabled: [], disabled: [] }
@@ -1982,6 +1949,12 @@ window.__ModuleLoader__.load({
        */
       const dismiss = useCallback(() => {
         setOpen(null)
+        // The rail never unmounts, so component state alone would carry a folded
+        // section (and an expanded project) into the next opening. The spec says
+        // every opening starts from the defaults, so closing resets them.
+        setFoldedSections({})
+        setExpandedProjects({})
+        setProjectAction({ phase: 'idle' })
       }, [])
 
       /**
@@ -1995,6 +1968,11 @@ window.__ModuleLoader__.load({
       const retract = useCallback(() => {
         setOpen(null)
         setRevealed(false)
+        // Same reason as `dismiss`: a closed flyout must forget its folds and
+        // expanded projects, or the next opening resumes someone else's state.
+        setFoldedSections({})
+        setExpandedProjects({})
+        setProjectAction({ phase: 'idle' })
       }, [])
 
       // The account seat is read once per mount. Per the PRD's non-goals this
@@ -2056,12 +2034,24 @@ window.__ModuleLoader__.load({
       }
 
       /** Merge a remote descriptor into one list slot, normalizing ready rows. */
-      const writer = (setState, normalize) => (next) => setState((current) => {
+      const writer = (setState, normalize, label) => (next) => setState((current) => {
         if (typeof next === 'function') return next(current)
         // 'unavailable' means the optional remote is absent — that is a failure
         // the person can act on ("open panel"), never an empty list.
         const phase = next.phase === 'unavailable' ? 'failed' : next.phase
-        return { phase, rows: phase === 'ready' ? normalize(next.rows) : [] }
+        const rows = phase === 'ready' ? normalize(next.rows) : []
+        if (phase === 'ready') {
+          // CODING_STANDARDS §6 asks for a log at key decisions. The normalise
+          // step is one: it drops rows the host sent (an unrecognised task
+          // status, a bundle that is not installed), and a silent drop is
+          // invisible when someone asks "why is my plugin missing". Cheap to log,
+          // and it never carries a title or a path.
+          const received = Array.isArray(next.rows) ? next.rows.length : -1
+          if (received >= 0 && received !== rows.length) {
+            console.info('[dsh-sidebar-rail] %s: kept %d of %d rows', label, rows.length, received)
+          }
+        }
+        return { phase, rows }
       })
 
       useEffect(() => {
@@ -2071,10 +2061,10 @@ window.__ModuleLoader__.load({
           return undefined
         }
         if (open === 'tasks') {
-          return loadRemote('tasks', loaders.current.scheduleCatalog, writer(setTasks, normalizeTasks))
+          return loadRemote('tasks', loaders.current.scheduleCatalog, writer(setTasks, normalizeTasks, 'tasks'))
         }
         if (open === 'plugins') {
-          return loadRemote('plugins', loaders.current.pluginInventory, writer(setPlugins, normalizePlugins))
+          return loadRemote('plugins', loaders.current.pluginInventory, writer(setPlugins, normalizePlugins, 'plugins'))
         }
         return undefined
       }, [open])
@@ -2166,6 +2156,24 @@ window.__ModuleLoader__.load({
        */
       const addProject = useCallback(() => {
         setProjectAction({ phase: 'busy' })
+        // AGENTS.md hard rule 8: an optional Host call must never leave the UI in
+        // a permanent loading state. The native chooser can hang (it is an OS
+        // dialog reached over Remote), and `create` is an RPC, so the whole
+        // sequence is raced against the same budget the list loaders use.
+        let settled = false
+        const timer = window.setTimeout(() => {
+          if (settled) return
+          settled = true
+          console.warn('[dsh-sidebar-rail] add project timed out')
+          setProjectAction({ phase: 'failed', message: t('state.addProjectFailed') })
+        }, REMOTE_TIMEOUT_MS)
+        /** Mark the sequence finished so the timeout stops firing. */
+        const finish = (next) => {
+          if (settled) return
+          settled = true
+          window.clearTimeout(timer)
+          setProjectAction(next)
+        }
         // The pick call is wrapped so its rejection reaches `pickedDirectory`
         // instead of the outer catch: a refused backend is a specific, expected
         // outcome (ADR-0005), not a generic failure, and the caller should see
@@ -2182,7 +2190,7 @@ window.__ModuleLoader__.load({
           .then((picked) => {
             const outcome = pickedDirectory(picked)
             if (outcome.kind === 'cancelled') {
-              setProjectAction({ phase: 'idle' })
+              finish({ phase: 'idle' })
               return undefined
             }
             if (outcome.kind === 'failed') {
@@ -2190,24 +2198,24 @@ window.__ModuleLoader__.load({
               // A refused picker is the one case worth naming precisely: the
               // person can still add the project, just through the host's own
               // sidebar, so point there instead of reporting a dead end.
-              setProjectAction({ phase: 'failed', message: t('state.addProjectFailed') })
+              finish({ phase: 'failed', message: t('state.addProjectFailed') })
               return undefined
             }
             if (typeof createWorkspace !== 'function') {
-              setProjectAction({ phase: 'failed', message: t('state.addProjectUnavailable') })
+              finish({ phase: 'failed', message: t('state.addProjectUnavailable') })
               return undefined
             }
             return Promise.resolve(createWorkspace(outcome.path)).then(
-              () => { setProjectAction({ phase: 'idle' }) },
+              () => { finish({ phase: 'idle' }) },
               (error) => {
                 console.warn('[dsh-sidebar-rail] add project failed', error)
-                setProjectAction({ phase: 'failed', message: t('state.addProjectFailed') })
+                finish({ phase: 'failed', message: t('state.addProjectFailed') })
               },
             )
           })
           .catch((error) => {
             console.warn('[dsh-sidebar-rail] add project failed', error)
-            setProjectAction({ phase: 'failed', message: t('state.addProjectFailed') })
+            finish({ phase: 'failed', message: t('state.addProjectFailed') })
           })
         // `t` is deliberately not a dependency: the host hands a fresh translator
         // every render, so listing it would rebuild this callback each time for no
@@ -2262,40 +2270,12 @@ window.__ModuleLoader__.load({
       }, [openSession, retract])
 
       /**
-       * Draw the flyout shell for one entry.
+       * 浮层必须避开的那条窗口 chrome 带的高度。
        *
-       * `fixedHeight` pins the panel to a computed height instead of letting it
-       * shrink to its content: once a flyout is sectioned its height must not
-       * follow how many rows happen to exist, or stepping the recent count would
-       * resize the whole panel (the 0.3.2 fix this must not undo).
-       *
-       * `sections` renders the body as the section container instead of the usual
-       * scrolling wrapper. The wrapper has to be skipped entirely: as a single
-       * scroll container it would swallow the scroll, and the per-section
-       * scrollers inside could never be independent.
-       *
-       * `topFlush` pins the panel's top edge to the window-chrome line rather than
-       * below the anchor: a sectioned panel runs from under the traffic lights to
-       * the window bottom, so it neither floats mid-screen nor covers the host's
-       * reopen controls (AGENTS.md hard rule 3).
-       * @param title - Flyout heading.
-       * @param body - Panel body, or the section list when `sections` is set.
-       * @param foot - Optional pinned foot.
-       * @param bottomAligned - True for the account seat, which anchors at the foot.
-       * @param fixedHeight - Pixel height to occupy, or undefined to fit content.
-       * @param sections - True to render the body as independent sections.
-       * @param topFlush - True to start at the chrome line, not below the anchor.
-       * @returns The flyout element.
-       */
-      /**
-       * Height of the window-chrome strip the flyout must stay below.
-       *
-       * The host declares `--dsh-frame-top-clearance` on the root element (48px on
-       * macOS Desktop) so portalled overlays inherit it. Reading it at render time
-       * keeps a future host change from needing a plugin release; an unreadable
-       * value falls back to the documented 48px, because drawing over the traffic
-       * lights is worse than losing 48px to the chrome.
-       * @returns The strip height in CSS pixels.
+       * 宿主在根元素上声明 `--dsh-frame-top-clearance`（macOS Desktop 为 48px），
+       * portal 出去的浮层会继承它。渲染时读取让宿主日后调整不必等插件发版；
+       * 读不到时退回文档规定的 48px——盖住红绿灯比少用 48px 更糟。
+       * @returns chrome 带的像素高度。
        */
       const frameTopClearance = () => {
         try {
@@ -2310,6 +2290,27 @@ window.__ModuleLoader__.load({
         return FRAME_TOP_CLEARANCE_FALLBACK
       }
 
+      /**
+       * 画出某个入口对应的浮层外壳。
+       *
+       * `fixedHeight` 把面板钉在算出的高度上，而不是让它贴内容收缩：分区化之后，
+       * 高度绝不能再随条目多少变化，否则步进最近会话条数就会改变面板高度
+       * （0.3.2 修掉的缺陷，不得回退）。
+       *
+       * `sections` 让 body 直接作为分区容器，跳过常规的滚动包装层：那层一旦存在
+       * 就会独占滚动，内部各分区便无法独立滚动。
+       *
+       * `topFlush` 把面板顶边钉在 chrome 带下沿而不是锚点下方：分区面板要从红绿灯
+       * 之下占到底边，既不悬在屏幕中间，也不盖住宿主的重开按钮（AGENTS.md 硬约束 3）。
+       * @param title - 浮层标题。
+       * @param body - 面板内容；`sections` 为真时是分区列表。
+       * @param foot - 可选的固定底栏。
+       * @param bottomAligned - 账号座位为真，此时底边对齐。
+       * @param fixedHeight - 占用的像素高度；留空则贴合内容。
+       * @param sections - 为真时把 body 渲染成独立分区。
+       * @param topFlush - 为真时从 chrome 带下沿起，而非锚点下方。
+       * @returns 浮层元素。
+       */
       const flyoutShell = (title, body, foot, bottomAligned, fixedHeight, sections, topFlush) => {
         const placed = flyoutPlacement(anchor, window.innerHeight, bottomAligned)
         // A flush panel owns the whole column below the chrome strip, so neither
@@ -2398,13 +2399,16 @@ window.__ModuleLoader__.load({
            */
           const projectRow = (row) => {
             const openProjects = expandedProjects[row.id] === true
-            const sessions = projectSessionRows(
+            // Named `sessionRows`, not `sessions`: a `const sessions` here would
+            // shadow the `sessions` this initializer reads from and hit the
+            // temporal dead zone (ReferenceError on every render).
+            const sessionRows = projectSessionRows(
               row.sessionIds, sessions.byId, language, archivedIds, shownSessionId,
             )
             const body = openProjects
-              ? (sessions.length === 0
+              ? (sessionRows.length === 0
                 ? h(Empty, null, t('empty.projectSessions'))
-                : sessions.map((entry) => h(Row, {
+                : sessionRows.map((entry) => h(Row, {
                   key: `ps-${row.id}-${entry.id}`,
                   title: entry.title,
                   // Archived rows stay listed but say so, so a session that no

@@ -48,6 +48,22 @@
 - CSS 类一律 `.dsr-*` 前缀；`localStorage` 只用 `dsh.sidebar-rail.v1`；样式节点带 `data-dsh-sidebar-rail` 标记。
 - 文案走 `client.js` 内的 `zh`/`en` 字典（脚本会校验两侧对齐），**不要在 JSX 里硬编码中英文**。
 
+## 7. 渲染层没有单测，靠这些规则兜底
+
+`test/data.test.mjs` 只切片 `#region pure-helpers` / `#region pure-data` 执行（第 2 条），
+**渲染代码零覆盖**。所以下面这些错误 `npm run check` 抓不到，只能靠 review 与这组规则：
+
+- **不要用与外层同名的 `const` 接住计算中间值。**
+  `const sessions = projectSessionRows(row.sessionIds, sessions.byId, …)` 这种写法会命中
+  temporal dead zone，在每次渲染时抛 `ReferenceError`，而所有单测仍然全绿。
+  中间值另取名字（`sessionRows`）。0.4.0 的 #3 票真实踩过。
+- **只在打开态执行的代码路径，单测与静态检查都不会跑到。**
+  浮层正文、`projectRow` 这类只在 `open === '…'` 分支里求值的函数，出错只有真机能暴露。
+  改动它们时，必须在 review 里逐个调用点核对变量来源，并在 `docs/verify.md` 记录真机结果。
+- **新增的 `useState` 要问「谁负责把它重置」。**
+  轨组件常驻挂载（`RailColumn` 从不卸载），所以组件 state 会跨浮层开关存活。
+  凡是不持久化的 UI 状态，都必须在该浮层关闭时显式清空，否则下次打开会继承上次的状态。
+
 ## 相关文档
 
 - 硬约束与导航：[AGENTS.md](AGENTS.md)

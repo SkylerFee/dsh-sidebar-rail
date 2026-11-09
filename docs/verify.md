@@ -69,6 +69,27 @@
 
 真机验收时可直接比对：浮层顶边应 ≈ 48（chrome 带下沿），底边应 ≈ 982，高度 ≈ 934；某区内容超过约 311px 后应开始自己滚动。
 
+### 两轴 code review 的发现与处置（2026-11-09）
+
+对 `68668f7...HEAD` 做了 Standards + Spec 两轴审查。Standards 轴报出的问题**已全部处置**：
+
+| 发现 | 判定 | 处置 |
+| --- | --- | --- |
+| **BLOCKER**：`const sessions = projectSessionRows(row.sessionIds, sessions.byId, …)` 同名 `const` 自引用，命中 TDZ，工作区浮层每次渲染抛 `ReferenceError` | ✅ 属实，已复现 | 改名 `sessionRows`。单测测的是纯函数，调用点没覆盖，所以此前 `npm run check` 一直绿 |
+| 违反硬约束 #8：`addProject` 没有超时，选择器/Create 卡住会让按钮永久停在「选择中…」 | ✅ 属实 | 整段与 `REMOTE_TIMEOUT_MS` 竞速，超时进失败态 |
+| 展开/收起状态在浮层关闭后不重置（`RailColumn` 从不卸载） | ✅ 属实，与 spec「每次打开都是默认状态」和 B14 矛盾 | `dismiss`/`retract` 关闭时清空 `foldedSections`、`expandedProjects`、`projectAction` |
+| 新增函数 JSDoc 是英文，违反 §6「每个函数前有中文 JSDoc」 | ✅ 属实 | 本次 diff 新增的 11 个函数全部改为中文（全仓另有 ~117 个英文 JSDoc 属 0.3.x 历史债，不在本票范围） |
+| `flyoutShell` 的 JSDoc 因插入 `frameTopClearance` 而失联 | ✅ 属实 | 重排为「`frameTopClearance` 自带 doc → `flyoutShell` 的 doc 紧贴其定义」 |
+| 丢弃未知任务状态 / 未安装插件时无日志 | ⚠️ 部分成立 | 纯函数区不允许副作用（§2），改为在 `writer` 归一化边界记录「保留 N / 收到 M」并带 `[dsh-sidebar-rail]` 前缀 |
+| 4 个 i18n 键已成死键（`section.tasks`、`section.plugins`、`empty.tasks`、`empty.plugins`） | ✅ 属实 | 删除；`check.mjs` 只校验中英对齐，不校验使用，所以此前没报 |
+
+Judgement calls（Duplicated Code、Data Clumps、Divergent Change 等）**本轮不处理**：
+它们描述的是可读性取舍，改动面覆盖 `renderFlyout` 全部五个分支，风险高于收益。
+
+反面暴露的仓库级问题已写进 [CODING_STANDARDS.md](../CODING_STANDARDS.md) 第 7 条：
+渲染层零单测覆盖，所以「同名 `const` 自引用」「只在打开态执行的路径」「新增 state 谁重置」
+这三类错误必须靠 review 与规范约束，不能指望 `npm run check`。
+
 ### 未验证（真机，本轮未能执行）
 
 **原因**：本会话运行在 DSH Web GUI 中，工具面内 `ps` 被沙箱禁止、启动日志停在 2026-09-29，**无法确认当前前台是否为 macOS Desktop 窗口**；同时 `~/.dsh/profiles/` 不在会话可写范围（`workspace-write` 只覆盖本仓库），无法把 profile 里的 npm `0.3.3` 副本切成指向本仓库的 `link:`。因此 B1–B15 中所有**像素测量**与**目视/点击**类断言一项都没有执行。
