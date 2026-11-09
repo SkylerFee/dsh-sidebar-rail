@@ -33,13 +33,13 @@ ${region('pure-data')}
 return { EMPTY_SESSIONS, EMPTY_WORKSPACES, selectorHook, relativeTime, shortPath,
   resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT,
   deriveSections, normalizeTasks, normalizePlugins, currentSessionId, accountSeatState, accountClientMetadata, clientBuildVersion, readRecentCount,
-  remoteOutcome, flyoutPlacement, keepsRailRevealed, RAIL_REVEAL_WIDTH, readRecentCount, sessionStatusOf, formatWalletBalance, balanceRows, accountLinks, withAccountExtras, workspaceFlyoutHeight }`)()
+  remoteOutcome, flyoutPlacement, keepsRailRevealed, RAIL_REVEAL_WIDTH, readRecentCount, sessionStatusOf, formatWalletBalance, balanceRows, accountLinks, withAccountExtras, flyoutSectionedHeight, sectionMaxHeight, sectionIsOpen }`)()
 
 const { deriveSections, normalizeTasks, normalizePlugins, relativeTime, shortPath, selectorHook,
   resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT, currentSessionId, accountSeatState,
   accountClientMetadata, clientBuildVersion, readRecentCount, sessionStatusOf,
   formatWalletBalance, balanceRows, accountLinks, remoteOutcome, flyoutPlacement,
-  keepsRailRevealed, RAIL_REVEAL_WIDTH, EMPTY_SESSIONS, withAccountExtras, workspaceFlyoutHeight } = helpers
+  keepsRailRevealed, RAIL_REVEAL_WIDTH, EMPTY_SESSIONS, withAccountExtras, flyoutSectionedHeight, sectionMaxHeight, sectionIsOpen } = helpers
 
 /**
  * Build a SessionSummary-shaped row.
@@ -64,6 +64,17 @@ test('deriveSections: pinned workspaces lead, in pin order', () => {
   const sections = deriveSections(WORKSPACES, { byId: {} }, [], ['ws3', 'ws1'], 'en')
   assert.deepEqual(sections.pinnedRows.map((r) => r.id), ['ws3', 'ws1'])
   assert.deepEqual(sections.normalRows.map((r) => r.id), ['ws2'])
+})
+
+test('deriveSections: a pinned project lives in exactly one of the three sections', () => {
+  // 「置顶项目不在项目区重复」是 0.4.0 三分区的硬要求（spec 3.1）。这条锁住它：
+  // 两组的 id 集合必须互斥，且并集等于宿主全部项目。
+  const sections = deriveSections(WORKSPACES, { byId: {} }, [], ['ws2'], 'en')
+  const pinnedIds = sections.pinnedRows.map((r) => r.id)
+  const normalIds = sections.normalRows.map((r) => r.id)
+  assert.deepEqual(pinnedIds, ['ws2'])
+  assert.ok(!normalIds.includes('ws2'), 'a pinned project must not repeat in the projects section')
+  assert.deepEqual([...pinnedIds, ...normalIds].sort(), ['ws1', 'ws2', 'ws3'])
 })
 
 test('deriveSections: normal rows keep host order when nothing is pinned', () => {
@@ -317,28 +328,53 @@ test('flyoutPlacement: never claims more height than the window has left', () =>
   assert.equal(account.top, undefined)
 })
 
-test('workspaceFlyoutHeight: a fixed viewport fraction, never above the budget', () => {
-  // 定高是「增减最近会话条数不改变浮层高度」的基础。
-  assert.equal(workspaceFlyoutHeight(1000, 1000), 700)
-  assert.equal(workspaceFlyoutHeight(800, 1000), 560)
-  // 可用空间优先：矮窗口或靠下的锚点让预算更小时，不能越出窗口。
-  assert.equal(workspaceFlyoutHeight(1000, 420), 420)
-  assert.equal(workspaceFlyoutHeight(1000, 0), 0)
-  // 脏输入不产出负值或 NaN。
-  assert.equal(workspaceFlyoutHeight(0, 500), 0)
-  assert.equal(workspaceFlyoutHeight(Number.NaN, 500), 0)
-  assert.equal(workspaceFlyoutHeight(1000, Number.NaN), 0)
+test('flyoutSectionedHeight: fills from below the chrome strip to the window bottom', () => {
+  // 0.4.0 起分区浮层不再用视口比例：从 --dsh-frame-top-clearance 之下占满到窗口底。
+  assert.equal(flyoutSectionedHeight(1000, 48), 952)
+  assert.equal(flyoutSectionedHeight(900, 48), 852)
+  // 窗口比 chrome 带还矮时没有可用高度，不能产出负值。
+  assert.equal(flyoutSectionedHeight(40, 48), 0)
+  // 脏输入不产出负值或 NaN。clearance 不可用时退回文档侧的默认 48px——
+  // 当成 0 会让浮层盖住 chrome 带，比少算 48px 更糟。
+  assert.equal(flyoutSectionedHeight(0, 48), 0)
+  assert.equal(flyoutSectionedHeight(Number.NaN, 48), 0)
+  assert.equal(flyoutSectionedHeight(1000, Number.NaN), 952)
+  assert.equal(flyoutSectionedHeight(1000, -10), 952)
 })
 
-test('workspaceFlyoutHeight: the same count change never resizes the panel', () => {
-  // 回归锁：条数从 1 调到 20 时，浮层高度必须完全一致——
-  // 高度只由视口与预算决定，与条数无关。
+test('flyoutSectionedHeight: the same count change never resizes the panel', () => {
+  // 回归锁（0.3.2 的性质）：条数从 1 调到 20 时，浮层高度必须完全一致。
+  // 占满高度只由视口与顶部 chrome 带决定，与内容、条数都无关。
   const viewport = 900
-  const budget = flyoutPlacement({ top: 100, bottom: 136 }, viewport, false).maxHeight
-  const forOne = workspaceFlyoutHeight(viewport, budget)
-  const forTwenty = workspaceFlyoutHeight(viewport, budget)
+  const forOne = flyoutSectionedHeight(viewport, 48)
+  const forTwenty = flyoutSectionedHeight(viewport, 48)
   assert.equal(forOne, forTwenty)
-  assert.equal(forOne, Math.min(Math.round(viewport * 0.7), budget))
+  assert.equal(forOne, 852)
+})
+
+test('sectionIsOpen: the spec default applies until the person folds a section', () => {
+  // 无记录时用该分区的规范默认值：工作区全展开，任务只有「进行中」默认展开。
+  assert.equal(sectionIsOpen({}, 'workspace.projects', true), true)
+  assert.equal(sectionIsOpen({}, 'tasks.ended', false), false)
+  // 折叠表存的是「是否已收起」：true 收起，false 表示显式展开。
+  assert.equal(sectionIsOpen({ 'tasks.active': true }, 'tasks.active', true), false)
+  assert.equal(sectionIsOpen({ 'tasks.ended': false }, 'tasks.ended', false), true)
+  assert.equal(sectionIsOpen({ 'tasks.active': false }, 'tasks.active', false), true)
+  // 其他分区的记录不影响本区；脏输入退回默认值而不是抛错。
+  assert.equal(sectionIsOpen({ other: true }, 'tasks.active', true), true)
+  assert.equal(sectionIsOpen(null, 'tasks.active', true), true)
+  assert.equal(sectionIsOpen(undefined, 'tasks.active', false), false)
+})
+
+test('sectionMaxHeight: each section caps at one third of the available height', () => {
+  // 内容超出 1/3 时该区自己滚动；不足 1/3 时不强行撑满（由 CSS 的 flex 负责）。
+  assert.equal(sectionMaxHeight(900), 300)
+  assert.equal(sectionMaxHeight(852), 284)
+  assert.equal(sectionMaxHeight(901), 300)
+  // 极小的可用高度向下取整到 0，不产出负值或小数。
+  assert.equal(sectionMaxHeight(2), 0)
+  assert.equal(sectionMaxHeight(0), 0)
+  assert.equal(sectionMaxHeight(Number.NaN), 0)
 })
 
 test('keepsRailRevealed: position decides, so an overlaid strip cannot oscillate', () => {

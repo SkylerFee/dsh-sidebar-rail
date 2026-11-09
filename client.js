@@ -112,6 +112,7 @@ window.__ModuleLoader__.load({
       'section.pinned': '置顶项目',
       'section.workspaces': '项目',
       'empty.recent': '还没有最近会话',
+      'empty.pinned': '还没有置顶项目',
       'section.recent': '最近会话',
       'settings.title': '侧栏图标轨',
       'settings.recentCount': '最近会话条数',
@@ -151,6 +152,7 @@ window.__ModuleLoader__.load({
       'section.pinned': 'Pinned projects',
       'section.workspaces': 'Projects',
       'empty.recent': 'No recent sessions yet',
+      'empty.pinned': 'No pinned projects yet',
       'section.recent': 'Recent sessions',
       'settings.title': 'Sidebar rail',
       'settings.recentCount': 'Recent count',
@@ -327,17 +329,28 @@ window.__ModuleLoader__.load({
   color:var(--dsw-alias-label-primary); }
 .dsr-flyout-body { overflow-y:auto; padding:2px 6px 8px; min-height:0; }
 .dsr-flyout-foot { border-top:1px solid var(--dsw-alias-border-l1); padding:6px; }
-/* The workspace flyout splits into two panes of equal height: workspaces above,
-   recent sessions below. Each pane is a fixed header row plus its own scroller,
-   so a header never scrolls away and the two panes never fight over height:
-   flex:1 1 0 divides whatever is left after the head and the count stepper.
-   The divider marks the boundary between them. */
-.dsr-split-body { display:flex; flex-direction:column; flex:1 1 auto; min-height:0; padding:0; }
-.dsr-pane { display:flex; flex-direction:column; flex:1 1 0; min-height:0; }
-.dsr-pane + .dsr-pane { border-top:1px solid var(--dsw-alias-border-l1); }
-.dsr-pane-head { flex:none; padding:10px 12px 4px; font-size:11px; font-weight:600;
-  letter-spacing:.04em; text-transform:none; color:var(--dsw-alias-label-secondary); }
-.dsr-pane-scroll { flex:1 1 auto; min-height:0; overflow-y:auto; padding:0 6px 8px; }
+/* Sections (0.4.0). Each section is a header that never scrolls plus a body
+   that scrolls on its own, so folding or scrolling one leaves the others put.
+   The cap comes from JS as --dsr-section-cap (a third of the usable height,
+   computed by sectionMaxHeight); the percentage is only the fallback when that
+   custom property is missing, and it resolves against this container's definite
+   height. flex:0 1 auto rather than flex:1 keeps a short section at its natural
+   height instead of stretching it to the cap. */
+.dsr-sections { display:flex; flex-direction:column; flex:1 1 auto; min-height:0; overflow:hidden; }
+.dsr-section { display:flex; flex-direction:column; flex:0 1 auto; min-height:0;
+  max-height:var(--dsr-section-cap, 33.3333%); }
+.dsr-section + .dsr-section { border-top:1px solid var(--dsw-alias-border-l1); }
+.dsr-section-head { flex:none; display:flex; align-items:center; gap:4px; padding:8px 8px 5px 10px; }
+.dsr-section-toggle { display:flex; align-items:center; gap:6px; flex:1 1 auto; min-width:0;
+  padding:0; border:none; background:transparent; font:inherit; font-size:11px; font-weight:600;
+  letter-spacing:.04em; color:var(--dsw-alias-label-secondary); text-align:left; cursor:pointer; }
+.dsr-section-toggle:hover, .dsr-section-toggle:focus-visible { color:var(--dsw-alias-label-primary); outline:none; }
+.dsr-section-caret { flex:none; display:flex; align-items:center; justify-content:center;
+  width:10px; height:10px; transition:transform 120ms ease; }
+.dsr-section[data-dsr-open="false"] .dsr-section-caret { transform:rotate(-90deg); }
+.dsr-section-title-text { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dsr-section-body { flex:1 1 auto; min-height:0; overflow-y:auto; padding:0 6px 8px; }
+@media (prefers-reduced-motion: reduce) { .dsr-section-caret { transition:none; } }
 .dsr-stepper { display:flex; align-items:center; gap:6px; padding:6px 6px 0; font-size:11px;
   color:var(--dsw-alias-label-primary); }
 .dsr-stepper-label { flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -441,6 +454,17 @@ window.__ModuleLoader__.load({
       viewBox: '0 0 24 24', width: 13, height: 13, fill: 'none', stroke: 'currentColor',
       strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true,
     }, h('path', { d: 'M9 4.5h6l-.8 5.2 3.3 3.3v1.5H6.5V13l3.3-3.3z' }), h('path', { d: 'M12 14.5V20' }))
+
+    /**
+     * Disclosure caret for a foldable section header.
+     *
+     * Points down when open; the section's CSS rotates it a quarter turn when
+     * closed, so one shape covers both states and the fold animates.
+     */
+    const IconChevron = () => h('svg', {
+      viewBox: '0 0 24 24', width: 10, height: 10, fill: 'none', stroke: 'currentColor',
+      strokeWidth: 2.4, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true,
+    }, h('path', { d: 'M5 9l7 7 7-7' }))
 
     // ------------------------------------------------------------- formatting --
     /**
@@ -708,6 +732,41 @@ window.__ModuleLoader__.load({
     /** Grouped heading inside a flyout body. */
     function Section({ title, children }) {
       return h('div', null, h('div', { className: 'dsr-section-title' }, title), children)
+    }
+
+    /**
+     * One foldable section: a header that never scrolls, plus its own scroller.
+     *
+     * The header is a button so the fold is reachable by keyboard, and it carries
+     * `aria-expanded` so the state is announced. The body unmounts when folded
+     * rather than hiding with CSS: a folded section must not keep its list
+     * mounted, or the next open would resume at a stale scroll offset.
+     *
+     * The height cap arrives as the `--dsr-section-cap` custom property from the
+     * panel, so all sections share one computed third of the usable height
+     * instead of each guessing at the room it has.
+     * @param props - Title, open flag, fold callback, optional header actions and
+     *   the section body.
+     * @returns The section element.
+     */
+    function FlyoutSection({ title, open, onToggle, actions, children }) {
+      return h('div', {
+        className: 'dsr-section',
+        'data-dsr-section': title,
+        'data-dsr-open': open === true ? 'true' : 'false',
+      },
+      h('div', { className: 'dsr-section-head' },
+        h('button', {
+          type: 'button',
+          className: 'dsr-section-toggle',
+          'aria-expanded': open === true,
+          'data-dsr-toggle': title,
+          onClick: onToggle,
+        },
+        h('span', { className: 'dsr-section-caret' }, h(IconChevron)),
+        h('span', { className: 'dsr-section-title-text' }, title)),
+        actions === undefined ? null : actions),
+      open === true ? h('div', { className: 'dsr-section-body' }, children) : null)
     }
 
     /** Centered empty or status line. */
@@ -1136,36 +1195,81 @@ window.__ModuleLoader__.load({
     /** Reserved height for the flyout head and foot when budgeting space. */
     const FLYOUT_CHROME_HEIGHT = 96
     /**
-     * Share of the viewport the workspace flyout aims for.
+     * Fallback height of the window-chrome strip.
      *
-     * The workspace flyout is the one panel whose content length swings wildly —
-     * two recent sessions or twenty. Pinning it to a viewport fraction means the
-     * panel keeps still while the person steps `recentCount` up and down, and the
-     * recent block scrolls instead of resizing the whole flyout. Other flyouts
-     * (tasks, plugins, account) stay content-sized: their lists are short and a
-     * fixed tall panel there would be mostly empty.
+     * The live value comes from `--dsh-frame-top-clearance` (48px on macOS
+     * Desktop, declared on the root element so portalled overlays inherit it).
+     * This constant is only the answer when the computed style is unreadable, so
+     * a missing token degrades to "stay below the traffic lights" instead of
+     * "draw over them".
      */
-    const WORKSPACE_FLYOUT_VIEWPORT_RATIO = 0.7
+    const FRAME_TOP_CLEARANCE_FALLBACK = 48
     /**
-     * Height the workspace flyout should occupy, clamped to the room available.
+     * Share of one section's height budget the section may grow to.
      *
-     * `flyoutPlacement` answers the space the panel MAY use; this answers the
-     * space it SHOULD use, so the panel does not grow and shrink as the recent
-     * count changes. The viewport fraction is a target, never a promise: near
-     * the window edges the available budget wins, because overflowing the window
-     * is worse than a shorter panel.
-     *
-     * The panes inside are split by flex (`flex:1 1 0` on both), not by arithmetic
-     * here: CSS knows the real head/stepper heights, a constant would not.
-     * @param viewportHeight - `window.innerHeight`.
-     * @param maxHeight - Budget returned by `flyoutPlacement`.
-     * @returns A pixel height, never above `maxHeight` and never negative.
+     * 0.4.0 replaces "two equal panes" with "one section per group, each with a
+     * fixed header and its own scroller". Three sections sharing the panel would
+     * leave every one of them short, so each may claim at most a third of the
+     * usable height and scrolls past that. A section with less content keeps its
+     * natural height instead of stretching: the fill is CSS (`flex: 0 1 auto`),
+     * not arithmetic here. See docs/adr/0004-sectioned-flyout.md.
      */
-    function workspaceFlyoutHeight(viewportHeight, maxHeight) {
+    const SECTION_HEIGHT_RATIO = 1 / 3
+    /**
+     * Height a sectioned flyout occupies: everything below the window chrome.
+     *
+     * The 0.3.x flyout used a share of the viewport, which left a gap above and
+     * below it once sections arrived. 0.4.0 pins the panel from
+     * `--dsh-frame-top-clearance` (the 48px strip holding the traffic lights and
+     * the host's reopen controls) down to the window bottom. Deliberately NOT
+     * derived from the content: the panel must not resize as rows arrive, as the
+     * recent count steps, or as a section is folded — that property is the whole
+     * reason the height is computed rather than fitted.
+     * @param viewportHeight - `window.innerHeight`.
+     * @param topClearance - Height of the window-chrome strip to stay below. An
+     *   unusable value falls back to the documented 48px rather than 0: drawing
+     *   over the traffic lights is worse than losing 48px to the chrome.
+     * @returns A pixel height, never negative and never NaN.
+     */
+    function flyoutSectionedHeight(viewportHeight, topClearance) {
       const viewport = Number.isFinite(viewportHeight) && viewportHeight > 0 ? viewportHeight : 0
-      const cap = Number.isFinite(maxHeight) && maxHeight > 0 ? maxHeight : 0
-      if (viewport === 0 || cap === 0) return 0
-      return Math.min(Math.round(viewport * WORKSPACE_FLYOUT_VIEWPORT_RATIO), cap)
+      if (viewport === 0) return 0
+      const clearance = Number.isFinite(topClearance) && topClearance > 0 ? topClearance : FRAME_TOP_CLEARANCE_FALLBACK
+      return Math.max(0, Math.round(viewport - clearance))
+    }
+
+    /**
+     * Maximum height one section may claim before it starts scrolling.
+     *
+     * A third of the usable height, floored to a whole pixel so three sections
+     * cannot add up to more than the available room. The caller still applies
+     * `min(...)` against the section's own content height via flex: this is a
+     * ceiling, never a target.
+     * @param availableHeight - Height the flyout body may use.
+     * @returns A pixel ceiling, never negative and never NaN.
+     */
+    function sectionMaxHeight(availableHeight) {
+      const available = Number.isFinite(availableHeight) && availableHeight > 0 ? availableHeight : 0
+      if (available === 0) return 0
+      return Math.floor(available * SECTION_HEIGHT_RATIO)
+    }
+
+    /**
+     * Whether one section renders open.
+     *
+     * The defaults are part of the spec: the workspace flyout opens every
+     * section, the task flyout opens only "进行中", the plugin flyout opens both.
+     * A section the person folded wins over the default; there is no persisted
+     * state, so every flyout opening starts from `defaultOpen`.
+     * @param folded - Map of section id to folded flag (component state).
+     * @param id - Section id, namespaced by flyout.
+     * @param defaultOpen - Whether the spec opens this section by default.
+     * @returns True when the section body should render.
+     */
+    function sectionIsOpen(folded, id, defaultOpen) {
+      const entry = folded !== null && typeof folded === 'object' ? folded[id] : undefined
+      if (typeof entry === 'boolean') return entry !== true
+      return defaultOpen === true
     }
 
     /**
@@ -1437,6 +1541,25 @@ window.__ModuleLoader__.load({
       const [anchor, setAnchor] = useState({ top: 12, bottom: 44, right: 56 })
       const [tasks, setTasks] = useState({ phase: 'idle', rows: [] })
       const [plugins, setPlugins] = useState({ phase: 'idle', rows: [] })
+      /**
+       * Folded sections, keyed by section id.
+       *
+       * Deliberately component state, never storage: every flyout opening starts
+       * from the spec's defaults (see the spec's "不持久化" decision). The id is
+       * namespaced by flyout so the same key cannot collide across panels. The
+       * default lives in `sectionIsOpen`, so a key absent here reads as open.
+       */
+      const [foldedSections, setFoldedSections] = useState({})
+      /**
+       * Fold or unfold one section.
+       *
+       * Folding only swaps which body is mounted; the panel height comes from the
+       * shell, so the panel does not resize (acceptance B4).
+       * @param id - Section id, already namespaced by flyout.
+       */
+      const toggleSection = useCallback((id) => {
+        setFoldedSections((current) => ({ ...current, [id]: current[id] !== true }))
+      }, [])
       const openTimer = useRef(undefined)
       const closeTimer = useRef(undefined)
       /** The rail button that opened the flyout, for Escape focus return. */
@@ -1709,119 +1832,160 @@ window.__ModuleLoader__.load({
        * Draw the flyout shell for one entry.
        *
        * `fixedHeight` pins the panel to a computed height instead of letting it
-       * shrink to its content: the workspace flyout uses it so changing the
-       * recent count does not resize the panel. Other flyouts pass nothing and
-       * stay content-sized.
+       * shrink to its content: once a flyout is sectioned its height must not
+       * follow how many rows happen to exist, or stepping the recent count would
+       * resize the whole panel (the 0.3.2 fix this must not undo).
        *
-       * `split` renders the body as a plain flex container instead of the usual
-       * scrolling wrapper, so two equal panes inside can divide the panel's
-       * remaining height with `flex:1 1 0`. The wrapper has to be skipped
-       * entirely: as a scroll container it would collapse its children to content
-       * height and the split would never happen.
+       * `sections` renders the body as the section container instead of the usual
+       * scrolling wrapper. The wrapper has to be skipped entirely: as a single
+       * scroll container it would swallow the scroll, and the per-section
+       * scrollers inside could never be independent.
+       *
+       * `topFlush` pins the panel's top edge to the window-chrome line rather than
+       * below the anchor: a sectioned panel runs from under the traffic lights to
+       * the window bottom, so it neither floats mid-screen nor covers the host's
+       * reopen controls (AGENTS.md hard rule 3).
        * @param title - Flyout heading.
-       * @param body - Panel body.
+       * @param body - Panel body, or the section list when `sections` is set.
        * @param foot - Optional pinned foot.
        * @param bottomAligned - True for the account seat, which anchors at the foot.
        * @param fixedHeight - Pixel height to occupy, or undefined to fit content.
-       * @param split - True to let flex children divide the body height.
+       * @param sections - True to render the body as independent sections.
+       * @param topFlush - True to start at the chrome line, not below the anchor.
        * @returns The flyout element.
        */
-      const flyoutShell = (title, body, foot, bottomAligned, fixedHeight, split) => createPortal(h('div', {
-        ref: panelRef,
-        className: 'dsr-flyout',
-        role: 'dialog',
-        'aria-label': title,
-        ...(split === true ? { 'data-dsr-split': 'true' } : {}),
-        style: (() => {
-          const placed = flyoutPlacement(anchor, window.innerHeight, bottomAligned)
-          return {
-            ...(placed.top === undefined ? {} : { top: `${placed.top}px` }),
+      /**
+       * Height of the window-chrome strip the flyout must stay below.
+       *
+       * The host declares `--dsh-frame-top-clearance` on the root element (48px on
+       * macOS Desktop) so portalled overlays inherit it. Reading it at render time
+       * keeps a future host change from needing a plugin release; an unreadable
+       * value falls back to the documented 48px, because drawing over the traffic
+       * lights is worse than losing 48px to the chrome.
+       * @returns The strip height in CSS pixels.
+       */
+      const frameTopClearance = () => {
+        try {
+          const raw = window.getComputedStyle(document.documentElement).getPropertyValue('--dsh-frame-top-clearance')
+          const parsed = Number.parseFloat(raw)
+          if (Number.isFinite(parsed) && parsed > 0) return parsed
+        } catch (error) {
+          // A failed style read must not cost the panel its position: fall through
+          // to the documented default instead of rendering without a top offset.
+          console.warn('[dsh-sidebar-rail] frame clearance unreadable', error)
+        }
+        return FRAME_TOP_CLEARANCE_FALLBACK
+      }
+
+      const flyoutShell = (title, body, foot, bottomAligned, fixedHeight, sections, topFlush) => {
+        const placed = flyoutPlacement(anchor, window.innerHeight, bottomAligned)
+        // A flush panel owns the whole column below the chrome strip, so neither
+        // the anchor-derived top nor its budget applies; the strip height does.
+        // Read once here so the top offset and the height cannot disagree.
+        const flushTop = topFlush === true ? frameTopClearance() : undefined
+        const panelHeight = topFlush === true
+          ? flyoutSectionedHeight(window.innerHeight, flushTop)
+          : fixedHeight
+        return createPortal(h('div', {
+          ref: panelRef,
+          className: 'dsr-flyout',
+          role: 'dialog',
+          'aria-label': title,
+          ...(sections === true ? { 'data-dsr-sections': 'true' } : {}),
+          style: {
+            ...(topFlush === true
+              ? { top: `${flushTop}px` }
+              : placed.top === undefined ? {} : { top: `${placed.top}px` }),
             ...(placed.bottom === undefined ? {} : { bottom: `${placed.bottom}px` }),
-            maxHeight: `${placed.maxHeight}px`,
-            ...(fixedHeight === undefined ? {} : { height: `${fixedHeight}px` }),
+            maxHeight: `${topFlush === true ? panelHeight : placed.maxHeight}px`,
+            ...(panelHeight === undefined ? {} : { height: `${panelHeight}px` }),
             left: `${anchor.right + 8}px`,
-          }
-        })(),
-        onPointerEnter: cancelClose,
-        onPointerLeave: scheduleClose,
-        onKeyDown: (event) => {
-          // Escape hands focus back to the trigger so the next Tab continues from
-          // the rail instead of jumping to the top of the page.
-          if (event.key !== 'Escape') return
-          event.stopPropagation()
-          retract()
-          const trigger = triggerRef.current
-          if (trigger !== null) trigger.focus()
+            // Shared ceiling for every section inside this panel, so all of them
+            // read the same third of the usable height.
+            ...(sections === true ? { '--dsr-section-cap': `${sectionMaxHeight(panelHeight)}px` } : {}),
+          },
+          onPointerEnter: cancelClose,
+          onPointerLeave: scheduleClose,
+          onKeyDown: (event) => {
+            // Escape hands focus back to the trigger so the next Tab continues from
+            // the rail instead of jumping to the top of the page.
+            if (event.key !== 'Escape') return
+            event.stopPropagation()
+            retract()
+            const trigger = triggerRef.current
+            if (trigger !== null) trigger.focus()
+          },
         },
-      },
-      h('div', { className: 'dsr-flyout-head' }, title),
-      split === true
-        ? h('div', { className: 'dsr-split-body' }, body)
-        : h('div', { className: 'dsr-flyout-body' }, body),
-      foot === undefined ? null : h('div', { className: 'dsr-flyout-foot' }, foot)), document.body)
+        h('div', { className: 'dsr-flyout-head' }, title),
+        sections === true
+          ? h('div', { className: 'dsr-sections' }, body)
+          : h('div', { className: 'dsr-flyout-body' }, body),
+        foot === undefined ? null : h('div', { className: 'dsr-flyout-foot' }, foot)), document.body)
+      }
 
       /** Render the flyout for the currently open entry only. */
       const renderFlyout = () => {
-        // Computed once per render so the panel height and the two halves cannot
-        // disagree about the space available.
-        const viewportFlyoutHeight = workspaceFlyoutHeight(
-          window.innerHeight,
-          flyoutPlacement(anchor, window.innerHeight, false).maxHeight,
-        )
+        /**
+         * Build one foldable section with its fold state bound.
+         *
+         * The id is namespaced by the flyout so two panels can each own a
+         * "recent" section without sharing fold state.
+         * @param flyout - Which flyout owns the section.
+         * @param name - Section name, stable within that flyout.
+         * @param title - Localized header text.
+         * @param defaultOpen - Spec default for this section.
+         * @param children - Section body.
+         * @param actions - Optional header-right controls.
+         * @returns The section element.
+         */
+        const section = (flyout, name, title, defaultOpen, children, actions) => {
+          const id = `${flyout}.${name}`
+          return h(FlyoutSection, {
+            key: id,
+            title,
+            open: sectionIsOpen(foldedSections, id, defaultOpen),
+            onToggle: () => toggleSection(id),
+            actions,
+          }, children)
+        }
         if (open === 'workspace') {
-          // Each pane is a fixed header plus its own scroller. The headers stay
-          // put while the lists scroll underneath, and the two panes split the
-          // leftover height evenly (`flex:1 1 0`), so adding projects or stepping
-          // the recent count only makes that pane scroll — neither pane resizes.
-          // A divider between them marks the boundary.
-          const projectsEmpty = sections.pinnedRows.length === 0 && sections.normalRows.length === 0
-          // The flyout head already says "Workspaces"; this pane's fixed row names
-          // its two groups instead of repeating that word, and stays put while the
-          // rows scroll beneath it.
-          const projectsHeadLabel = sections.pinnedRows.length === 0
-            ? t('section.workspaces')
-            : `${t('section.pinned')} · ${t('section.workspaces')}`
-          const projectsPane = h('div', { className: 'dsr-pane' },
-            h('div', { className: 'dsr-pane-head' }, projectsHeadLabel),
-            h('div', { className: 'dsr-pane-scroll' },
-              projectsEmpty
-                ? h(Empty, null, t('empty.workspaces'))
-                : [
-                  sections.pinnedRows.length === 0 ? null : h(Section, { title: t('section.pinned') },
-                    sections.pinnedRows.map((row) => h(Row, {
-                      key: `pin-${row.id}`,
-                      title: row.title,
-                      meta: row.meta,
-                      pinned: true,
-                      pinLabel: t('pin.unpin'),
-                      onTogglePin: () => togglePin(row.id),
-                      onClick: () => openWorkspaceFromRail(row.id),
-                    }))),
-                  sections.normalRows.length === 0 ? null : h(Section,
-                    { title: sections.pinnedRows.length === 0 ? t('section.pinned') : t('section.workspaces') },
-                    sections.normalRows.map((row) => h(Row, {
-                      key: `ws-${row.id}`,
-                      title: row.title,
-                      meta: row.meta,
-                      pinLabel: t('pin.pin'),
-                      onTogglePin: () => togglePin(row.id),
-                      onClick: () => openWorkspaceFromRail(row.id),
-                    }))),
-                ]))
-          const recentPane = h('div', { className: 'dsr-pane' },
-            h('div', { className: 'dsr-pane-head' }, t('section.recent')),
-            h('div', { className: 'dsr-pane-scroll' },
-              sections.recentRows.length === 0
-                ? h(Empty, null, t('empty.recent'))
-                : sections.recentRows.map((row) => h(Row, {
-                  key: `recent-${row.id}`,
-                  title: row.title,
-                  meta: row.meta,
-                  current: row.active === true,
-                  status: row.status,
-                  statusLabel: t(`status.${row.status}`),
-                  onClick: () => openSessionFromRail(row.id),
-                }))))
+          // Three fixed sections, in this order: pinned projects, the remaining
+          // projects, then recent sessions. A project lives in exactly one of the
+          // first two — `deriveSections` already partitions them, so the renderer
+          // only has to draw each list in its own section. All three open by
+          // default and none of that is persisted (spec section 3.1).
+          const pinned = sections.pinnedRows.length === 0
+            ? h(Empty, null, t('empty.pinned'))
+            : sections.pinnedRows.map((row) => h(Row, {
+              key: `pin-${row.id}`,
+              title: row.title,
+              meta: row.meta,
+              pinned: true,
+              pinLabel: t('pin.unpin'),
+              onTogglePin: () => togglePin(row.id),
+              onClick: () => openWorkspaceFromRail(row.id),
+            }))
+          const projects = sections.normalRows.length === 0
+            ? h(Empty, null, t('empty.workspaces'))
+            : sections.normalRows.map((row) => h(Row, {
+              key: `ws-${row.id}`,
+              title: row.title,
+              meta: row.meta,
+              pinLabel: t('pin.pin'),
+              onTogglePin: () => togglePin(row.id),
+              onClick: () => openWorkspaceFromRail(row.id),
+            }))
+          const recent = sections.recentRows.length === 0
+            ? h(Empty, null, t('empty.recent'))
+            : sections.recentRows.map((row) => h(Row, {
+              key: `recent-${row.id}`,
+              title: row.title,
+              meta: row.meta,
+              current: row.active === true,
+              status: row.status,
+              statusLabel: t(`status.${row.status}`),
+              onClick: () => openSessionFromRail(row.id),
+            }))
           const stepper = h('div', { className: 'dsr-flyout-foot' },
             h(RecentCountRow, {
               value: recentCount,
@@ -1830,38 +1994,43 @@ window.__ModuleLoader__.load({
               min: MIN_RECENT_COUNT,
               max: MAX_RECENT_COUNT,
             }))
-          return flyoutShell(t('rail.workspace'), [projectsPane, recentPane],
-            stepper, undefined, viewportFlyoutHeight, true)
+          return flyoutShell(t('rail.workspace'), [
+            section('workspace', 'pinned', t('section.pinned'), true, pinned),
+            section('workspace', 'projects', t('section.workspaces'), true, projects),
+            section('workspace', 'recent', t('section.recent'), true, recent),
+          ], stepper, undefined, undefined, true, true)
         }
         if (open === 'tasks') {
           const body = tasks.phase === 'loading' ? h(Empty, null, t('state.loading'))
             : tasks.phase === 'failed' ? h(Empty, null, t('state.failed'))
               : tasks.rows.length === 0 ? h(Empty, null, t('empty.tasks'))
-                : h(Section, { title: t('section.tasks') },
-                  tasks.rows.map((row) => h(Row, {
-                    key: `task-${row.id}`,
-                    title: row.title,
-                    meta: row.meta,
-                    onClick: () => { retract(); selectPanel('schedules') },
-                  })))
-          return flyoutShell(t('rail.tasks'), body, h(ActionRow, {
-            onClick: () => { retract(); selectPanel('schedules') },
-          }, t('action.openPanel')))
+                : tasks.rows.map((row) => h(Row, {
+                  key: `task-${row.id}`,
+                  title: row.title,
+                  meta: row.meta,
+                  onClick: () => { retract(); selectPanel('schedules') },
+                }))
+          return flyoutShell(t('rail.tasks'),
+            [section('tasks', 'all', t('section.tasks'), true, body)],
+            h(ActionRow, {
+              onClick: () => { retract(); selectPanel('schedules') },
+            }, t('action.openPanel')), undefined, undefined, true, true)
         }
         if (open === 'plugins') {
           const body = plugins.phase === 'loading' ? h(Empty, null, t('state.loading'))
             : plugins.phase === 'failed' ? h(Empty, null, t('state.failed'))
               : plugins.rows.length === 0 ? h(Empty, null, t('empty.plugins'))
-                : h(Section, { title: t('section.plugins') },
-                  plugins.rows.map((row) => h(Row, {
-                    key: `plugin-${row.name}`,
-                    title: row.name,
-                    meta: row.meta,
-                    onClick: () => { retract(); selectPanel('plugins') },
-                  })))
-          return flyoutShell(t('rail.plugins'), body, h(ActionRow, {
-            onClick: () => { retract(); selectPanel('plugins') },
-          }, t('action.openPanel')))
+                : plugins.rows.map((row) => h(Row, {
+                  key: `plugin-${row.name}`,
+                  title: row.name,
+                  meta: row.meta,
+                  onClick: () => { retract(); selectPanel('plugins') },
+                }))
+          return flyoutShell(t('rail.plugins'),
+            [section('plugins', 'all', t('section.plugins'), true, body)],
+            h(ActionRow, {
+              onClick: () => { retract(); selectPanel('plugins') },
+            }, t('action.openPanel')), undefined, undefined, true, true)
         }
         if (open === 'more') {
           const extras = panelEntries.filter((panel) => panel.id !== 'schedules' && panel.id !== 'plugins')
