@@ -23,7 +23,7 @@
 | --- | --- |
 | 仓库规则 4 条（regions / manifest / banned / i18n） | ✅ 全过；i18n **52 key** 中英对齐 |
 | 两入口语法（`node --check client.js` / `index.js`） | ✅ |
-| 纯逻辑单测 | ✅ **50 项全过**（0.3.3 为 35 项） |
+| 纯逻辑单测 | ✅ **53 项全过**（0.3.3 为 35 项） |
 | `flyoutSectionedHeight` | ✅ 1000/48→952、900/48→852；矮于 chrome 带→0；clearance 不可用退回 48 |
 | `sectionMaxHeight` | ✅ 900→300、852→284；极小值→0，不产出负值/小数 |
 | 高度不随内容变化（0.3.2 性质） | ✅ 单测锁住：同一视口下条数 1 与 20 得到同一高度 |
@@ -31,8 +31,21 @@
 | 置顶项目不重复 | ✅ `pinnedRows` 与 `normalRows` 的 id 集合互斥且并集等于全部项目 |
 | `projectSessionRows` 不过滤 | ✅ host 顺序（不按时间重排）、归档与空白都保留、未知成员降级、脏输入为空 |
 | 任务三状态分组 | ✅ `active`/`paused`/`ended` 各归各位；空输入返回完整三键；未知状态被丢弃 |
+| 任务下次运行时间 | ✅ 按宿主同款公式 `deliveryFloorEndsAt > scheduledAt ? floor : scheduledAt`；`ScheduleCatalogEntry` 无 `nextRunAt`，回归测试锁住乱入字段不会胜出 |
+| 目录选择被拒 ≠ 取消 | ✅ 后端无 native 能力时报失败态并指向宿主添加按钮；只有 `null` 才是静默取消 |
 | 插件二分 | ✅ enabled 与 installed-but-off 分开；未安装与宿主自带项不进入 |
 | 目录选择三结局 | ✅ picked / cancelled（静默）/ failed；相对路径判失败；非 Error 拒绝有可读文案 |
+
+### 本轮据调研修正的事实（已核对宿主源码）
+
+| 事实 | 对实现的影响 |
+| --- | --- |
+| `catalog()` 的条目是 `scheduledAt` + 可选 `deliveryFloorEndsAt`，**没有 `nextRunAt`** | `client.js` 原写 `task.nextRunAt ?? task.next ?? task.scheduledAt`，前两键在契约中不存在；已改为 `taskNextRun`（宿主同款公式） |
+| `pickDirectory()` 在 Desktop 大概率可用但未真机验证；后端无 native 能力时被 `directory-picker/unavailable` 拒绝 | 失败态不再是通用文案；`pick` 的拒绝走 `pickedDirectory`，指向宿主自带添加按钮 |
+| 宿主无 pick 动词时传 `null` 会被读成「用户取消」 | 已改为抛错，落到失败态——静默取消会吞掉原因 |
+| `WorkspaceView.sessionIds` 本就含归档/空白、不含子代理 | `projectSessionRows` 不过滤：与 host 行为一致，未额外按 `origin` 筛选 |
+| `SessionSummary` 无 `workspaceId`；`archivedSessionIds` 在 `WorkspaceSnapshot` 顶层 | 反查只走 `WorkspaceView.sessionIds`；`archivedIds` 从 `readWorkspaces(state => state.archivedSessionIds)` 读 |
+| `workspaces.create({path})` 只登记已存在目录、幂等、不建目录 | 添加项目不调用任何 `mkdir`/`createDirectory`；重复选同一目录不产生重复行 |
 
 ### 未验证（真机，本轮未能执行）
 
