@@ -33,13 +33,13 @@ ${region('pure-data')}
 return { EMPTY_SESSIONS, EMPTY_WORKSPACES, selectorHook, relativeTime, shortPath,
   resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT,
   deriveSections, normalizeTasks, normalizePlugins, currentSessionId, accountSeatState, accountClientMetadata, clientBuildVersion, readRecentCount,
-  remoteOutcome, flyoutPlacement, keepsRailRevealed, RAIL_REVEAL_WIDTH, readRecentCount, sessionStatusOf, formatWalletBalance, balanceRows, accountLinks, withAccountExtras, flyoutSectionedHeight, sectionMaxHeight, sectionIsOpen, projectSessionRows, pickedDirectory, groupTasksByStatus, groupPluginsByState, taskNextRun }`)()
+  remoteOutcome, flyoutPlacement, keepsRailRevealed, RAIL_REVEAL_WIDTH, readRecentCount, sessionStatusOf, formatWalletBalance, balanceRows, accountLinks, withAccountExtras, flyoutSectionedHeight, sectionMaxHeight, sectionIsOpen, projectSessionRows, pickedDirectory, groupTasksByStatus, groupPluginsByState, taskNextRun, sectionBudgetFor }`)()
 
 const { deriveSections, normalizeTasks, normalizePlugins, relativeTime, shortPath, selectorHook,
   resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT, currentSessionId, accountSeatState,
   accountClientMetadata, clientBuildVersion, readRecentCount, sessionStatusOf,
   formatWalletBalance, balanceRows, accountLinks, remoteOutcome, flyoutPlacement,
-  keepsRailRevealed, RAIL_REVEAL_WIDTH, EMPTY_SESSIONS, withAccountExtras, flyoutSectionedHeight, sectionMaxHeight, sectionIsOpen, projectSessionRows, pickedDirectory, groupTasksByStatus, groupPluginsByState, taskNextRun } = helpers
+  keepsRailRevealed, RAIL_REVEAL_WIDTH, EMPTY_SESSIONS, withAccountExtras, flyoutSectionedHeight, sectionMaxHeight, sectionIsOpen, projectSessionRows, pickedDirectory, groupTasksByStatus, groupPluginsByState, taskNextRun, sectionBudgetFor } = helpers
 
 /**
  * Build a SessionSummary-shaped row.
@@ -64,6 +64,32 @@ test('deriveSections: pinned workspaces lead, in pin order', () => {
   const sections = deriveSections(WORKSPACES, { byId: {} }, [], ['ws3', 'ws1'], 'en')
   assert.deepEqual(sections.pinnedRows.map((r) => r.id), ['ws3', 'ws1'])
   assert.deepEqual(sections.normalRows.map((r) => r.id), ['ws2'])
+})
+
+test('sectionBudgetFor: the room a section is measured against', () => {
+  // 分区上限的基数 = 浮层可用高度 - 面板自身的 head+foot 预算。
+  // 真机实测：innerHeight 1092、chrome 带 48、FLYOUT_CHROME_HEIGHT 96
+  //   -> 1092 - 48 - 96 = 948 -> cap 316，与实测 sections 容器 949 的 1/3 一致。
+  assert.equal(sectionBudgetFor(1092, 48, 96), 948)
+  assert.equal(sectionBudgetFor(1080, 48, 96), 936)
+  // 矮到不够 head+foot 时不产出负值——负的 max-height 在 CSS 里是非法的。
+  assert.equal(sectionBudgetFor(100, 48, 96), 0)
+  assert.equal(sectionBudgetFor(48, 48, 96), 0)
+  // 脏输入不产出 NaN。
+  assert.equal(sectionBudgetFor(Number.NaN, 48, 96), 0)
+  // clearance 取不到时 flyoutSectionedHeight 回退到文档的 48px（不盖红绿灯优先），
+  // 所以预算仍按 48 算，而不是塌成 0。
+  assert.equal(sectionBudgetFor(1092, Number.NaN, 96), 948)
+  // chromeHeight 脏值时按 0 预留，预算等于面板全高。
+  assert.equal(sectionBudgetFor(1092, 48, Number.NaN), 1044)
+})
+
+test('sectionBudgetFor: the cap derived from it lands on the measured third', () => {
+  // 回归锁：这条把「预算 → 上限」两个函数接起来，保证 B3 的数值关系不漂移。
+  const budget = sectionBudgetFor(1092, 48, 96)
+  assert.equal(sectionMaxHeight(budget), 316)
+  // 三个满额分区合计不超过预算。
+  assert.ok(sectionMaxHeight(budget) * 3 <= budget)
 })
 
 test('taskNextRun: the host formula, not a nextRunAt field', () => {

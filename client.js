@@ -1437,6 +1437,28 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * 求分区高度上限所依据的「可用预算」。
+     *
+     * 浮层可用高度减去面板自身 head + foot 的预留，就是里面所有分区能瓜分的空间。
+     * 这个值必须由这里算出并可单测，而不是散在渲染闭包里：B3 的「每区不超过可用
+     * 高度三分之一」直接依赖它，一旦算错，真机上表现为某个分区撑满整块面板。
+     *
+     * 真机实测对照（macOS Desktop，外接屏 1920×1080，渲染进程 innerHeight 1092）：
+     * `1092 − 48 − 96 = 948`，取三分之一得 316px，与实测 sections 容器 949px
+     * 的三分之一完全吻合。
+     * @param viewportHeight - `window.innerHeight`。
+     * @param topClearance - 顶部 chrome 带高度，通常来自 `--dsh-frame-top-clearance`。
+     * @param chromeHeight - 面板 head 与 foot 占掉的预留高度。
+     * @returns 像素预算，不为负、不为 NaN。
+     */
+    function sectionBudgetFor(viewportHeight, topClearance, chromeHeight) {
+      const panel = flyoutSectionedHeight(viewportHeight, topClearance)
+      if (panel === 0) return 0
+      const chrome = Number.isFinite(chromeHeight) && chromeHeight > 0 ? chromeHeight : 0
+      return Math.max(0, panel - chrome)
+    }
+
+    /**
      * 判断某个分区是否以展开态渲染。
      *
      * 默认值由 spec 规定：工作区浮层三区全展开，任务浮层只展开「进行中」，
@@ -2370,7 +2392,7 @@ window.__ModuleLoader__.load({
         // minus the panel's own head, computed once so all sections in every
         // flyout read the same third. Reading it here (rather than deriving it
         // inside the CSS) is what makes the cap a number instead of a percentage.
-        const sectionBudget = Math.max(0, flyoutSectionedHeight(window.innerHeight, frameTopClearance()) - FLYOUT_CHROME_HEIGHT)
+        const sectionBudget = sectionBudgetFor(window.innerHeight, frameTopClearance(), FLYOUT_CHROME_HEIGHT)
         /**
          * Build one foldable section with its fold state bound.
          *
