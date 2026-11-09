@@ -33,7 +33,7 @@
 | 任务三状态分组 | ✅ `active`/`paused`/`ended` 各归各位；空输入返回完整三键；未知状态被丢弃 |
 | 任务下次运行时间 | ✅ 按宿主同款公式 `deliveryFloorEndsAt > scheduledAt ? floor : scheduledAt`；`ScheduleCatalogEntry` 无 `nextRunAt`，回归测试锁住乱入字段不会胜出 |
 | 目录选择被拒 ≠ 取消 | ✅ 后端无 native 能力时报失败态并指向宿主添加按钮；只有 `null` 才是静默取消 |
-| 插件二分 | ✅ enabled 与 installed-but-off 分开；未安装与宿主自带项不进入 |
+| 插件二分 | ✅ 归一化把 `installed` 一并带出；分区显式按 `installed && !enabled` 判据，未安装项两侧都不进；宿主自带项在归一化阶段剔除 |
 | 目录选择三结局 | ✅ picked / cancelled（静默）/ failed；相对路径判失败；非 Error 拒绝有可读文案 |
 
 ### 本轮据调研修正的事实（已核对宿主源码）

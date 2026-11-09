@@ -1682,10 +1682,20 @@ window.__ModuleLoader__.load({
         // Belt and braces against an availability value that shifts meaning.
         if (String(name).startsWith('@deepseek-ai/')) continue
         const meta = bundle.version === undefined ? '' : `v${bundle.version}`
-        // Both states are carried out; the flyout splits them into its two
-        // sections. Keeping `enabled` on the row rather than pre-filtering means
-        // one listing answers both sections without a second remote read.
-        rows.push({ name: String(name), meta, enabled: bundle.enabled === true })
+        // Both states are carried out; the flyout splits them at render time.
+        // `installed` travels with the row even though this function already
+        // drops the explicitly-not-installed ones: the section criterion is
+        // `installed && !enabled`, so the split must read that fact from the row
+        // rather than depend on an upstream filter that could change.
+        // A bundle that omits `installed` counts as installed — only an explicit
+        // `false` means "not here", which is how the host reports on-demand
+        // plugins it has not installed.
+        rows.push({
+          name: String(name),
+          meta,
+          enabled: bundle.enabled === true,
+          installed: bundle.installed !== false,
+        })
       }
       rows.sort((a, b) => a.name.localeCompare(b.name))
       return rows
@@ -1707,6 +1717,14 @@ window.__ModuleLoader__.load({
       if (!Array.isArray(rows)) return groups
       for (const row of rows) {
         if (row === null || typeof row !== 'object') continue
+        // Both sides check `installed`, not just the disabled one. A row claiming
+        // `enabled: true` for something the profile does not declare is malformed
+        // rather than "on", and the spec's two criteria both presuppose an
+        // installed bundle. Rows without the flag count as installed (see
+        // normalizePlugins); only an explicit false is excluded. "Not installed at
+        // all" is an on-demand plugin whose install flow this flyout does not
+        // offer, so it belongs in neither section.
+        if (row.installed === false) continue
         if (row.enabled === true) groups.enabled.push(row)
         else groups.disabled.push(row)
       }

@@ -158,6 +158,38 @@ test('normalizeTasks: keeps every status instead of filtering to active', () => 
   assert.deepEqual(groups.ended.map((r) => r.id), ['e', 'i'])
 })
 
+test('normalizePlugins: carries installed, so the split stays explicit', () => {
+  // 判据是 installed === true && enabled === false（spec 5）。归一化必须把 installed
+  // 带出来，否则分区层只能靠「上游已经滤掉未安装项」这个隐含前提工作——上游一变
+  // 就会静默漂移。
+  const rows = normalizePlugins({ ok: true, value: {
+    bundles: [
+      { name: 'on', official: false, enabled: true, installed: true, version: '1.0.0' },
+      { name: 'off', official: false, enabled: false, installed: true },
+      // 宿主未报 installed 视为已安装：normalizePlugins 只剔除明确 installed:false 的。
+      { name: 'unreported', official: false, enabled: false },
+    ],
+  } })
+  assert.deepEqual(rows.map((r) => [r.name, r.enabled, r.installed]), [
+    ['off', false, true],
+    ['on', true, true],
+    ['unreported', false, true],
+  ])
+})
+
+test('groupPluginsByState: the disabled side applies the spec criterion', () => {
+  // 显式判据：installed && !enabled。一条「未安装但 enabled:false」的行不属于任何区
+  // ——它不是「被关掉的插件」，而是「还没装的东西」，进哪一区都是错的。
+  const groups = groupPluginsByState([
+    { name: 'on', enabled: true, installed: true },
+    { name: 'off', enabled: false, installed: true },
+    { name: 'absent', enabled: false, installed: false },
+    { name: 'on-absent', enabled: true, installed: false },
+  ])
+  assert.deepEqual(groups.enabled.map((r) => r.name), ['on'])
+  assert.deepEqual(groups.disabled.map((r) => r.name), ['off'])
+})
+
 test('groupPluginsByState: enabled and installed-but-off are separated', () => {
   // spec 5：「未启用」只含 installed && !enabled，未安装的官方按需插件不进来。
   // 归一化层已经挡掉了未安装项与宿主自带项，这里只做两分。
@@ -168,8 +200,10 @@ test('groupPluginsByState: enabled and installed-but-off are separated', () => {
     { name: 'on-but-not-installed', meta: 'v4', enabled: true, installed: false },
   ]
   const groups = groupPluginsByState(rows)
-  assert.deepEqual(groups.enabled.map((r) => r.name), ['on', 'on-but-not-installed'])
-  assert.deepEqual(groups.disabled.map((r) => r.name), ['off', 'missing'])
+  // 只有 installed 的行进入分区：未安装的（missing）与「未安装却 enabled」的畸形行
+  // 都不属于这两区。
+  assert.deepEqual(groups.enabled.map((r) => r.name), ['on'])
+  assert.deepEqual(groups.disabled.map((r) => r.name), ['off'])
 })
 
 test('groupPluginsByState: both keys exist when empty', () => {
