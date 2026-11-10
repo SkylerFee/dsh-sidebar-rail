@@ -98,7 +98,7 @@ The assistant can also call `plugin_manager` with `set_bundle` (enable/disable) 
 | Entry | Available actions |
 | --- | --- |
 | Workspaces | Three sections — pinned projects, projects, recent sessions. A project row expands to its own session list (unfiltered, in host order) and can start a new session; Add project registers a directory without navigating |
-| Recent sessions | Scroll independently at the foot of the workspace flyout, newest first, excluding archived, blank and subagent sessions; open an existing session and see its relative time and host-provided status mark |
+| Recent sessions | Listed at the foot of the workspace flyout, newest first, excluding archived, blank and subagent sessions; open an existing session and see its relative time and host-provided status mark |
 | Scheduled tasks | Three sections — running, paused, ended; only running opens by default. Choose a row or Open panel to enter the task panel |
 | My plugins | Two sections — enabled, and installed but switched off; host bundles are excluded and no switch is offered. Choose a row to enter the plugin manager |
 | More | Open other host panels or expand the native sidebar |
@@ -111,7 +111,7 @@ Keyboard: `Tab` to an icon reveals the rail. On a top-row function icon, press `
 
 Recent count defaults to **5**, with a range of **1–20**. Adjust it with the stepper at the foot of the workspace flyout or on the plugin detail page.
 
-Every flyout fills the column from below the window chrome to the bottom edge, and is organised in sections: a header that never scrolls plus its own scrolling list. Each section may grow to a third of the available height and scrolls past that, so a short section keeps its natural height instead of stretching. Sections fold, and folding never changes the panel height.
+Every flyout fills the column from below the window chrome to the bottom edge. Its content scrolls as one list: sections are groupings with a title row, not separate scroll areas, so a long list scrolls as a whole and the titles scroll with it. Sections fold, and folding never changes the panel height; the recent-count stepper stays in a fixed footer so it is reachable however far you scroll.
 
 ![Recent count setting on the plugin detail page, showing 9 with decrease and increase buttons](docs/images/plugin-settings.png)
 

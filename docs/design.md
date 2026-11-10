@@ -82,9 +82,10 @@ transform: translateX(-100%);
 - **显式 `-webkit-app-region: no-drag`**：Electron 的 app-region 是**几何**而不是 stacking，浮轨盖住窗口拖拽带时必须自己 opt out（即便 body 级 portal 通常已继承 no-drag），否则点图标会拖窗口。
 - **窄窗口不渲染**：判定不是 CSS 媒体查询，而是纯函数 `shouldRenderRail(platform, collapsed, viewportWidth)`（阈值 `RAIL_MIN_VIEWPORT = 768`），`RailOverlay` 用 `window.innerWidth` + `resize` 监听驱动；不满足即 `return null`，组件整体卸载。768 = 680（宿主正文最小宽）+ 56（轨宽）+ 32（两侧安全）。为什么不用 CSS：阈值语义是「正文是否还放得下」，与轨自身盒模型无关；做成纯函数还能被单测覆盖边界（`src/client/model/geometry.ts`，由 `test/*.test.ts` 直接导入执行）。为什么不是 900：旧实现的 900 是拍的，与宿主 drawer 断点（768）无对应关系；按 680 正文可读宽推导更可解释。
 - **浮层位置**：`.dsr-flyout` 也是 `position: fixed`（portal 到 body），宽 288px，`left = rect.right + 8`。`flyoutPlacement` 根据触发按钮与视口计算顶部或底部距离，并以内联 `maxHeight` 限制剩余可视高度；账号浮层从头像底边向上展开。
-- **工作区浮层定高**：该浮层内容长度差异最大（两条或二十条最近会话），因此改为**视口比例定高**——`workspaceFlyoutHeight(innerHeight, 预算)` 取 `0.7 × 视口` 且不超过 `flyoutPlacement` 的预算，再以内联 `height` 固定。这样调「最近会话条数」只改变列表是否滚动，不改浮动层高度。任务/插件/账号浮层列表短，仍保持内容自适应。
-- **两区分栏**：浮层 body 用 `.dsr-split-body`（flex 列）承载两个 `.dsr-pane`，各自 `flex:1 1 0` 平分扣除头部与步进器后的高度，因此两区大小基本一致（实测 314.5 / 351.0 px）。每个 pane 内再拆成固定标题 `.dsr-pane-head`（`flex:none`，不随内容滚动）与独立滚动区 `.dsr-pane-scroll`（`overflow-y:auto`）；`pane + pane` 之间的 `border-top` 用宿主 `--dsw-alias-border-l1`，即两区之间的分隔线。分栏用 flex 而非 JS 常数：真实 head/步进器高度只有 CSS 知道，常数估算会偏。
-- **必须跳过 `.dsr-flyout-body` 包装**：它本身是滚动容器，会把子元素压回内容高度，导致 flex 等分失效；`split` 模式下改为直接渲染 `.dsr-split-body`。
+- **浮层定高的来历**：0.3.x 曾用「视口 70%」给工作区浮层定高（`workspaceFlyoutHeight` + `WORKSPACE_FLYOUT_VIEWPORT_RATIO`），因为该浮层内容长度差异最大（两条或二十条最近会话）。0.4.0 起改为**从 chrome 带下沿占到底边**（`flyoutSectionedHeight`），两个函数都已不在源码里。定高的目的没变——调「最近会话条数」只改变列表是否滚动，不改变浮层高度。
+- **单一滚动容器（0.5.0 目标形态，决策见 ADR-0007；实现于票 #11）**：浮层 body 用 `.dsr-sections` 承载所有分区，整块内容共用一个 `overflow-y:auto` 滚动区。分区（`.dsr-section`）只是「标题行 + 条目组」，**不是滚动单元**，也没有高度上限：内容多就整页一起滚，标题跟着滚走；内容少就没有滚动条。分区之间的分隔线已移除，分组靠标题字重与留白区分。
+- **浮层高度仍钉死**：`.dsr-flyout` 的 `height` 由 `flyoutSectionedHeight(innerHeight, topClearance)` 算出（chrome 带之下到底边），不随内容与 `recentCount` 变化。分区收起/展开只让滚动内容变短，不改变面板高度。底部条数步进器在固定底栏（`.dsr-flyout-foot`），不参与滚动——这是标题滚走之后仍能找到条数设置的前提。
+- **为什么不再分区独立滚动**：0.4.0 的三段式（固定标题 + 独立滚动 + 1/3 限高）在真机上让列表被切碎、多个滚动条并存，与宿主侧栏「一个列表 + 分组标题」的习惯相反。见 [ADR-0007](adr/0007-single-scroll-flyout.md)。注意：本节描述的是 0.5.0 的目标形态；0.4.0 的旧结构（`.dsr-section` 的 `max-height: 33.3333%`、分区 `border-top`、分区独立 `overflow`）在票 #11 落地前仍存在于源码中。
 
 ## 5. 为什么不改宿主列宽
 
