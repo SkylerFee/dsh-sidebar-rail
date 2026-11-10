@@ -25,12 +25,11 @@ import {
 } from './flyouts.tsx'
 import { RailSurface } from './RailSurface.tsx'
 import {
-  FLYOUT_CHROME_HEIGHT,
   RAIL_REVEAL_WIDTH,
   REMOTE_TIMEOUT_MS,
   RETRACT_DELAY_MS,
 } from '../model/constants.ts'
-import { keepsRailRevealed, sectionBudgetFor } from '../model/geometry.ts'
+import { keepsRailRevealed } from '../model/geometry.ts'
 import {
   groupPluginsByState,
   groupTasksByStatus,
@@ -320,10 +319,10 @@ export function RailColumn(props: RailColumnProps): ReactNode {
   /**
    * 选一个目录并登记为项目，停在浮层里。
    *
-   * 三种结局（spec 3.3）：选中的目录被登记且浮层留着（不导航、不新建会话）；
+   * 三种结局（spec §4.5.3）：选中的目录被登记且浮层留着（不导航、不新建会话）；
    * 取消则静默返回；失败在项目分区里显示，不让人干猜。宿主侧本身幂等——
    * 它的 `create` 会解析已有的工作区而不是重复创建——所以选一个已登记的目录
-   * 只是重新列出它。
+   * 只是重新列出它，不算失败。
    *
    * `pickDirectory` 在挂载的后端服务内嵌浏览器（而非原生选择器）时会拒绝
    * （ADR-0005），这正是失败态必须是一等分支而不是兜底日志的原因。
@@ -350,34 +349,27 @@ export function RailColumn(props: RailColumnProps): ReactNode {
       window.clearTimeout(timer)
       setProjectAction(next)
     }
-    // pick 调用被包装，让它的拒绝进到 `pickedDirectory` 而不是外层 catch：
-    // 被拒绝的后端是一个具体、可预期的结局（ADR-0005），不是通用失败，
-    // 调用方应该看到「用宿主自己的添加按钮」而不是「添加项目失败」。
+    // 三态必须分开（spec §4.5.3，K1）：host 的 pickDirectory 在**用户取消时
+    // resolve 出 null**，只有真失败才 reject。所以判定依据是 resolve 出来的值，
+    // 不是「有没有拒绝」；成功值也绝不能在中间某一跳被丢掉——迁移前的
+    // `.then((_picked) => undefined, ...)` 正是「添加项目永远走取消分支」的根因。
     Promise.resolve()
       // 没有 pick 动词的宿主不能被读成「用户取消了」：那会把原因静默吞掉。
-      // 给 `pickedDirectory` 一个失败，让分区指出该去哪里。
+      // 抛出去，由外层 catch 报成失败。
       .then(() => {
         if (typeof pickDirectory !== 'function') throw new Error('directory picker unavailable')
         return pickDirectory()
       })
-      // K1（迁移前既有缺陷，本次不修）：这一跳的第一个处理函数把**成功**的
-      // picked 值丢成 undefined，于是取消与成功都走同一支；拒绝原因则原样透传。
-      // 迁移只保留原行为，不把缺陷修复混进结构重构；修复需要单独的改动说明与
-      // 回归证据（见 docs/typescript-migration.md §2.2 与 docs/verify.md）。
-      .then(
-        (_picked) => undefined,
-        (error: unknown) => error,
-      )
-      .then((picked) => {
-        const outcome = pickedDirectory(picked)
+      // 成功值原样交给归一化函数：null / 相对路径 / 畸形值都在那里收敛。
+      .then((picked) => pickedDirectory(picked))
+      .then((outcome) => {
         if (outcome.kind === 'cancelled') {
+          // 取消是静默结局：不报错、不留 loading。
           finish({ phase: 'idle' })
           return undefined
         }
         if (outcome.kind === 'failed') {
           console.warn('[dsh-sidebar-rail] directory pick failed:', outcome.message)
-          // 被拒绝的选择器是唯一值得精确点名的情形：人仍然能添加项目，
-          // 只是得走宿主自己的侧栏，所以指向那里而不是报告死路。
           finish({ phase: 'failed', message: t('state.addProjectFailed') })
           return undefined
         }
@@ -385,6 +377,8 @@ export function RailColumn(props: RailColumnProps): ReactNode {
           finish({ phase: 'failed', message: t('state.addProjectUnavailable') })
           return undefined
         }
+        // 登记失败与选择失败分开处理：这里已经是「选到了路径但登记不上」。
+        // 宿主 create 是幂等的，选一个已登记的目录会成功返回而不是报错。
         return Promise.resolve(createWorkspace(outcome.path)).then(
           () => {
             finish({ phase: 'idle' })
@@ -396,7 +390,8 @@ export function RailColumn(props: RailColumnProps): ReactNode {
         )
       })
       .catch((error: unknown) => {
-        console.warn('[dsh-sidebar-rail] add project failed', error)
+        // 选择器本身拒绝了（如挂载的后端服务内嵌浏览器，ADR-0005）。
+        console.warn('[dsh-sidebar-rail] directory pick failed', error)
         finish({ phase: 'failed', message: t('state.addProjectFailed') })
       })
     // `t` 刻意不作为依赖：宿主每次渲染都会给一个新的翻译函数，
@@ -441,8 +436,6 @@ export function RailColumn(props: RailColumnProps): ReactNode {
     }
   }, [openSession, retract])
 
-  /** 浮层里所有分区共享的高度预算。 */
-  const sectionBudget = sectionBudgetFor(window.innerHeight, readFrameTopClearance(), FLYOUT_CHROME_HEIGHT)
   /** 浮层外壳：定位、固定高度、指针与 Escape 行为。 */
   const shell = makeFlyoutShell({
     title: '',
@@ -508,7 +501,6 @@ export function RailColumn(props: RailColumnProps): ReactNode {
         t,
         toggleSection,
         foldedSections,
-        sectionBudget,
         sections,
         expandedProjects,
         toggleProject,
@@ -528,7 +520,6 @@ export function RailColumn(props: RailColumnProps): ReactNode {
         t,
         toggleSection,
         foldedSections,
-        sectionBudget,
         groups: taskGroups,
         phase: taskList.phase,
         openPanel: () => openMainPanel('schedules'),
@@ -540,7 +531,6 @@ export function RailColumn(props: RailColumnProps): ReactNode {
         t,
         toggleSection,
         foldedSections,
-        sectionBudget,
         groups: pluginGroups,
         phase: pluginList.phase,
         openPanel: () => openMainPanel('plugins'),

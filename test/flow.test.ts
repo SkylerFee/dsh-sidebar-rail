@@ -7,6 +7,9 @@
  *   - 分区的首次切换（默认展开与默认收起都要能翻）；
  *   - 请求状态机把「服务缺失」判成失败而不是空列表。
  *
+ * 0.5.0 增补（spec-0.5.0 §4.2）：`expandedProjectIds` 的读写、合并语义与
+ * 「失效 id 读取时忽略」。
+ *
  * 全部用固定替身与纯函数，不发真实网络、不渲染 DOM。
  */
 import { test } from 'node:test'
@@ -14,18 +17,21 @@ import assert from 'node:assert/strict'
 
 import {
   getRecentCountSnapshot,
+  readExpandedProjectIds,
   readStore,
   setRecentCount,
   subscribeRecentCount,
+  writeExpandedProjectIds,
   writeStore,
 } from '../src/client/preferences.ts'
 import {
   DEFAULT_RECENT_COUNT,
   MAX_RECENT_COUNT,
   MIN_RECENT_COUNT,
+  RAIL_REVEAL_WIDTH,
   STORE_KEY,
 } from '../src/client/model/constants.ts'
-import { sectionIsOpen } from '../src/client/model/geometry.ts'
+import { DEFAULT_FLYOUT_ANCHOR, flyoutAnchorFrom, sectionIsOpen } from '../src/client/model/geometry.ts'
 import { readRecentCount } from '../src/client/model/formatting.ts'
 import { pickedDirectory, remoteOutcome } from '../src/client/model/remote.ts'
 
@@ -91,6 +97,61 @@ test('preferences: setRecentCount clamps and never drops the pinned list', () =>
   assert.equal(stored.recentCount, MIN_RECENT_COUNT)
 })
 
+test('preferences: expandedProjectIds round-trips through the store', () => {
+  const { data } = installStorage()
+  // 默认无记录：空数组，而不是 undefined——调用方可以直接遍历。
+  assert.deepEqual(readExpandedProjectIds(), [])
+  writeExpandedProjectIds(['ws-a', 'ws-b'])
+  assert.deepEqual(readExpandedProjectIds(), ['ws-a', 'ws-b'], 'the expanded list reads back as written')
+  // 同一个键，不是另开一个：spec-0.5.0 §4.2 要求与置顶/条数共用副本。
+  assert.ok(data.get(STORE_KEY) !== undefined)
+  // 清空是合法写入（收起最后一个项目之后）。
+  writeExpandedProjectIds([])
+  assert.deepEqual(readExpandedProjectIds(), [])
+})
+
+test('preferences: writing expandedProjectIds never drops pins or recentCount', () => {
+  const { data } = installStorage({
+    [STORE_KEY]: JSON.stringify({ pinnedWorkspaceIds: ['ws1', 'ws2'], recentCount: 7 }),
+  })
+  writeExpandedProjectIds(['ws3'])
+  const stored = JSON.parse(data.get(STORE_KEY) ?? '{}') as {
+    pinnedWorkspaceIds: string[]
+    recentCount: number
+    expandedProjectIds: string[]
+  }
+  assert.deepEqual(stored.expandedProjectIds, ['ws3'])
+  assert.deepEqual(stored.pinnedWorkspaceIds, ['ws1', 'ws2'], 'pins survive an expandedProjectIds write')
+  assert.equal(stored.recentCount, 7, 'the recent count survives too')
+  // 反方向：写 recentCount 也不能抹掉展开列表。
+  setRecentCount(3)
+  assert.deepEqual(readExpandedProjectIds(), ['ws3'], 'the expanded list survives a recentCount write')
+})
+
+test('preferences: stale workspace ids are read back but never cleaned up', () => {
+  // spec-0.5.0 §4.2 决策 2：失效 id（项目已删除）读取时忽略即可，不写回清理。
+  // 模型层不做「它还存在吗」的判断——那是渲染层拿宿主工作区列表才知道的事。
+  const { writes } = installStorage({
+    [STORE_KEY]: JSON.stringify({ expandedProjectIds: ['gone-forever', 'ws1'] }),
+  })
+  assert.deepEqual(readExpandedProjectIds(), ['gone-forever', 'ws1'])
+  // 读路径不产生写盘：否则每次打开浮层都会写一次存储。
+  assert.equal(writes.length, 0, 'reading must not write')
+})
+
+test('preferences: malformed expandedProjectIds entries are ignored on read', () => {
+  // 存储是手可编辑的明文 JSON：数字、null、嵌套对象、空串都不能漏进渲染层当键用。
+  installStorage({
+    [STORE_KEY]: JSON.stringify({ expandedProjectIds: ['ws1', 42, null, {}, '', ['ws2'], 'ws3'] }),
+  })
+  assert.deepEqual(readExpandedProjectIds(), ['ws1', 'ws3'])
+  // 整个字段不是数组时退化成空，而不是抛错。
+  installStorage({ [STORE_KEY]: JSON.stringify({ expandedProjectIds: 'ws1' }) })
+  assert.deepEqual(readExpandedProjectIds(), [])
+  installStorage({ [STORE_KEY]: JSON.stringify({}) })
+  assert.deepEqual(readExpandedProjectIds(), [])
+})
+
 test('preferences: an unreadable store degrades instead of throwing', () => {
   Object.defineProperty(globalThis, 'window', {
     configurable: true,
@@ -129,6 +190,35 @@ test('preferences: a cleared preference falls back to the default, not to one ro
   assert.equal(readRecentCount(0), MIN_RECENT_COUNT)
   assert.equal(readRecentCount(999), MAX_RECENT_COUNT)
   assert.equal(readRecentCount('3.6'), 4)
+})
+
+test('flyoutAnchorFrom: the horizontal origin is the rail, not the mid-transition rect', () => {
+  // spec-0.5.0 §4.5.1：轨用 160ms 的 translateX(-100%) → 0 过渡，浮层 120ms 后打开。
+  // 过渡中途的矩形 right 会明显偏小（轨还半在窗外），旧实现直接采信它，浮层偏左。
+  const midTransition = { top: 120, bottom: 156, right: 18 }
+  const settled = { top: 120, bottom: 156, right: RAIL_REVEAL_WIDTH }
+  const fromMid = flyoutAnchorFrom(midTransition)
+  const fromSettled = flyoutAnchorFrom(settled)
+  // 关键断言：两种时序取值得到**同一个**锚点——位置不再依赖动画进度。
+  assert.deepEqual(fromMid, fromSettled, 'the anchor must not depend on transition progress')
+  assert.equal(fromMid.right, RAIL_REVEAL_WIDTH, 'the rail right edge is a constant, not a measurement')
+  // 垂直位置仍跟随按钮，浮层才能与它对齐。
+  assert.equal(fromMid.top, 120)
+  assert.equal(fromMid.bottom, 156)
+})
+
+test('flyoutAnchorFrom: a missing or junk rect falls back to the rail geometry', () => {
+  // 键盘打开（onFocus）与合成事件都可能没有可用矩形；兜底必须仍落在轨的右缘。
+  for (const rect of [undefined, null, {}, { top: Number.NaN, bottom: Number.NaN, right: 3 }]) {
+    const anchor = flyoutAnchorFrom(rect)
+    assert.equal(anchor.right, RAIL_REVEAL_WIDTH, 'even without a rect the flyout sits right of the rail')
+    assert.equal(anchor.top, DEFAULT_FLYOUT_ANCHOR.top)
+    assert.equal(anchor.bottom, DEFAULT_FLYOUT_ANCHOR.bottom)
+  }
+  // 只有 top 可用时，bottom 单独回退：两个字段互不牵连。
+  const half = flyoutAnchorFrom({ top: 300 })
+  assert.equal(half.top, 300)
+  assert.equal(half.bottom, DEFAULT_FLYOUT_ANCHOR.bottom)
 })
 
 test('pickedDirectory: chosen, cancelled and failed stay three distinct outcomes', () => {

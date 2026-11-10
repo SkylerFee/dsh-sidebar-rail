@@ -5,16 +5,19 @@
  * 持有一个 `useState`、只在挂载时读一次，于是在一处改成 8、在另一处按「+」
  * 会把 7 写回存储。模块级 store 同时修掉「读到旧值」与「覆盖别人的写入」。
  *
- * 存储只保存 `pinnedWorkspaceIds` 与 `recentCount`（键 `dsh.sidebar-rail.v1`）；
- * 分区与项目展开状态一律不落盘。
+ * 存储只保存 `pinnedWorkspaceIds`、`recentCount` 与 `expandedProjectIds`
+ * （键 `dsh.sidebar-rail.v1`）；**分区收起状态不落盘**（spec-0.5.0 §4.2）。
+ * 每次写入都是「先重读、再合并」，因此一个字段的写入不会覆盖其他字段。
  */
 import { STORE_KEY } from './model/constants.ts'
 import { readRecentCount } from './model/formatting.ts'
 
-/** 持久化的插件状态；两个字段都可缺席。 */
+/** 持久化的插件状态；字段都可缺席（旧版本写入的对象可能只有前两个）。 */
 export interface StoredRailState {
   readonly pinnedWorkspaceIds?: readonly string[] | undefined
   readonly recentCount?: unknown
+  /** 展开中的项目（工作区 id 数组）；0.5.0 起与另两个字段共用同一个键。 */
+  readonly expandedProjectIds?: readonly string[] | undefined
 }
 
 /** 偏好快照的订阅者。 */
@@ -50,6 +53,44 @@ export function writeStore(patch: Partial<StoredRailState>): void {
   } catch {
     // 被禁用的存储后端绝不能打断渲染。
   }
+}
+
+/**
+ * 读取持久化的展开项目 id 列表，忽略非字符串项。
+ *
+ * 存储是手可编辑的明文 JSON，任何畸形值（数字、null、嵌套对象、非数组）都必须
+ * 在这里被吸收，绝不能漏到渲染层当键用。失效的工作区 id（项目已被删除）**原样
+ * 返回、不写回清理**：读路径不产生写盘，这类 id 只是在 UI 上不产生效果
+ * （spec-0.5.0 §4.2 决策 2）。
+ * @returns 只含非空字符串的数组（保持存储顺序），缺失或不可读时返回空数组。
+ */
+export function readExpandedProjectIds(): readonly string[] {
+  const stored = readStore().expandedProjectIds
+  if (!Array.isArray(stored)) return []
+  const out: string[] = []
+  for (const entry of stored) {
+    if (typeof entry === 'string' && entry !== '') out.push(entry)
+  }
+  return out
+}
+
+/**
+ * 写入展开中的项目 id 列表（合并语义）。
+ *
+ * 走 `writeStore` 的「先重读、再合并」，因此不会覆盖 `pinnedWorkspaceIds`
+ * 与 `recentCount`。传入空数组即清空该字段，其他字段仍保留。
+ * @param ids - 展开中的工作区 id；非字符串项被丢弃，重复项去重并保序。
+ * @returns 无。存储失败只损失持久化，不影响渲染。
+ */
+export function writeExpandedProjectIds(ids: readonly string[] | null | undefined): void {
+  const unique: string[] = []
+  const seen = new Set<string>()
+  for (const entry of Array.isArray(ids) ? ids : []) {
+    if (typeof entry !== 'string' || entry === '' || seen.has(entry)) continue
+    seen.add(entry)
+    unique.push(entry)
+  }
+  writeStore({ expandedProjectIds: unique })
 }
 
 /**

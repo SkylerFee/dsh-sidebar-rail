@@ -38,8 +38,6 @@ export interface FlyoutCommonProps {
   readonly toggleSection: (id: string) => void
   /** 分区收起状态（按浮层命名空间化的 id）。 */
   readonly foldedSections: FoldedSections
-  /** 分区高度上限。 */
-  readonly sectionBudget: number
 }
 
 /**
@@ -71,7 +69,6 @@ export function buildSection(
     open: sectionIsOpenSafe(props.foldedSections, id, defaultOpen),
     onToggle: () => props.toggleSection(id),
     actions,
-    maxHeight: sectionMaxHeightSafe(props.sectionBudget),
   }, children)
 }
 
@@ -368,14 +365,9 @@ export function AccountFlyout(props: AccountFlyoutProps): ReactNode {
     undefined, true)
 }
 
-import { sectionIsOpen, sectionMaxHeight } from '../model/geometry.ts'
+import { sectionIsOpen } from '../model/geometry.ts'
 
 /** 分区是否展开（薄包装，保持渲染层不直接 import 模型函数名）。 */
 function sectionIsOpenSafe(folded: FoldedSections, id: string, defaultOpen: boolean): boolean {
   return sectionIsOpen(folded, id, defaultOpen)
-}
-
-/** 分区高度上限（薄包装）。 */
-function sectionMaxHeightSafe(budget: number): number {
-  return sectionMaxHeight(budget)
 }

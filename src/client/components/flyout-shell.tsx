@@ -11,7 +11,6 @@ import { h } from '../jsx.ts'
 import {
   flyoutPlacement,
   flyoutSectionedHeight,
-  sectionMaxHeight,
 } from '../model/geometry.ts'
 import type { FlyoutAnchor } from '../model/geometry.ts'
 import { RAIL_REVEAL_WIDTH } from '../model/constants.ts'
@@ -60,8 +59,8 @@ export type FlyoutShell = (
 /**
  * 构造一个把面板挂到 `document.body` 的浮层外壳函数。
  *
- * 面板高度用内联 `height` 钉住；分区化的面板跳过常规滚动包装层，因为那一层
- * 一旦存在就会独占滚动，内部各分区便无法独立滚动。
+ * 面板高度用内联 `height` 钉住。分区化的面板把 body 放进 `.dsr-sections`，那是
+ * 浮层里**唯一**的滚动容器（ADR-0007）：分区只是分组，不再各自限高或独立滚动。
  * @param options - 定位所需的一切与交互回调。
  * @returns 可用于渲染一个浮层的外壳函数。
  */
@@ -87,8 +86,6 @@ export function makeFlyoutShell(options: FlyoutShellOptions): FlyoutShell {
         maxHeight: `${topFlush === true ? panelHeight : placed.maxHeight}px`,
         ...(panelHeight === undefined ? {} : { height: `${panelHeight}px` }),
         left: `${(options.anchor.right ?? RAIL_REVEAL_WIDTH) + 8}px`,
-        // 所有分区共享的天花板，于是它们都读同一个「可用高度的三分之一」。
-        ...(sections === true ? { '--dsr-section-cap': `${sectionMaxHeight(panelHeight)}px` } : {}),
       },
       onPointerEnter: options.onPointerEnter,
       onPointerLeave: options.onPointerLeave,

@@ -108,6 +108,53 @@ export function IconChevron(): ReactNode {
   }, h('path', { d: 'M5 9l7 7 7-7' }))
 }
 
+/**
+ * 展开态的项目文件夹图标（宿主 folder-open 图形）。
+ *
+ * 形状照抄宿主 `IconFolderOpenRegular`（ui-primitives artwork）：三条 path 里
+ * 第一条是 opacity 0.16 的同形填充（背面那一层），第二条是外框，第三条是文件夹
+ * 背脊与左上角折角。宿主该图标是 fill-only 的 16px 图形，因此这里也走 fill，
+ * 不描边——用描边重画会得到另一个形状。外层的 stroke 只是外框默认值，
+ * 三条 path 各自用 fill 定义形状。
+ */
+export function IconFolderOpen(): ReactNode {
+  return h('svg', {
+    viewBox: '0 0 16 16', width: 16, height: 16, fill: 'none', stroke: 'currentColor',
+    strokeWidth: 1, strokeLinecap: 'round', strokeLinejoin: 'round',
+    'aria-hidden': true, focusable: false,
+  },
+  h('path', {
+    d: 'M2.55912 7.93683C2.67584 7.49906 3.0723 7.19446 3.52536 7.19446H13.6491C14.3061 7.19446 14.7846 7.81725 14.6153 8.45209L13.4411 12.856C13.3244 13.2938 12.9279 13.5984 12.4748 13.5984H2.35113C1.69411 13.5984 1.21562 12.9756 1.38489 12.3407L2.55912 7.93683Z',
+    fill: 'currentColor', opacity: 0.16, stroke: 'none',
+  }),
+  h('path', {
+    d: 'M13.6491 6.69446C14.6346 6.69453 15.3522 7.62895 15.0983 8.58118L13.9245 12.9845C13.7494 13.6412 13.1539 14.0988 12.4743 14.0988H2.35126C1.36574 14.0988 0.648153 13.1643 0.902044 12.212L2.07587 7.80774C2.25102 7.15128 2.84567 6.69455 3.52509 6.69446H13.6491ZM3.52509 7.69446C3.29865 7.69455 3.10004 7.84674 3.04169 8.06555L1.86786 12.4698C1.78345 12.7872 2.02285 13.0988 2.35126 13.0988H12.4743C12.7007 13.0988 12.8992 12.9463 12.9577 12.7277L14.1325 8.32336C14.2171 8.00598 13.9776 7.69453 13.6491 7.69446H3.52509Z',
+    fill: 'currentColor', stroke: 'none',
+  }),
+  h('path', {
+    d: 'M4.7666 1.90137C5.13227 1.90144 5.48571 2.03525 5.75977 2.27734L7.27246 3.61328C7.36379 3.69382 7.48174 3.73828 7.60352 3.73828H12.3994C13.2276 3.73841 13.8993 4.41005 13.8994 5.23828V6.7168C13.8183 6.70327 13.735 6.69436 13.6494 6.69434H12.8994V5.23828C12.8993 4.96233 12.6754 4.73841 12.3994 4.73828H7.60352C7.23781 4.73828 6.88446 4.60438 6.61035 4.3623L5.09766 3.02637C5.00636 2.94576 4.88838 2.90144 4.7666 2.90137H2.0498C1.77366 2.90137 1.5498 3.12523 1.5498 3.40137V9.78223L0.902344 12.2119C0.648452 13.1642 1.36604 14.0986 2.35156 14.0986H2.0498C1.2214 14.0986 0.549838 13.427 0.549805 12.5986V3.40137C0.549805 2.57294 1.22138 1.90137 2.0498 1.90137H4.7666Z',
+    fill: 'currentColor', stroke: 'none',
+  }))
+}
+
+/**
+ * 收起态的项目文件夹图标（宿主 folder-close 图形）。
+ *
+ * 照抄宿主 `IconFolderCloseRegular`：16px、两条描边 path（外框 + 折痕），
+ * 描边宽度取宿主 regular 权重的 1px，与展开态那条 fill-only 图形同源。
+ */
+export function IconFolderClose(): ReactNode {
+  return h('svg', {
+    viewBox: '0 0 16 16', width: 16, height: 16, fill: 'none', stroke: 'currentColor',
+    strokeWidth: 1, strokeLinecap: 'round', strokeLinejoin: 'round',
+    'aria-hidden': true, focusable: false,
+  },
+  h('path', {
+    d: 'M1.50439 3.11059C1.50439 2.55831 1.95211 2.1106 2.50439 2.1106H5.43389C5.67773 2.1106 5.91318 2.19969 6.09593 2.36113L7.71649 3.79265C7.89924 3.95409 8.1347 4.04319 8.3785 4.04319H13.4958C14.0481 4.04319 14.4958 4.4909 14.4958 5.04319V12.8894C14.4958 13.4417 14.0481 13.8894 13.4958 13.8894H2.50439C1.95211 13.8894 1.50439 13.4417 1.50439 12.8894V4.04319V3.11059Z',
+  }),
+  h('path', { d: 'M3.63501 7.66614H12.3647' }))
+}
+
 /** 一行列表的入参。 */
 export interface RowProps {
   readonly title: string
@@ -175,32 +222,38 @@ export interface ProjectRowProps {
 }
 
 /**
- * 一个项目行：展开箭头、名称、图钉、新建会话。
+ * 一个项目行：文件夹图标、名称、新建会话、图钉。
  *
- * **刻意不复用 `Row`**：项目行有三个任何会话行都没有的操作，且展开箭头必须常显
+ * **刻意不复用 `Row`**：项目行有两个任何会话行都没有的操作，且文件夹图标必须常显
  * （会话行的图钉只在悬停时出现）。并进 `Row` 会让其余每个列表都要做一堆
  * `undefined` 判断。
  *
- * 箭头与名称是同一个按钮：点哪个都收起/展开，符合 disclosure 行的惯例。
+ * 展开/收起用宿主的方式（spec §4.3）：**整行**可点，不再只有箭头可点；图标本身
+ * 也从箭头换成了文件夹——收起是 folder-close，展开是 folder-open。整行的点击
+ * 处理器挂在外层容器上，中间那个 `<button>` 只负责键盘可达与 `aria-expanded`，
+ * 它的点击事件冒泡到外层，因此鼠标与键盘走同一条路径。
+ *
  * 图钉与新建会话按钮阻止冒泡，避免顺带把行折起来。
  * @param props - 行内容、展开态与三个回调。
  * @returns 项目行元素。
  */
 export function ProjectRow(props: ProjectRowProps): ReactNode {
   return h('div', { className: 'dsr-project-row', 'data-pinned': props.pinned === true ? 'true' : undefined },
-    h('div', { className: 'dsr-row-wrap' },
+    // 整行点击：处理器只挂在这一层。内层按钮自己不挂 onClick，它的鼠标点击与
+    // 键盘 Enter/Space 都会冒泡到这一层，于是两条路径共用同一个处理器，也不会
+    // 因为两层各挂一个而切换两次。
+    h('div', { className: 'dsr-row-wrap', onClick: props.onToggleOpen },
       h('button', {
         type: 'button',
         className: 'dsr-row dsr-project-main',
         style: { flex: '1 1 auto', minWidth: 0 },
         'aria-expanded': props.open === true,
         'data-dsr-project-toggle': props.title,
-        onClick: props.onToggleOpen,
       },
       h('span', {
-        className: 'dsr-project-caret',
+        className: 'dsr-project-folder',
         'data-dsr-open': props.open === true ? 'true' : 'false',
-      }, h(IconChevron)),
+      }, props.open === true ? h(IconFolderOpen) : h(IconFolderClose)),
       h('span', { className: 'dsr-row-main' },
         h('span', { className: 'dsr-row-title' }, props.title),
         props.meta === undefined || props.meta === '' ? null : h('span', { className: 'dsr-row-meta' }, props.meta))),
@@ -358,30 +411,26 @@ export interface FlyoutSectionProps {
   readonly open: boolean
   readonly onToggle: () => void
   readonly actions?: ReactNode
-  readonly maxHeight?: number | undefined
   readonly children?: ReactNode
 }
 
 /**
- * 一个可收起的分区：不随内容滚动的标题行 + 自己的滚动区。
+ * 一个可收起的分区：标题行 + 内容区，两者都在浮层**同一个**滚动容器里。
  *
  * 标题是按钮，键盘可达，并带 `aria-expanded` 让状态可被朗读。收起时**卸载**
  * 内容区而不是用 CSS 隐藏——留着挂载会让下次展开回到旧的滚动位置。
  *
- * 高度上限由面板通过内联 `maxHeight` 下发，所有分区共享同一个「可用高度的
- * 三分之一」，而不是各自猜自己有多少空间。
+ * 分区**不再限高、也不再自己滚动**（ADR-0007）：标题与条目一起随浮层整体滚动，
+ * 于是这里既没有 `maxHeight` 入参，也没有内联高度。
  * @param props - 标题、展开标志、收起回调、可选的行内操作、分区内容。
  * @returns 分区元素。
  */
 export function FlyoutSection(props: FlyoutSectionProps): ReactNode {
+  // 没有内联高度：分区高度从此只由内容决定，限高已随 ADR-0007 一并移除。
   return h('div', {
     className: 'dsr-section',
     'data-dsr-section': props.title,
     'data-dsr-open': props.open === true ? 'true' : 'false',
-    // 上限用内联而不是面板上的 CSS 变量：百分比 max-height 需要确定的父高度，
-    // 而这些条目是内容高度，于是后备规则静默失效，最后一个分区会撑满面板
-    // 而不是被限制并滚动（验收 B3，实测 566px 对 316px 的三分之一）。
-    style: props.maxHeight === undefined ? undefined : { maxHeight: `${props.maxHeight}px` },
   },
   h('div', { className: 'dsr-section-head' },
     h('button', {

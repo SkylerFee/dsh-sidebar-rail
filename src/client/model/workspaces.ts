@@ -32,15 +32,20 @@ import type {
  * `attachSession` 没有 subagent 调用点，那些会话根本不进 `sessionIds`。
  * 再按 `origin` 筛一遍，只会在宿主改变行为时误伤真实会话。
  *
- * 快照里缺失的成员仍会产出一行（标题退化为 id）：`sessionIds` 来自工作区
- * registry，`byId` 来自会话快照，重命名或删除的瞬间两者可能差一帧。
- * 丢掉该行会让一个会话从它自己的项目里凭空消失。
+ * 快照里缺失的成员**直接丢弃，不产出任何行**：`sessionIds` 来自工作区
+ * registry，`byId` 来自会话快照，重命名或删除的瞬间两者可能差一帧。旧行为在这里
+ * 补一行 `title: id` 的占位，结果是项目下冒出一个与项目同名的「幽灵会话」——
+ * 点开没有任何内容。宁可少一帧的会话行，也不产出点不开的假节点；项目确实没有
+ * 会话时由渲染层显示空态（`empty.projectSessions`），而不是任何占位行。
+ *
+ * 丢弃时记一行调试日志（只有条数，不含标题、路径或 id）。
  * @param sessionIds - `WorkspaceView.sessionIds`，宿主顺序。
  * @param byId - `useSessions` 提供的会话摘要，按 id 索引。
  * @param language - 当前 locale id，用于相对时间。
  * @param archivedIds - 归档会话 id，只用于打标记。
  * @param shownSessionId - 主视图正在显示的会话，只用于打标记。
- * @returns 行数组，不排序、不过滤。
+ * @returns 行数组：不排序、不按 archived/blank 过滤；缺摘要的成员被丢弃，
+ *   因此长度可能小于传入的成员数（空项目返回零行，由渲染层显示空态）。
  */
 export function projectSessionRows(
   sessionIds: readonly SessionId[] | null | undefined,
@@ -53,14 +58,14 @@ export function projectSessionRows(
   const summaries = byId !== null && byId !== undefined && typeof byId === 'object' ? byId : {}
   const archived = new Set<SessionId>(Array.isArray(archivedIds) ? archivedIds : [])
   const rows: ProjectSessionRow[] = []
+  let total = 0
   for (const raw of sessionIds) {
     if (raw === null || raw === undefined) continue
+    total += 1
     const id = String(raw)
     const entry = summaries[id]
-    if (entry === null || entry === undefined || typeof entry !== 'object') {
-      rows.push({ id, title: id, meta: '', archived: archived.has(id), current: id === shownSessionId })
-      continue
-    }
+    // 缺摘要的成员没有任何可渲染的内容，产出占位行就是那个「幽灵会话」。
+    if (entry === null || entry === undefined || typeof entry !== 'object') continue
     rows.push({
       id,
       title: entryDisplayTitle(entry, id),
@@ -68,6 +73,11 @@ export function projectSessionRows(
       archived: archived.has(id),
       current: id === shownSessionId,
     })
+  }
+  if (rows.length !== total) {
+    // 只报条数：标题、路径与 id 都可能敏感，且这行日志的用途只是让
+    // 「项目里少了一条会话」有迹可循（CODING_STANDARDS §6）。
+    console.info('[dsh-sidebar-rail] project sessions: kept %d of %d members', rows.length, total)
   }
   return rows
 }

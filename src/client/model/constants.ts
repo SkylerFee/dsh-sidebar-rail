@@ -57,16 +57,6 @@ export const FLYOUT_CHROME_HEIGHT = 96
  */
 export const FRAME_TOP_CLEARANCE_FALLBACK = 48
 
-/**
- * 单个分区的最大高度占可用高度的比例。
- *
- * 0.4.0 用「每个分组一个分区」取代「两栏等分」：三个分区共享浮层时谁都不该独占，
- * 于是各自最多可用高度的三分之一，超出则自己滚动；内容少的分区保持自然高度，
- * 不强行撑满（那是 CSS 的 `flex: 0 1 auto`，不是这里的算术）。
- * 见 docs/adr/0004-sectioned-flyout.md。
- */
-export const SECTION_HEIGHT_RATIO = 1 / 3
-
 /** 唤出图标轨的边缘热区宽度。 */
 export const RAIL_HOTZONE_WIDTH = 12
 

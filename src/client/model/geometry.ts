@@ -1,23 +1,55 @@
 /**
- * 几何计算：浮层高度、分区上限、浮层定位与图标轨唤出判据。
+ * 几何计算：浮层高度、浮层定位、分区展开判据与图标轨唤出判据。
  *
- * 全是纯函数，便于单测；这些数字直接对应真机验收项（B3 的分区上限、
- * B4 的高度不随内容变化）。宿主 chrome 带高度从调用方传入，模块本身不读 DOM。
+ * 全是纯函数，便于单测；这些数字直接对应真机验收项（B4 的高度不随内容变化）。
+ * 宿主 chrome 带高度从调用方传入，模块本身不读 DOM。
+ *
+ * 0.5.0 起不再有「分区限高」：浮层内容是单一滚动容器，分区只是分组
+ * （见 docs/adr/0007-single-scroll-flyout.md），所以 sectionMaxHeight /
+ * sectionBudgetFor 与 SECTION_HEIGHT_RATIO 一并删除。
  */
 import {
   FLYOUT_CHROME_HEIGHT,
   FLYOUT_EDGE_GAP,
   FRAME_TOP_CLEARANCE_FALLBACK,
-  SECTION_HEIGHT_RATIO,
+  RAIL_REVEAL_WIDTH,
 } from './constants.ts'
 import type { FoldedSections } from './types.ts'
 
-/** 浮层锚点：打开它的图标按钮在视口中的位置。 */
+/**
+ * 浮层锚点。
+ *
+ * 语义是「图标轨的位置」，**不是**「某个按钮此刻的矩形」：`right` 恒为轨展开后的
+ * 右缘（左缘 0 + `RAIL_REVEAL_WIDTH`），只有 `top` / `bottom` 随垂直位置变化。
+ */
 export interface FlyoutAnchor {
   readonly top: number
   readonly bottom: number
-  /** 图标轨右缘，用于把浮层摆在它右侧；只做定位计算时可以不提供。 */
+  /** 图标轨右缘的固定 x 坐标；浮层摆在它右侧。只做定位计算时可以不提供。 */
   readonly right?: number | undefined
+}
+
+/**
+ * 触发按钮矩形里本模块读取的部分。
+ *
+ * `right` **存在但被刻意忽略**：轨的露出动画让它不可信（见 `flyoutAnchorFrom`）。
+ * 保留该字段是为了让 DOMRect 结构兼容，并让「忽略它」这件事在类型上可见。
+ */
+export interface TriggerRectLike {
+  readonly top?: number | undefined
+  readonly bottom?: number | undefined
+  readonly right?: number | undefined
+}
+
+/**
+ * 浮层默认锚点：拿不到按钮矩形时的兜底。
+ *
+ * 垂直值只是「第一排图标附近」的保守估计；`right` 是轨展开后的右缘。
+ */
+export const DEFAULT_FLYOUT_ANCHOR: FlyoutAnchor = {
+  top: 12,
+  bottom: 44,
+  right: RAIL_REVEAL_WIDTH,
 }
 
 /** 浮层定位结果：上边或下边贴齐，以及可用的最大高度。 */
@@ -25,6 +57,30 @@ export interface FlyoutPlacement {
   readonly top?: number
   readonly bottom?: number
   readonly maxHeight: number
+}
+
+/**
+ * 从触发按钮的矩形推出浮层锚点，水平方向**只用轨的固定几何**。
+ *
+ * 为什么不能读矩形里的 `right`（spec-0.5.0 §4.5.1 决策 3）：图标轨默认
+ * `transform: translateX(-100%)`，露出时用 160ms 过渡滑到 `translateX(0)`，
+ * 而浮层在悬停 120ms 后就打开。打开瞬间量到的矩形反映的是**过渡中途**的位置，
+ * 左侧还在窗口外，`right` 因而偏小，浮层被摆得偏左；即便改到计时器回调里
+ * 再量，结果也只是「另一个中途位置」，依赖动画时序。这还顺带影响「轨正在
+ * 收回时打开浮层」的同一条路径。
+ *
+ * 锚点的语义本就是「轨在哪」，不是「按钮此刻在哪」，所以水平基准取常量：
+ * 左缘 0、右缘 `RAIL_REVEAL_WIDTH`。垂直位置仍取自矩形——它不受水平滑动
+ * 影响，且保留它浮层才能与按钮垂直对齐。
+ * @param rect - 触发按钮的矩形；缺失或字段非法时逐项退回默认锚点。
+ * @returns 可直接交给 `flyoutPlacement` 与外壳定位的锚点。
+ */
+export function flyoutAnchorFrom(rect: TriggerRectLike | null | undefined): FlyoutAnchor {
+  const top = typeof rect?.top === 'number' && Number.isFinite(rect.top) ? rect.top : DEFAULT_FLYOUT_ANCHOR.top
+  const bottom = typeof rect?.bottom === 'number' && Number.isFinite(rect.bottom)
+    ? rect.bottom
+    : DEFAULT_FLYOUT_ANCHOR.bottom
+  return { top, bottom, right: RAIL_REVEAL_WIDTH }
 }
 
 /**
@@ -49,49 +105,6 @@ export function flyoutSectionedHeight(
   const clearance = typeof topClearance === 'number' && Number.isFinite(topClearance) && topClearance > 0
     ? topClearance : FRAME_TOP_CLEARANCE_FALLBACK
   return Math.max(0, Math.round(viewport - clearance))
-}
-
-/**
- * 单个分区在开始自身滚动前可占的最大高度。
- *
- * 取可用高度的三分之一并向下取整，保证三个满额分区加起来不超过可用空间。
- * 调用方仍通过 flex 与分区自身内容高度取 min：这是**上限**，不是目标值
- * ——内容少的分区保持自然高度，不强行撑满。
- * @param availableHeight - 浮层体可用的高度。
- * @returns 像素上限，不为负、不为 NaN。
- */
-export function sectionMaxHeight(availableHeight: number | undefined): number {
-  const available = typeof availableHeight === 'number' && Number.isFinite(availableHeight) && availableHeight > 0
-    ? availableHeight : 0
-  if (available === 0) return 0
-  return Math.floor(available * SECTION_HEIGHT_RATIO)
-}
-
-/**
- * 求分区高度上限所依据的「可用预算」。
- *
- * 浮层可用高度减去面板自身 head + foot 的预留，就是里面所有分区能瓜分的空间。
- * 这个值必须由这里算出并可单测，而不是散在渲染闭包里：B3 的「每区不超过可用
- * 高度三分之一」直接依赖它，一旦算错，真机上表现为某个分区撑满整块面板。
- *
- * 真机实测对照（macOS Desktop，外接屏 1920×1080，渲染进程 innerHeight 1092）：
- * `1092 − 48 − 96 = 948`，取三分之一得 316px，与实测 sections 容器 949px
- * 的三分之一完全吻合。
- * @param viewportHeight - `window.innerHeight`。
- * @param topClearance - 顶部 chrome 带高度，通常来自 `--dsh-frame-top-clearance`。
- * @param chromeHeight - 面板 head 与 foot 占掉的预留高度。
- * @returns 像素预算，不为负、不为 NaN。
- */
-export function sectionBudgetFor(
-  viewportHeight: number | undefined,
-  topClearance: number | undefined,
-  chromeHeight: number | undefined,
-): number {
-  const panel = flyoutSectionedHeight(viewportHeight, topClearance)
-  if (panel === 0) return 0
-  const chrome = typeof chromeHeight === 'number' && Number.isFinite(chromeHeight) && chromeHeight > 0
-    ? chromeHeight : 0
-  return Math.max(0, panel - chrome)
 }
 
 /**

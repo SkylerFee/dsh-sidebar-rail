@@ -45,9 +45,7 @@ import {
   flyoutPlacement,
   flyoutSectionedHeight,
   keepsRailRevealed,
-  sectionBudgetFor,
   sectionIsOpen,
-  sectionMaxHeight,
 } from '../src/client/model/geometry.ts'
 import type { SessionSummaryLike } from '../src/client/model/types.ts'
 
@@ -98,32 +96,6 @@ test('deriveSections: pinned workspaces lead, in pin order', () => {
   const sections = deriveSections(WORKSPACES, { byId: {} }, [], ['ws3', 'ws1'], 'en')
   assert.deepEqual(sections.pinnedRows.map((r) => r.id), ['ws3', 'ws1'])
   assert.deepEqual(sections.normalRows.map((r) => r.id), ['ws2'])
-})
-
-test('sectionBudgetFor: the room a section is measured against', () => {
-  // 分区上限的基数 = 浮层可用高度 - 面板自身的 head+foot 预算。
-  // 真机实测：innerHeight 1092、chrome 带 48、FLYOUT_CHROME_HEIGHT 96
-  //   -> 1092 - 48 - 96 = 948 -> cap 316，与实测 sections 容器 949 的 1/3 一致。
-  assert.equal(sectionBudgetFor(1092, 48, 96), 948)
-  assert.equal(sectionBudgetFor(1080, 48, 96), 936)
-  // 矮到不够 head+foot 时不产出负值——负的 max-height 在 CSS 里是非法的。
-  assert.equal(sectionBudgetFor(100, 48, 96), 0)
-  assert.equal(sectionBudgetFor(48, 48, 96), 0)
-  // 脏输入不产出 NaN。
-  assert.equal(sectionBudgetFor(Number.NaN, 48, 96), 0)
-  // clearance 取不到时 flyoutSectionedHeight 回退到文档的 48px（不盖红绿灯优先），
-  // 所以预算仍按 48 算，而不是塌成 0。
-  assert.equal(sectionBudgetFor(1092, Number.NaN, 96), 948)
-  // chromeHeight 脏值时按 0 预留，预算等于面板全高。
-  assert.equal(sectionBudgetFor(1092, 48, Number.NaN), 1044)
-})
-
-test('sectionBudgetFor: the cap derived from it lands on the measured third', () => {
-  // 回归锁：这条把「预算 → 上限」两个函数接起来，保证 B3 的数值关系不漂移。
-  const budget = sectionBudgetFor(1092, 48, 96)
-  assert.equal(sectionMaxHeight(budget), 316)
-  // 三个满额分区合计不超过预算。
-  assert.ok(sectionMaxHeight(budget) * 3 <= budget)
 })
 
 test('taskNextRun: the host formula, not a nextRunAt field', () => {
@@ -331,11 +303,23 @@ test('projectSessionRows: archived members stay listed and are marked', () => {
   assert.equal(rows[1]!.archived, true, 'the renderer needs to tell the two apart')
 })
 
-test('projectSessionRows: unknown members degrade to an id-only row', () => {
-  // sessionIds 是宿主 registry 的结果，byId 是宿主会话快照：两者可能短暂不同步。
-  // 缺条目时给一行占位，而不是整段消失。
+test('projectSessionRows: members missing from the snapshot are dropped', () => {
+  // 0.5.0 行为变更（spec §4.5.2）：sessionIds 是宿主 registry 的结果，byId 是宿主
+  // 会话快照，两者可能短暂不同步。旧实现缺条目时补一行 title=id 的占位，结果是
+  // 项目下冒出一个与项目同名的「幽灵会话」，点开没有任何内容。现在直接丢弃。
   const rows = projectSessionRows(['ghost'], { s1: session('s1') }, 'en')
-  assert.deepEqual(rows, [{ id: 'ghost', title: 'ghost', meta: '', archived: false, current: false }])
+  assert.deepEqual(rows, [], 'a member with no summary produces no row at all')
+  // 混合输入：能解析的成员照列，缺摘要的被丢弃，顺序保持宿主顺序。
+  const mixed = projectSessionRows(['ghost', 's1', 'phantom'], { s1: session('s1', { displayTitle: 'real' }) }, 'en')
+  assert.deepEqual(mixed.map((r) => r.id), ['s1'])
+  assert.equal(mixed[0]!.title, 'real')
+})
+
+test('projectSessionRows: an empty project yields no rows', () => {
+  // 空项目的「空态文案」是渲染层的事；模型层只保证零行——绝不能靠占位行充数，
+  // 否则空态与假会话就分不清了（spec §4.5.2）。
+  assert.deepEqual(projectSessionRows([], { s1: session('s1') }, 'en'), [])
+  assert.deepEqual(projectSessionRows([], {}, 'en'), [])
 })
 
 test('projectSessionRows: a missing or junk session list is empty, not a throw', () => {
@@ -647,17 +631,6 @@ test('sectionIsOpen: the spec default applies until the person folds a section',
   assert.equal(sectionIsOpen({ other: true }, 'tasks.active', true), true)
   assert.equal(sectionIsOpen(null, 'tasks.active', true), true)
   assert.equal(sectionIsOpen(undefined, 'tasks.active', false), false)
-})
-
-test('sectionMaxHeight: each section caps at one third of the available height', () => {
-  // 内容超出 1/3 时该区自己滚动；不足 1/3 时不强行撑满（由 CSS 的 flex 负责）。
-  assert.equal(sectionMaxHeight(900), 300)
-  assert.equal(sectionMaxHeight(852), 284)
-  assert.equal(sectionMaxHeight(901), 300)
-  // 极小的可用高度向下取整到 0，不产出负值或小数。
-  assert.equal(sectionMaxHeight(2), 0)
-  assert.equal(sectionMaxHeight(0), 0)
-  assert.equal(sectionMaxHeight(Number.NaN), 0)
 })
 
 test('keepsRailRevealed: position decides, so an overlaid strip cannot oscillate', () => {

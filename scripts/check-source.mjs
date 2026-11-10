@@ -152,7 +152,33 @@ const sources = new Map(tsFiles.map((path) => [path, read(path)]))
   if (hits.length === 0) console.log('ok  model-purity: model modules stay free of UI, entry and React imports')
 }
 
-// ------------------------------------------------------- 5. 文件规模 --
+// ------------------------------------------------- 5. CSS 颜色只走宿主 token --
+// 硬编码色值会让浮层在深/浅色主题下与宿主脱节（spec §4.6 的验收口径是「全部走
+// 宿主 token」）。只允许 var(--...)、transparent 与 currentColor。
+{
+  const banned = [
+    [/#[0-9a-fA-F]{3,8}\b/g, 'hex colour'],
+    [/\brgba?\(/g, 'rgb()/rgba() colour'],
+    [/\bhsla?\(/g, 'hsl()/hsla() colour'],
+  ]
+  const hits = []
+  for (const path of cssFiles) {
+    const text = read(path)
+    for (const [pattern, why] of banned) {
+      for (const match of text.matchAll(pattern)) {
+        // 行号便于定位；不打印整行，避免把长规则回显到终端。
+        const line = text.slice(0, match.index).split('\n').length
+        hits.push(`${why} at line ${line} (${path.slice(root.length + 1)})`)
+      }
+    }
+  }
+  for (const why of hits) fail('颜色', why)
+  if (hits.length === 0 && cssFiles.length > 0) {
+    console.log('ok  颜色: stylesheets use only host tokens, transparent or currentColor')
+  }
+}
+
+// ------------------------------------------------------- 6. 文件规模 --
 // 单文件过大是「所有实现挤在一处」的回归信号。
 {
   const LIMIT = 700
