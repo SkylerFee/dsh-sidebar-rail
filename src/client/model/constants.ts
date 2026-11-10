@@ -30,17 +30,24 @@ export const RAIL_MIN_VIEWPORT = 768
  */
 export const REMOTE_TIMEOUT_MS = 5000
 
-/** 最近会话行数的硬上限。 */
-export const RECENT_LIMIT = 20
+/**
+ * 列表分页的基础水位：一屏默认显示多少条非空白会话。
+ *
+ * 0.5.1 起不再是用户偏好（可调的 `recentCount` 已整项移除，spec §4）：它是
+ * 「显示更多」每次累加的步长，也是自动提升的下限。照抄宿主
+ * `SESSION_WATERMARK_BASE`。
+ */
+export const PAGE_SIZE = 10
 
-/** `recentCount` 偏好的默认值：浮层显示多少最近会话行。 */
-export const DEFAULT_RECENT_COUNT = 5
+/**
+ * 自动提升水位的上限，照抄宿主 `SESSION_WATERMARK_AUTO_MAX`。
+ *
+ * 只有落在这个序号之内的会话才能把水位自动顶高；再往后就只剩「显示更多」。
+ */
+export const PAGE_SIZE_AUTO_MAX = 50
 
-/** 偏好允许的下界；设置输入框按此范围夹取。 */
-export const MIN_RECENT_COUNT = 1
-
-/** 偏好允许的上界。 */
-export const MAX_RECENT_COUNT = RECENT_LIMIT
+/** 最近会话区在水位表里的固定键（项目列表用自己的工作区 id 作键）。 */
+export const RECENT_LIST_KEY = 'recent'
 
 /** 浮层与窗口边缘之间保留的间隙。 */
 export const FLYOUT_EDGE_GAP = 12

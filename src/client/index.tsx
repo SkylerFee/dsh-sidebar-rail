@@ -1,15 +1,13 @@
 /**
  * Client 半边入口：导出 `inject` 与 `apply`，组织槽注册、locale 与样式生命周期。
  *
- * 只使用宿主公开面：`shell.overlay` 增量注册（从不替换 sidebar 单槽），
- * 自己的设置块注册到 `plugins.bundle.config`。所有注册都经 `ctx.effect` 持有
- * 清理句柄，卸载顺序是「先停消费者，再释放依赖」。
+ * 只使用宿主公开面：`shell.overlay` 增量注册（从不替换 sidebar 单槽）。
+ * 所有注册都经 `ctx.effect` 持有清理句柄，卸载顺序是「先停消费者，再释放依赖」。
  */
 import type { ReactNode } from 'react'
 import { h } from './jsx.ts'
 import { Boundary } from './components/primitives.tsx'
 import { RailOverlay } from './components/RailOverlay.tsx'
-import { RailSettings } from './components/RailSettings.tsx'
 import {
   localeSource,
   panelEntriesSource,
@@ -248,15 +246,6 @@ export function apply(ctx: ClientContext): void {
       h(RailOverlay, props as never)))) as () => void
 
     ctx.effect(registerOverlay, 'dsh-sidebar-rail: rail overlay')
-
-    // 插件详情页的配置座位。`key` 必须是包名，那是宿主的 bundle 用的同一契约。
-    const registerSettings = (): () => void => ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
-      name: 'plugins.bundle.config',
-      key: '@skylerfee/dsh-sidebar-rail',
-      locale: NS,
-    }, RailSettings as never)) as () => void
-
-    ctx.effect(registerSettings, 'dsh-sidebar-rail: settings panel')
   } catch (error) {
     console.error('[dsh-sidebar-rail] apply failed; the shipped sidebar is unaffected', error)
   }

@@ -275,8 +275,13 @@ const registrations = []
       domSandbox.console.error = origError
     }
     const labels = effects.map((entry) => entry.label)
-    for (const required of ['dictionaries', 'styles', 'rail overlay', 'settings panel']) {
+    // 0.5.1 起设置块整项移除（spec-0.5.1 §4）：唯一剩下的设置项是最近会话条数，
+    // 它已被「默认 10 条 + 显示更多」取代，因此不再有第四支 effect。
+    for (const required of ['dictionaries', 'styles', 'rail overlay']) {
       if (!labels.some((label) => label.includes(required))) fail('lifecycle', `apply did not register the ${required} effect`)
+    }
+    if (labels.some((label) => label.includes('settings panel'))) {
+      fail('lifecycle', 'apply must not register a settings-panel effect: the settings block was removed in 0.5.1')
     }
     if (localeRegistrations.length !== 1 || localeRegistrations[0].namespace !== 'sidebarRail') {
       fail('lifecycle', `locale.register should run once for namespace sidebarRail, saw ${JSON.stringify(localeRegistrations)}`)
@@ -285,9 +290,10 @@ const registrations = []
     if (overlay === undefined) fail('lifecycle', 'apply did not register into shell.overlay')
     else if (overlay.id !== 'dsh-sidebar-rail.rail') fail('lifecycle', `overlay id should be dsh-sidebar-rail.rail, saw ${overlay.id}`)
     else if (overlay.children !== undefined) fail('lifecycle', 'the overlay entry must not declare children')
+    // 反过来断言：插件详情页设置块已删除，不得再注册进 plugins.bundle.config。
+    // 这条检查是「移除动作没被意外回滚」的守卫，不是遗漏。
     const settings = slotRegistrations.find((definition) => definition.name === 'plugins.bundle.config')
-    if (settings === undefined) fail('lifecycle', 'apply did not register into plugins.bundle.config')
-    else if (settings.key !== pkg.name) fail('lifecycle', `settings key should be the package name, saw ${settings.key}`)
+    if (settings !== undefined) fail('lifecycle', 'apply must not register into plugins.bundle.config: the settings block was removed in 0.5.1')
     if (styleNodes.length !== 1) fail('lifecycle', `the styles effect should create exactly one style node, saw ${styleNodes.length}`)
     else if (styleNode.textContent.length === 0) fail('lifecycle', 'the injected style node carries no CSS text')
     for (const entry of effects) {

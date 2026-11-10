@@ -4,19 +4,26 @@
  * 每个浮层只负责把自己那组已归一化的行画成分区；数据与回调都由
  * `RailColumn` 传入，组件本身不读宿主 Context。
  */
+import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { h } from '../jsx.ts'
-import { MAX_RECENT_COUNT, MIN_RECENT_COUNT } from '../model/constants.ts'
 import type { FlyoutShell } from './flyout-shell.tsx'
 import {
   ActionRow,
   Empty,
   FlyoutSection,
   ProjectRow,
-  RecentCountRow,
   Row,
   Section,
+  ShowMore,
 } from './primitives.tsx'
+import { RECENT_LIST_KEY } from '../model/constants.ts'
+import {
+  projectRowNeedsAttention,
+  recentRowNeedsAttention,
+  requiredWatermark,
+  watermarkSlice,
+} from '../model/workspaces.ts'
 import type { Translate } from '../locales.ts'
 import type {
   AccountBalances,
@@ -82,9 +89,15 @@ export interface WorkspaceFlyoutProps extends FlyoutCommonProps {
   readonly startSessionInProject: (workspaceId: string) => void
   readonly addProject: () => void
   readonly projectAction: { readonly phase: string; readonly message?: string | undefined }
-  readonly recentCount: number
-  readonly changeRecentCount: (next: number) => void
   readonly projectSessionRows: (row: WorkspaceRow) => readonly ProjectSessionRow[]
+  /** 有效水位 = max(用户抬高值, 自动需求值, PAGE_SIZE)。 */
+  readonly effectiveWatermark: (key: string, required?: number) => number
+  /** 点「显示更多」：在当前有效水位上再 + PAGE_SIZE。 */
+  readonly raiseWatermark: (key: string, required?: number) => void
+  /** 把自动需求水位记进控制器，于是它只升不降。 */
+  readonly noteWatermark: (key: string, required: number) => void
+  /** 主视图正在显示的会话 id，供最近会话区的注意力判定。 */
+  readonly currentSessionId: string | undefined
   readonly shell: FlyoutShell
 }
 
@@ -94,21 +107,24 @@ export interface WorkspaceFlyoutProps extends FlyoutCommonProps {
  * 一个项目只会出现在前两个之一——`deriveSections` 已经分好区，渲染层只在各自
  * 分区里画各自列表。三个分区默认全展开，且任何一项都不持久化（spec 3.1）。
  *
- * 每个项目行就地展开成自己的会话列表；该列表**刻意不过滤**（见 projectSessionRows），
- * 与下面的最近会话区策略相反。
+ * 每个项目行就地展开成自己的会话列表。最近会话区与**每个项目**各自维护一份水位
+ * （spec-0.5.1 §4）：基础显示 10 条，注意力行（运行中/待操作/未读/当前）自动突破
+ * 水位显示，用户点「显示更多」再 +10。水位不落盘，浮层关闭即重置。
  */
 export function WorkspaceFlyout(props: WorkspaceFlyoutProps): ReactNode {
   const { t, sections, expandedProjects, projectAction } = props
 
   /**
    * 一个项目行加上它展开后的会话列表。
+   *
+   * 分页按项目独立：`ProjectSessions` 内部用 `project:<workspaceId>` 作水位 key，
+   * 两个项目同时展开时各抬各的水位。
    * @param row - `deriveSections` 给出的 `{ id, title, sessionIds }`。
    * @param pinned - 是否在置顶分区渲染。
    * @returns 项目行元素。
    */
   const projectRow = (row: WorkspaceRow, pinned: boolean): ReactNode => {
     const openProjects = expandedProjects[row.id] === true
-    const sessionRows = props.projectSessionRows(row)
     return h(ProjectRow, {
       key: `p-${row.id}`,
       title: row.title,
@@ -120,17 +136,16 @@ export function WorkspaceFlyout(props: WorkspaceFlyoutProps): ReactNode {
       newSessionLabel: t('action.newSession'),
       onNewSession: () => props.startSessionInProject(row.id),
     }, openProjects
-      ? (sessionRows.length === 0
-        ? h(Empty, null, t('empty.projectSessions'))
-        : sessionRows.map((entry) => h(Row, {
-          key: `ps-${row.id}-${entry.id}`,
-          title: entry.title,
-          // 归档行仍然列出但会标注，这样一条不再出现在最近会话区的会话
-          // 不会被读成「不见了」。
-          meta: [entry.meta, entry.archived ? t('status.archived') : ''].filter(Boolean).join(' · '),
-          current: entry.current === true,
-          onClick: () => props.openSession(entry.id),
-        })))
+      ? h(ProjectSessions, {
+        t,
+        workspaceId: row.id,
+        rows: props.projectSessionRows(row),
+        currentSessionId: props.currentSessionId,
+        openSession: props.openSession,
+        effectiveWatermark: props.effectiveWatermark,
+        raiseWatermark: props.raiseWatermark,
+        noteWatermark: props.noteWatermark,
+      })
       : null)
   }
 
@@ -157,30 +172,100 @@ export function WorkspaceFlyout(props: WorkspaceFlyoutProps): ReactNode {
     disabled: projectsBusy,
     onClick: props.addProject,
   }, projectsBusy ? t('state.picking') : t('action.addProject'))
+  // 最近会话区的水位：注意力行（运行中/待操作/未读/当前）把水位顶上去，
+  // 用户点「显示更多」再 +10。`noteWatermark` 在 effect 里折进 state，
+  // 于是自动提升只升不降（宿主同款）；渲染期只做纯读的 `effectiveWatermark`。
+  const recentRequired = requiredWatermark(sections.recentRows, props.currentSessionId, recentRowNeedsAttention)
+  useEffect(() => {
+    props.noteWatermark(RECENT_LIST_KEY, recentRequired)
+  }, [props.noteWatermark, recentRequired])
+  const recentVisible = watermarkSlice(
+    sections.recentRows,
+    props.effectiveWatermark(RECENT_LIST_KEY, recentRequired),
+  )
   const recent = sections.recentRows.length === 0
     ? h(Empty, null, t('empty.recent'))
-    : sections.recentRows.map((row) => h(Row, {
-      key: `recent-${row.id}`,
-      title: row.title,
-      meta: row.meta,
-      current: row.active === true,
-      status: row.status,
-      statusLabel: t(row.status === 'idle' ? 'status.idle' : `status.${row.status}` as never),
-      onClick: () => props.openSession(row.id),
-    }))
-  const stepper = h('div', { className: 'dsr-flyout-foot' },
-    h(RecentCountRow, {
-      value: props.recentCount,
-      label: t('settings.recentCount'),
-      onChange: props.changeRecentCount,
-      min: MIN_RECENT_COUNT,
-      max: MAX_RECENT_COUNT,
-    }))
+    : [
+      ...recentVisible.rows.map((row) => h(Row, {
+        key: `recent-${row.id}`,
+        title: row.title,
+        meta: row.meta,
+        current: row.active === true,
+        status: row.status,
+        statusLabel: t(row.status === 'idle' ? 'status.idle' : `status.${row.status}` as never),
+        onClick: () => props.openSession(row.id),
+      })),
+      recentVisible.hiddenCount > 0
+        ? h(ShowMore, {
+          key: 'recent-more',
+          label: t('action.showMore'),
+          onClick: () => props.raiseWatermark(RECENT_LIST_KEY, recentRequired),
+        })
+        : null,
+    ]
   return props.shell(t('rail.workspace'), [
     buildSection(props, 'workspace', 'pinned', t('section.pinned'), true, pinned),
     buildSection(props, 'workspace', 'projects', t('section.workspaces'), true, projects, addProjectAction),
     buildSection(props, 'workspace', 'recent', t('section.recent'), true, recent),
-  ], stepper, undefined, undefined, true)
+  ], undefined, undefined, undefined, true)
+}
+
+/** 一个展开项目的会话列表的入参。 */
+export interface ProjectSessionsProps {
+  /** 翻译函数。 */
+  readonly t: Translate
+  /** 工作区 id，构成本列表的水位 key（`project:<id>`）。 */
+  readonly workspaceId: string
+  /** 该项目下的全部会话行（已由 `projectSessionRows` 归一化）。 */
+  readonly rows: readonly ProjectSessionRow[]
+  /** 主视图正在显示的会话 id，供注意力判定。 */
+  readonly currentSessionId: string | undefined
+  /** 打开一条会话。 */
+  readonly openSession: (sessionId: string) => void
+  /** 当前有效水位 = max(抬高值, required, PAGE_SIZE)。 */
+  readonly effectiveWatermark: (key: string, required?: number) => number
+  /** 「显示更多」：在当前有效水位上 + PAGE_SIZE。 */
+  readonly raiseWatermark: (key: string, required?: number) => void
+  /** 把自动需求水位折进控制器，于是它只升不降。 */
+  readonly noteWatermark: (key: string, required: number) => void
+}
+
+/**
+ * 一个项目展开后的会话列表：水位切片与「显示更多」。
+ *
+ * 独立成组件而不是写在 `projectRow` 的渲染回调里，因为「把自动需求记进控制器」
+ * 需要 `useEffect`：在渲染期写状态会触发 React 的副作用警告，也会在
+ * StrictMode 下重复执行。每个项目一个实例，于是水位天然按项目独立。
+ * @param props - 该项目的全部会话行与水位的读取/抬高接口。
+ * @returns 行元素列表，或空态。
+ */
+export function ProjectSessions(props: ProjectSessionsProps): ReactNode {
+  const { t, workspaceId, rows } = props
+  const key = `project:${workspaceId}`
+  const required = requiredWatermark(rows, props.currentSessionId, projectRowNeedsAttention)
+  useEffect(() => {
+    props.noteWatermark(key, required)
+  }, [props.noteWatermark, key, required])
+  if (rows.length === 0) return h(Empty, null, t('empty.projectSessions'))
+  const visible = watermarkSlice(rows, props.effectiveWatermark(key, required))
+  return [
+    ...visible.rows.map((entry) => h(Row, {
+      key: `ps-${workspaceId}-${entry.id}`,
+      title: entry.title,
+      // 归档行仍然列出但会标注，这样一条不再出现在最近会话区的会话
+      // 不会被读成「不见了」。
+      meta: [entry.meta, entry.archived ? t('status.archived') : ''].filter(Boolean).join(' · '),
+      current: entry.current === true,
+      onClick: () => props.openSession(entry.id),
+    })),
+    visible.hiddenCount > 0
+      ? h(ShowMore, {
+        key: `ps-more-${workspaceId}`,
+        label: t('action.showMore'),
+        onClick: () => props.raiseWatermark(key, required),
+      })
+      : null,
+  ]
 }
 
 /** 任务浮层的入参。 */

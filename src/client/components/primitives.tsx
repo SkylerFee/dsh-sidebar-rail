@@ -9,7 +9,6 @@ import { Component, useState } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import { h } from '../jsx.ts'
 import type { SessionMark } from '../model/types.ts'
-import { MAX_RECENT_COUNT, MIN_RECENT_COUNT } from '../model/constants.ts'
 
 /** 图标公共入参：尺寸与子节点（`<path>`、`<circle>` 等）。 */
 export interface IconProps {
@@ -348,48 +347,6 @@ export function StateMark({ status, label }: StateMarkProps): ReactNode {
   })
 }
 
-/** 条数步进器的入参。 */
-export interface RecentCountRowProps {
-  readonly value: number
-  readonly label: string
-  readonly onChange: (next: number) => void
-  readonly min?: number | undefined
-  readonly max?: number | undefined
-}
-
-/**
- * 一条紧凑的步进行：最近会话条数偏好。
- *
- * 这是该值能改变的第二处（插件详情页是第一处）；两者写同一个 localStorage 键，
- * 因此图标轨浮层提供的是短路径，而不是自己拥有该设置。
- * @param props - 当前值、标签、变更回调与边界。
- * @returns 步进行元素。
- */
-export function RecentCountRow({ value, label, onChange, min, max }: RecentCountRowProps): ReactNode {
-  const low = min ?? MIN_RECENT_COUNT
-  const high = max ?? MAX_RECENT_COUNT
-  const step = (delta: number): void => {
-    onChange(value + delta)
-  }
-  return h('div', { className: 'dsr-stepper' },
-    h('span', { className: 'dsr-stepper-label' }, label),
-    h('button', {
-      type: 'button',
-      className: 'dsr-stepper-btn',
-      'aria-label': `${label} −`,
-      disabled: value <= low,
-      onClick: () => step(-1),
-    }, '−'),
-    h('span', { className: 'dsr-stepper-value', 'aria-live': 'polite' }, String(value)),
-    h('button', {
-      type: 'button',
-      className: 'dsr-stepper-btn',
-      'aria-label': `${label} +`,
-      disabled: value >= high,
-      onClick: () => step(1),
-    }, '+'))
-}
-
 /** 分组标题的入参。 */
 export interface SectionProps {
   readonly title: string
@@ -469,6 +426,29 @@ export interface ActionRowProps {
 export function ActionRow({ children, onClick }: ActionRowProps): ReactNode {
   return h('button', { type: 'button', className: 'dsr-row', onClick },
     h('span', { className: 'dsr-row-main' }, h('span', { className: 'dsr-row-title' }, children)))
+}
+
+/** 「显示更多」按钮的入参。 */
+export interface ShowMoreProps {
+  readonly label: string
+  readonly onClick: () => void
+}
+
+/**
+ * 列表末尾的「显示更多」按钮。
+ *
+ * 只在还有被水位藏起来的行时渲染（调用方判断后整个不挂载），因此这里没有
+ * disabled 态：一个永远点不动的按钮比不画它更像缺陷。
+ * @param props - 已翻译的文案与抬高水位的回调。
+ * @returns 按钮元素。
+ */
+export function ShowMore({ label, onClick }: ShowMoreProps): ReactNode {
+  return h('button', {
+    type: 'button',
+    className: 'dsr-show-more',
+    'data-dsr-show-more': '',
+    onClick,
+  }, label)
 }
 
 /** 错误边界的入参。 */

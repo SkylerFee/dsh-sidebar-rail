@@ -4,13 +4,7 @@
  * 这些函数原先在 `client.js` 的 pure-helpers 区，迁移后仍不依赖 React 或 DOM，
  * 因此可以被单测直接 import。
  */
-import {
-  DEFAULT_RECENT_COUNT,
-  MAX_RECENT_COUNT,
-  MIN_RECENT_COUNT,
-  RAIL_MIN_VIEWPORT,
-  VISIBLE_PENDING_KINDS,
-} from './constants.ts'
+import { RAIL_MIN_VIEWPORT, VISIBLE_PENDING_KINDS } from './constants.ts'
 import type { SessionMark, SessionStatusLike } from './types.ts'
 
 /**
@@ -114,25 +108,4 @@ export function sessionStatusOf(
   if (running === true) return 'ongoing'
   if (status?.completionUnread === true) return 'done'
   return 'idle'
-}
-
-/**
- * 把存储里的最近会话条数夹进支持范围。
- *
- * 值来自 localStorage，可能缺失、是字符串（手改）、是浮点数或越界。任何不可用的
- * 输入都退回默认值，而不是渲染出一个意外的行数。
- * @param raw - 存储里 `recentCount` 的原始值。
- * @returns MIN_RECENT_COUNT..MAX_RECENT_COUNT 之间的整数。
- */
-export function readRecentCount(raw: unknown): number {
-  // 空字符串或纯空白是「未设置」，不是 0：Number('') 为 0，会被夹到 1，
-  // 于是一次清空偏好会静默变成「只显示一条」。
-  if (typeof raw === 'string') {
-    if (raw.trim() === '') return DEFAULT_RECENT_COUNT
-    const parsed = Number(raw)
-    if (!Number.isFinite(parsed)) return DEFAULT_RECENT_COUNT
-    return Math.min(MAX_RECENT_COUNT, Math.max(MIN_RECENT_COUNT, Math.round(parsed)))
-  }
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) return DEFAULT_RECENT_COUNT
-  return Math.min(MAX_RECENT_COUNT, Math.max(MIN_RECENT_COUNT, Math.round(raw)))
 }

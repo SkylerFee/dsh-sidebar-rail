@@ -2,7 +2,7 @@
  * 流程与生命周期测试：迁移后新增的模块边界需要能独立验证的那些行为。
  *
  * 覆盖 docs/typescript-migration.md §5.2 点名的风险：
- *   - `recentCount` 在轨与设置块之间共享，且写入不覆盖置顶数据；
+ *   - 偏好写入是合并语义：写展开项目不覆盖置顶列表（0.5.1 移除 `recentCount` 后仍成立）；
  *   - 目录选择成功 / 取消 / 失败三种结局；
  *   - 分区的首次切换（默认展开与默认收起都要能翻）；
  *   - 请求状态机把「服务缺失」判成失败而不是空列表。
@@ -16,23 +16,13 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
-  getRecentCountSnapshot,
   readExpandedProjectIds,
   readStore,
-  setRecentCount,
-  subscribeRecentCount,
   writeExpandedProjectIds,
   writeStore,
 } from '../src/client/preferences.ts'
-import {
-  DEFAULT_RECENT_COUNT,
-  MAX_RECENT_COUNT,
-  MIN_RECENT_COUNT,
-  RAIL_REVEAL_WIDTH,
-  STORE_KEY,
-} from '../src/client/model/constants.ts'
+import { RAIL_REVEAL_WIDTH, STORE_KEY } from '../src/client/model/constants.ts'
 import { DEFAULT_FLYOUT_ANCHOR, flyoutAnchorFrom, sectionIsOpen } from '../src/client/model/geometry.ts'
-import { readRecentCount } from '../src/client/model/formatting.ts'
 import { pickedDirectory, remoteOutcome } from '../src/client/model/remote.ts'
 
 /**
@@ -67,36 +57,6 @@ function installStorage(initial: Record<string, string> = {}) {
   return { data, writes }
 }
 
-test('preferences: recentCount is shared between the rail and the settings block', () => {
-  installStorage()
-  // 两个界面各订阅一次：任一次发布都必须通知到两边。
-  const railSeen: number[] = []
-  const settingsSeen: number[] = []
-  const offRail = subscribeRecentCount(() => railSeen.push(getRecentCountSnapshot()))
-  const offSettings = subscribeRecentCount(() => settingsSeen.push(getRecentCountSnapshot()))
-  try {
-    setRecentCount(8)
-    assert.deepEqual(railSeen, [8], 'the rail surface sees the new value')
-    assert.deepEqual(settingsSeen, [8], 'the settings surface sees the same value')
-    assert.equal(getRecentCountSnapshot(), 8, 'both surfaces read one snapshot')
-  } finally {
-    offRail()
-    offSettings()
-  }
-})
-
-test('preferences: setRecentCount clamps and never drops the pinned list', () => {
-  const { data } = installStorage({
-    [STORE_KEY]: JSON.stringify({ pinnedWorkspaceIds: ['ws1', 'ws2'], recentCount: 3 }),
-  })
-  // 夹取到合法范围，且合并写入——置顶列表必须原样保留。
-  assert.equal(setRecentCount(999), MAX_RECENT_COUNT)
-  assert.equal(setRecentCount(0), MIN_RECENT_COUNT)
-  const stored = JSON.parse(data.get(STORE_KEY) ?? '{}') as { pinnedWorkspaceIds: string[]; recentCount: number }
-  assert.deepEqual(stored.pinnedWorkspaceIds, ['ws1', 'ws2'], 'the pinned list survives a recentCount write')
-  assert.equal(stored.recentCount, MIN_RECENT_COUNT)
-})
-
 test('preferences: expandedProjectIds round-trips through the store', () => {
   const { data } = installStorage()
   // 默认无记录：空数组，而不是 undefined——调用方可以直接遍历。
@@ -110,22 +70,32 @@ test('preferences: expandedProjectIds round-trips through the store', () => {
   assert.deepEqual(readExpandedProjectIds(), [])
 })
 
-test('preferences: writing expandedProjectIds never drops pins or recentCount', () => {
+test('preferences: writing expandedProjectIds never drops pinnedWorkspaceIds', () => {
+  // 0.5.1 移除 recentCount 之后，合并语义只剩这两个字段，但「一个字段的写入不得
+  // 抹掉另一个」这条性质必须继续成立（spec-0.5.0 §4.2）。
   const { data } = installStorage({
-    [STORE_KEY]: JSON.stringify({ pinnedWorkspaceIds: ['ws1', 'ws2'], recentCount: 7 }),
+    [STORE_KEY]: JSON.stringify({ pinnedWorkspaceIds: ['ws1', 'ws2'] }),
   })
   writeExpandedProjectIds(['ws3'])
   const stored = JSON.parse(data.get(STORE_KEY) ?? '{}') as {
     pinnedWorkspaceIds: string[]
-    recentCount: number
     expandedProjectIds: string[]
   }
   assert.deepEqual(stored.expandedProjectIds, ['ws3'])
   assert.deepEqual(stored.pinnedWorkspaceIds, ['ws1', 'ws2'], 'pins survive an expandedProjectIds write')
-  assert.equal(stored.recentCount, 7, 'the recent count survives too')
-  // 反方向：写 recentCount 也不能抹掉展开列表。
-  setRecentCount(3)
-  assert.deepEqual(readExpandedProjectIds(), ['ws3'], 'the expanded list survives a recentCount write')
+
+  // 反方向：写置顶列表也不能抹掉展开列表。
+  writeStore({ pinnedWorkspaceIds: ['ws9'] })
+  assert.deepEqual(readExpandedProjectIds(), ['ws3'], 'the expanded list survives a pins write')
+  assert.deepEqual(readStore().pinnedWorkspaceIds, ['ws9'])
+
+  // 旧版本遗留的 recentCount 字段既不读也不清理：读路径不写盘，写入时原样保留。
+  const legacy = installStorage({
+    [STORE_KEY]: JSON.stringify({ pinnedWorkspaceIds: ['ws1'], recentCount: 7 }),
+  })
+  writeExpandedProjectIds(['ws3'])
+  const legacyStored = JSON.parse(legacy.data.get(STORE_KEY) ?? '{}') as Record<string, unknown>
+  assert.equal(legacyStored.recentCount, 7, 'unknown legacy fields are preserved, never rewritten')
 })
 
 test('preferences: stale workspace ids are read back but never cleaned up', () => {
@@ -175,21 +145,7 @@ test('preferences: an unreadable store degrades instead of throwing', () => {
   })
   // 一个被禁用的存储后端绝不能打断渲染。
   assert.deepEqual(readStore(), {})
-  assert.doesNotThrow(() => writeStore({ recentCount: 4 }))
-})
-
-test('preferences: a cleared preference falls back to the default, not to one row', () => {
-  // 空白字符串是「未设置」：Number('') 为 0 会被误夹到 1，于是一次清空偏好
-  // 会静默变成「只显示一条」。
-  assert.equal(readRecentCount('   '), DEFAULT_RECENT_COUNT)
-  assert.equal(readRecentCount(''), DEFAULT_RECENT_COUNT)
-  assert.equal(readRecentCount(null), DEFAULT_RECENT_COUNT)
-  assert.equal(readRecentCount(undefined), DEFAULT_RECENT_COUNT)
-  assert.equal(readRecentCount('junk'), DEFAULT_RECENT_COUNT)
-  // 越界与浮点仍然夹进范围。
-  assert.equal(readRecentCount(0), MIN_RECENT_COUNT)
-  assert.equal(readRecentCount(999), MAX_RECENT_COUNT)
-  assert.equal(readRecentCount('3.6'), 4)
+  assert.doesNotThrow(() => writeStore({ pinnedWorkspaceIds: ['ws1'] }))
 })
 
 test('flyoutAnchorFrom: the horizontal origin is the rail, not the mid-transition rect', () => {

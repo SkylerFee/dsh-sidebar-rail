@@ -43,12 +43,7 @@ import {
   projectSessionRows,
 } from '../model/workspaces.ts'
 import { rawKeyTranslator } from '../locales.ts'
-import {
-  getRecentCountSnapshot,
-  setRecentCount,
-  subscribeRecentCount,
-  writeStore,
-} from '../preferences.ts'
+import { writeStore } from '../preferences.ts'
 import type {
   AccountSeat,
   AccountSeatWithExtras,
@@ -143,11 +138,6 @@ export function RailColumn(props: RailColumnProps): ReactNode {
     kind: 'unknown',
     avatarUrl: undefined,
   })
-  // 共享 store 而不是本地 state：插件详情页编辑同一个偏好，两个独立的
-  // `useState` 会让没被编辑的那个界面继续显示——并在下次点击时写回——旧条数。
-  // 在此订阅让任一界面的编辑都落到两边。
-  const recentCount = useSyncExternalStore(subscribeRecentCount, getRecentCountSnapshot, getRecentCountSnapshot)
-
   // 面板条目与语言是两个可订阅快照；`useObservable` 让 react 与它们同步。
   const panelEntries = useObservable(panels, (entries) => entries)
   const language = useObservable(locale, (snapshot) => snapshot.active)
@@ -174,6 +164,9 @@ export function RailColumn(props: RailColumnProps): ReactNode {
     dismiss,
     retract,
     focusFlyout,
+    effectiveWatermark,
+    raiseWatermark,
+    noteWatermark,
   } = flyout
 
   // 图标轨保持滑出，直到指针到达左缘、或有人用键盘聚焦它。
@@ -290,17 +283,6 @@ export function RailColumn(props: RailColumnProps): ReactNode {
     normalize: normalizePlugins,
     label: 'plugins',
   })
-
-  /**
-   * 持久化新的最近会话条数并立刻反映。
-   *
-   * 委托给模块级 store，于是插件详情页在下一次渲染看到同一个值；此前用本地
-   * `setState` 正是让另一个界面保留——并在稍后写回——旧条数的原因。
-   * @param next - 请求的条数；写入前会夹取。
-   */
-  const changeRecentCount = useCallback((next: number) => {
-    setRecentCount(next)
-  }, [])
 
   /**
    * 切换一个工作区的置顶并持久化新的顺序。
@@ -455,8 +437,8 @@ export function RailColumn(props: RailColumnProps): ReactNode {
 
   // 派生分区：置顶、普通、最近会话。两种列表策略不同，见 workspaces.ts。
   const sections = useMemo(
-    () => deriveSections(workspaceItems, sessions, archivedIds, pins, language, panelCovering, recentCount, statuses),
-    [workspaceItems, sessions, archivedIds, pins, language, panelCovering, recentCount, statuses],
+    () => deriveSections(workspaceItems, sessions, archivedIds, pins, language, panelCovering, statuses),
+    [workspaceItems, sessions, archivedIds, pins, language, panelCovering, statuses],
   )
   // 主视图正在显示的会话，供展开的项目列表使用。读与最近会话区同一个辅助函数，
   // 于是两处标同一行。
@@ -509,9 +491,11 @@ export function RailColumn(props: RailColumnProps): ReactNode {
         startSessionInProject,
         addProject,
         projectAction,
-        recentCount,
-        changeRecentCount,
         projectSessionRows: rowsForProject,
+        effectiveWatermark,
+        raiseWatermark,
+        noteWatermark,
+        currentSessionId: shownSessionId,
         shell,
       })
     }

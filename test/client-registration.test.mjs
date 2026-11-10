@@ -158,9 +158,10 @@ test('apply registers both slots and its resources can be disposed', () => {
   assert.equal(overlay.id, 'dsh-sidebar-rail.rail')
   assert.equal(overlay.children, undefined, 'the overlay entry must not declare children')
 
+  // 0.5.1 起设置块整项移除（spec-0.5.1 §4）：它唯一的设置项是最近会话条数，
+  // 已被「默认 10 条 + 显示更多」取代。这条断言守住「移除没有被意外回滚」。
   const settings = slots.find((definition) => definition.name === 'plugins.bundle.config')
-  assert.ok(settings, 'the settings block must register into plugins.bundle.config')
-  assert.equal(settings.key, pkg.name)
+  assert.equal(settings, undefined, 'the settings block has been removed: nothing may register into plugins.bundle.config')
 
   assert.equal(styleNodes.length, 1, 'exactly one style node is injected')
   assert.ok(styleNode.textContent.length > 0, 'the injected style carries the CSS text')

@@ -4,15 +4,17 @@
  * 这一组行为原先散在 `RailColumn` 里：命中区不同、计时器互相取消、Escape
  * 回焦、关闭时清空折叠分区与展开项目。抽成钩子后，状态所有权只有一处。
  *
- * 状态归属（0.5.0 起）：
+ * 状态归属（0.5.1 起）：
  *   - **展开的项目**落盘（`dsh.sidebar-rail.v1` 的 `expandedProjectIds`），
  *     重开浮层、甚至重启宿主后仍然展开；
  *   - **折叠的分区**仍只活在组件里，每次打开浮层都回到 spec 的默认态；
+ *   - **列表水位**（每页 10 条 + 「显示更多」）也只活在组件里，`dismiss` /
+ *     `retract` 时复位（spec-0.5.1 §4）；
  *   - **锚点**用图标轨的固定几何，不读按钮的实时矩形（见 `scheduleOpen`）。
  */
 import { useCallback, useRef, useState } from 'react'
 import type { MutableRefObject } from 'react'
-import { CLOSE_DELAY_MS, OPEN_DELAY_MS } from '../model/constants.ts'
+import { CLOSE_DELAY_MS, OPEN_DELAY_MS, PAGE_SIZE } from '../model/constants.ts'
 import type { FoldedSections } from '../model/types.ts'
 import { DEFAULT_FLYOUT_ANCHOR, flyoutAnchorFrom } from '../model/geometry.ts'
 import type { FlyoutAnchor, TriggerRectLike } from '../model/geometry.ts'
@@ -38,6 +40,13 @@ export interface FlyoutController {
   readonly foldedSections: FoldedSections
   /** 展开的项目（按工作区 id）。 */
   readonly expandedProjects: Readonly<Record<string, boolean | undefined>>
+  /**
+   * 各列表已抬高的水位（列表键 → 条数）。
+   *
+   * 键的约定：最近会话区用 `RECENT_LIST_KEY`，项目展开列表用该项目的
+   * 工作区 id。值只升不降，浮层关闭时整体清空（不持久化）。
+   */
+  readonly watermarks: Readonly<Record<string, number>>
   /** 添加项目动作的状态。 */
   readonly projectAction: ProjectActionState
   /** 浮层面板元素，供焦点移动与外部点击判断。 */
@@ -48,6 +57,31 @@ export interface FlyoutController {
   toggleSection(id: string): void
   /** 展开或收起一个项目的会话列表。 */
   toggleProject(workspaceId: string): void
+  /**
+   * 读某个列表当前的有效水位（条数）。
+   *
+   * 取「已抬高值、自动需求值、`PAGE_SIZE`」三者的最大值，因此**恒 >= PAGE_SIZE**，
+   * 调用方直接 `slice(0, 返回值)`，不必再兜底。
+   * @param key - 列表键（最近会话区用 `RECENT_LIST_KEY`，项目用工作区 id）。
+   * @param required - 该列表本次算出的自动需求水位（`requiredWatermark` 的结果）。
+   * @returns 应显示的条数。
+   */
+  effectiveWatermark(key: string, required?: number): number
+  /**
+   * 点「显示更多」：把该列表的水位在当前**有效**值上再加 `PAGE_SIZE`。
+   * @param key - 列表键。
+   * @param required - 该列表本次算出的自动需求水位。
+   */
+  raiseWatermark(key: string, required?: number): void
+  /**
+   * 记下一次自动需求水位，只升不降（宿主语义：涨上去就不回落）。
+   *
+   * 在 effect 里把 `requiredWatermark` 的结果喂进来；不调用也能正确渲染，
+   * 只是会话不再值得注意时列表会收回。
+   * @param key - 列表键。
+   * @param required - 自动需求水位；小于等于当前值时忽略。
+   */
+  noteWatermark(key: string, required: number): void
   /** 写入添加项目动作的状态。 */
   setProjectAction(next: ProjectActionState): void
   /** 悬停停留后打开某个浮层。 */
@@ -111,6 +145,9 @@ export function useFlyout(appWindow: Window = window): FlyoutController {
   const [open, setOpen] = useState<FlyoutKind | null>(null)
   const [anchor, setAnchor] = useState<FlyoutAnchor>(DEFAULT_ANCHOR)
   const [foldedSections, setFoldedSections] = useState<FoldedSections>({})
+  // 各列表已抬高的水位：`dismiss` / `retract` 时清空，因此每次打开浮层都是
+  // 「一页 10 条」。状态在这里而不是渲染层，与 foldedSections 同一生命周期。
+  const [watermarks, setWatermarks] = useState<Readonly<Record<string, number>>>({})
   // 展开的项目从存储物化；轨组件从不卸载，因此这份状态在会话内就是权威副本。
   const [expandedProjects, setExpandedProjects] = useState<Readonly<Record<string, boolean | undefined>>>(
     () => expandedProjectsOf(readExpandedProjectIds()),
@@ -139,7 +176,7 @@ export function useFlyout(appWindow: Window = window): FlyoutController {
    *
    * 展开状态是**持久化**的（spec-0.5.0 §4.2）：收起时把 id 从映射里删掉而不是
    * 记 `false`，这样写盘的数组只含展开中的项目。写入走 `writeExpandedProjectIds`
-   * 的合并语义，因此不会覆盖置顶列表与最近会话条数。多个项目可同时展开。
+   * 的合并语义，因此不会覆盖置顶列表。多个项目可同时展开。
    * @param workspaceId - 工作区 id。
    */
   const toggleProject = useCallback((workspaceId: string) => {
@@ -150,6 +187,65 @@ export function useFlyout(appWindow: Window = window): FlyoutController {
     expandedProjectsRef.current = next
     setExpandedProjects(next)
     writeExpandedProjectIds(Object.keys(next).filter((id) => next[id] === true))
+  }, [])
+
+  /**
+   * 读某个列表当前的有效水位。
+   *
+   * 三路取最大，逐字对应宿主 `raiseWatermarks` 的比较基准：
+   *   - `PAGE_SIZE`：基础一页，保证返回值恒 >= 10；
+   *   - 已抬高值：用户点「显示更多」累积的（以及 `noteWatermark` 记下的自动提升）；
+   *   - `required`：本次由 `requiredWatermark` 算出的自动需求值。
+   * @param key - 列表键（`RECENT_LIST_KEY` 或工作区 id）。
+   * @param required - 自动需求水位；省略或非法时按 0 处理。
+   * @returns 应显示的条数，恒 >= `PAGE_SIZE`。
+   */
+  const effectiveWatermark = useCallback((key: string, required?: number): number => {
+    const raised = watermarks[key]
+    const floor = typeof raised === 'number' && Number.isFinite(raised) ? raised : 0
+    const auto = typeof required === 'number' && Number.isFinite(required) ? required : 0
+    return Math.max(PAGE_SIZE, floor, auto)
+  }, [watermarks])
+
+  /**
+   * 点「显示更多」：在当前**有效**水位上再加一页。
+   *
+   * 基准是有效水位而不是存储值——否则从「自动提升到 20」的列表点一次只会回到
+   * 20（20 + 10 = 30 才是一次真正的加载）。
+   * @param key - 列表键。
+   * @param required - 该列表本次的自动需求水位。
+   */
+  const raiseWatermark = useCallback((key: string, required?: number): void => {
+    setWatermarks((current) => {
+      const raised = current[key]
+      const floor = typeof raised === 'number' && Number.isFinite(raised) ? raised : 0
+      const auto = typeof required === 'number' && Number.isFinite(required) ? required : 0
+      // 新值恒等于「当前有效水位 + 一页」，因此一定大于已记下的值，
+      // 不需要「是否已到」的守卫——那类守卫在这里恒为假，只会成为死代码。
+      return { ...current, [key]: Math.max(PAGE_SIZE, floor, auto) + PAGE_SIZE }
+    })
+  }, [])
+
+  /**
+   * 记下一次自动需求水位，只升不降。
+   *
+   * 宿主的「自动提升永不回落」是这么实现的：一旦因为某会话运行中显示到第 20 条，
+   * 它停了也不把列表收回去。不调用本方法列表只是会回落，不会渲染错。
+   *
+   * 与宿主 `raiseWatermarks` 一致：只有**高于基础水位**的需求值才值得记下来
+   * （宿主写的是 `watermark > (raised[key] ?? BASE)`），一页之内的需求不占状态。
+   * @param key - 列表键。
+   * @param required - 自动需求水位；非法值、不高于 `PAGE_SIZE` 或小于当前值时忽略。
+   */
+  const noteWatermark = useCallback((key: string, required: number): void => {
+    if (!Number.isFinite(required) || required <= PAGE_SIZE) return
+    const wanted = Math.round(required)
+    setWatermarks((current) => {
+      const raised = current[key]
+      const floor = typeof raised === 'number' && Number.isFinite(raised) ? raised : 0
+      if (wanted <= floor) return current
+      return { ...current, [key]: wanted }
+    })
   }, [])
 
   /**
@@ -235,7 +331,9 @@ export function useFlyout(appWindow: Window = window): FlyoutController {
     // 图标轨从不卸载，因此只靠组件状态会让折叠分区带进下一次打开。
     // spec 规定分区折叠每次打开都从默认值开始，所以关闭时复位；
     // **展开的项目不复位**——它在存储里，跨开关存活（spec-0.5.0 §4.2）。
+    // **列表水位同样复位**：每次打开浮层都从一页 10 条开始（spec-0.5.1 §4）。
     setFoldedSections({})
+    setWatermarks({})
     setProjectActionState({ phase: 'idle' })
   }, [])
 
@@ -248,9 +346,10 @@ export function useFlyout(appWindow: Window = window): FlyoutController {
    */
   const retract = useCallback(() => {
     setOpen(null)
-    // 与 dismiss 同理：分区折叠必须忘掉，否则下次打开会续上别人的状态。
-    // 项目展开相反——它是持久化偏好，必须留下来。
+    // 与 dismiss 同理：分区折叠与列表水位必须忘掉，否则下次打开会续上别人的
+    // 状态。项目展开相反——它是持久化偏好，必须留下来。
     setFoldedSections({})
+    setWatermarks({})
     setProjectActionState({ phase: 'idle' })
   }, [])
 
@@ -267,11 +366,15 @@ export function useFlyout(appWindow: Window = window): FlyoutController {
     anchor,
     foldedSections,
     expandedProjects,
+    watermarks,
     projectAction,
     panelRef,
     triggerRef,
     toggleSection,
     toggleProject,
+    effectiveWatermark,
+    raiseWatermark,
+    noteWatermark,
     setProjectAction,
     scheduleOpen,
     cancelClose,

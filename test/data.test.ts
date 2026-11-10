@@ -10,7 +10,6 @@ import { test } from 'node:test'
 import { strict as assert } from 'node:assert'
 
 import {
-  readRecentCount,
   relativeTime,
   resolveLocaleId,
   sessionStatusOf,
@@ -21,7 +20,11 @@ import { RAIL_MIN_VIEWPORT, RAIL_REVEAL_WIDTH } from '../src/client/model/consta
 import {
   currentSessionId,
   deriveSections,
+  projectRowNeedsAttention,
   projectSessionRows,
+  recentRowNeedsAttention,
+  requiredWatermark,
+  watermarkSlice,
 } from '../src/client/model/workspaces.ts'
 import {
   accountClientMetadata,
@@ -281,18 +284,45 @@ test('pickedDirectory: an absolute path is required, a relative one is a failure
   assert.equal(pickedDirectory('/repo/alpha').kind, 'picked')
 })
 
-test('projectSessionRows: lists every member unfiltered, in host order', () => {
-  // 项目展开要回答「这个项目里到底有什么」：不按 archived/blank/origin 再筛一遍，
-  // 也不截条数，顺序照抄 sessionIds（spec 3.2）。子代理会话本就不在 sessionIds 里。
+test('projectSessionRows: lists every member in host order, keeping archived rows', () => {
+  // 项目展开要回答「这个项目里到底有什么」：归档会话照列并打标记，也不截条数，
+  // 顺序照抄 sessionIds（spec 3.2）。子代理会话本就不在 sessionIds 里。
+  // 空白会话的可见性见下面两条用例（0.5.1 起只保留当前那个）。
   const byId = {
     s1: session('s1', { displayTitle: 'first', updatedAt: 10 }),
     s2: session('s2', { updatedAt: 30 }),
-    s3: session('s3', { blank: true, updatedAt: 20 }),
+    s3: session('s3', { updatedAt: 20 }),
   }
   const rows = projectSessionRows(['s1', 's3', 's2'], byId, 'en')
   assert.deepEqual(rows.map((r) => r.id), ['s1', 's3', 's2'], 'host order, not sorted by time')
-  assert.equal(rows.length, 3, 'nothing is filtered out')
-  assert.equal(rows[1]!.title, 'title-s3', 'a blank session is listed, under its own title')
+  assert.equal(rows.length, 3, 'non-blank members are all listed')
+  assert.equal(rows[1]!.title, 'title-s3')
+})
+
+test('projectSessionRows: the current blank session stays visible', () => {
+  // 宿主 ui-workspace/tree.ts#sessionVisible：空白会话中只有当前那一个可见
+  // （spec-0.5.1 §3）。当前会话由调用方传入的 shownSessionId 判定。
+  const byId = {
+    s1: session('s1', { updatedAt: 10 }),
+    blankCur: session('blankCur', { blank: true, updatedAt: 20 }),
+  }
+  const rows = projectSessionRows(['s1', 'blankCur'], byId, 'en', [], 'blankCur')
+  assert.deepEqual(rows.map((r) => r.id), ['s1', 'blankCur'])
+  assert.equal(rows[1]!.current, true, 'the surviving blank row is the current one')
+  assert.equal(rows[1]!.title, 'title-blankCur')
+})
+
+test('projectSessionRows: other blank sessions are hidden', () => {
+  // 不删除数据，只是不渲染：其余空白会话不出行；会话仍留在宿主 registry 里。
+  const byId = {
+    s1: session('s1', { updatedAt: 10 }),
+    blankA: session('blankA', { blank: true, updatedAt: 20 }),
+    blankB: session('blankB', { blank: true, updatedAt: 30 }),
+  }
+  const rows = projectSessionRows(['s1', 'blankA', 'blankB'], byId, 'en', [], 's1')
+  assert.deepEqual(rows.map((r) => r.id), ['s1'], 'only the non-blank member remains')
+  // 没有当前会话（undefined）时，任何空白会话都不可见。
+  assert.deepEqual(projectSessionRows(['s1', 'blankA'], byId, 'en').map((r) => r.id), ['s1'])
 })
 
 test('projectSessionRows: archived members stay listed and are marked', () => {
@@ -345,45 +375,51 @@ test('deriveSections: normal rows keep host order when nothing is pinned', () =>
   assert.deepEqual(sections.normalRows.map((r) => r.id), ['ws1', 'ws2', 'ws3'])
 })
 
-test('deriveSections: recent sessions are newest-first, filtered, and honour the count', () => {
+test('deriveSections: recent sessions are newest-first, filtered, and untruncated', () => {
   const byId: Record<string, SessionSummaryLike> = {}
   for (let i = 0; i < 14; i += 1) byId[`s${i}`] = session(`s${i}`, { updatedAt: i * 10 })
   byId.archived = session('archived', { updatedAt: 999 })
   byId.blank = session('blank', { updatedAt: 998, blank: true })
   byId.sub = session('sub', { updatedAt: 997, origin: 'subagent' })
 
-  // 默认（未传设置）→ DEFAULT_RECENT_COUNT，而不是旧实现的硬编码 10。
-  const byDefault = deriveSections(WORKSPACES, { byId }, ['archived'], [], 'en', false, undefined)
-  assert.equal(byDefault.recentRows.length, 5)
-  // 过滤仍然生效：归档/空白/子代理都不出现。
-  const ids = byDefault.recentRows.map((row) => row.id)
+  const sections = deriveSections(WORKSPACES, { byId }, ['archived'], [], 'en', false)
+  // 模型层不截条数（0.5.1：分页交给渲染层的水位），14 条全部返回。
+  assert.equal(sections.recentRows.length, 14)
+  // 过滤仍然生效：归档/非当前空白/子代理都不出现。
+  const ids = sections.recentRows.map((row) => row.id)
   assert.ok(!ids.includes('archived') && !ids.includes('blank') && !ids.includes('sub'))
-  // 倒序：最新在前。
-  assert.deepEqual(ids, ['s13', 's12', 's11', 's10', 's9'])
-
-  // 用户把数量调到上限 → 返回上限条数，且不超过硬上限 RECENT_LIMIT。
-  const many = deriveSections(WORKSPACES, { byId }, ['archived'], [], 'en', false, 20)
-  assert.equal(many.recentRows.length, 14)   // 只有 14 条可用
-  const huge = deriveSections(WORKSPACES, { byId }, ['archived'], [], 'en', false, 200)
-  assert.equal(huge.recentRows.length, 14)   // 仍受可用条数限制
-  // 超出硬上限的请求被夹到 RECENT_LIMIT 之内。
-  assert.ok(huge.recentRows.length <= 20)
+  // 倒序：最新在前，且一条都不截断。
+  assert.deepEqual(ids.slice(0, 3), ['s13', 's12', 's11'])
+  assert.deepEqual(ids.at(-1), 's0')
 })
 
-test('readRecentCount: clamps whatever storage held back into range', () => {
-  // 缺失/脏值 → 默认值，绝不渲染意外条数。
-  assert.equal(readRecentCount(undefined), 5)
-  assert.equal(readRecentCount(null), 5)
-  assert.equal(readRecentCount(''), 5)
-  assert.equal(readRecentCount(Number.NaN), 5)
-  assert.equal(readRecentCount('abc'), 5)
-  // 越界夹取。
-  assert.equal(readRecentCount(0), 1)
-  assert.equal(readRecentCount(-3), 1)
-  assert.equal(readRecentCount(999), 20)
-  // 字符串（手改 localStorage）与小数。
-  assert.equal(readRecentCount('7'), 7)
-  assert.equal(readRecentCount(7.6), 8)
+test('deriveSections: the current blank session stays in recent rows', () => {
+  // 主视图显示的那个空白会话必须留在最近区（宿主 sessionVisible 的第二个判据）。
+  const sessions = {
+    byId: <Record<string, SessionSummaryLike>>{
+      normal: session('normal', { updatedAt: 300 }),
+      blankCur: session('blankCur', { updatedAt: 200, blank: true, retainedBy: { mainView: 1 } }),
+    },
+  }
+  const sections = deriveSections(WORKSPACES, sessions, [], [], 'en', false)
+  assert.deepEqual(sections.recentRows.map((r) => [r.id, r.active]), [
+    ['normal', false],
+    ['blankCur', true],
+  ])
+})
+
+test('deriveSections: other blank sessions are hidden from recent rows', () => {
+  // 非当前的空白会话不渲染；正在显示的那一条不受影响。
+  const sessions = {
+    byId: <Record<string, SessionSummaryLike>>{
+      blankCur: session('blankCur', { updatedAt: 300, blank: true, retainedBy: { mainView: 1 } }),
+      blankOther: session('blankOther', { updatedAt: 200, blank: true }),
+      blankThird: session('blankThird', { updatedAt: 100, blank: true }),
+      normal: session('normal', { updatedAt: 50 }),
+    },
+  }
+  const sections = deriveSections(WORKSPACES, sessions, [], [], 'en', false)
+  assert.deepEqual(sections.recentRows.map((r) => r.id), ['blankCur', 'normal'])
 })
 
 test('currentSessionId: a covering panel clears the highlight', () => {
@@ -413,7 +449,7 @@ test('deriveSections: recent rows carry the host status mark for the renderer', 
     ['unread', { running: false, pendingInteraction: undefined, completionUnread: true }],
     ['plain', { running: false, pendingInteraction: undefined, completionUnread: false }],
   ])
-  const sections = deriveSections(WORKSPACES, sessions, [], [], 'en', false, 10, statuses)
+  const sections = deriveSections(WORKSPACES, sessions, [], [], 'en', false, statuses)
   assert.deepEqual(
     sections.recentRows.map((r) => [r.id, r.status]),
     [['run', 'ongoing'], ['wait', 'warning'], ['unread', 'done'], ['plain', 'idle']],
@@ -423,9 +459,9 @@ test('deriveSections: recent rows carry the host status mark for the renderer', 
 test('deriveSections: a missing or object-shaped status snapshot degrades to no marks', () => {
   const sessions = { byId: <Record<string, SessionSummaryLike>>{ s1: session('s1', { running: true }) } }
   // 宿主未注入 useSessionStatus 时 statuses 为 undefined，不能抛错。
-  assert.equal(deriveSections(WORKSPACES, sessions, [], [], 'en', false, 5, undefined).recentRows[0]!.status, 'ongoing')
+  assert.equal(deriveSections(WORKSPACES, sessions, [], [], 'en', false, undefined).recentRows[0]!.status, 'ongoing')
   // 普通对象（非 Map）也要能读，形状变化时退化为「无状态事实」而不是崩溃。
-  const asObject = deriveSections(WORKSPACES, sessions, [], [], 'en', false, 5, { s1: { running: false } })
+  const asObject = deriveSections(WORKSPACES, sessions, [], [], 'en', false, { s1: { running: false } })
   assert.equal(asObject.recentRows[0]!.status, 'idle')
 })
 
@@ -451,6 +487,66 @@ test('deriveSections: workspace rows carry no path subtitle', () => {
     // 路径副标题已移除，行数据里不应再有 meta。
     assert.equal((row as { meta?: unknown }).meta, undefined)
   }
+})
+
+test('watermarkSlice: keeps every blank row and counts only non-blank ones', () => {
+  // 宿主 WorkspaceBrowser.tsx#watermarkRows：空白会话恒显示且不占水位名额。
+  const rows = Array.from({ length: 12 }, (_, i) => ({ id: `s${i}` }))
+  const blank = { id: 'blank', blank: true }
+  const sliced = watermarkSlice([...rows, blank], 10)
+  assert.equal(sliced.rows.length, 11, 'ten counted rows plus the blank one')
+  assert.equal(sliced.rows.at(-1)!.id, 'blank', 'the blank row is always kept')
+  assert.equal(sliced.hiddenCount, 2, 'the two rows past the watermark are hidden')
+
+  // 边界：正好一页 → 不隐藏（按钮因此不渲染）；0 条 → 什么都不显示。
+  assert.equal(watermarkSlice(rows.slice(0, 10), 10).hiddenCount, 0)
+  assert.deepEqual(watermarkSlice([], 10), { rows: [], hiddenCount: 0 })
+  assert.deepEqual(watermarkSlice(undefined, 10), { rows: [], hiddenCount: 0 })
+  assert.equal(watermarkSlice(rows, 0).rows.length, 0, 'a zero watermark shows nothing')
+  // 脏水位退化成 0，而不是抛错或全展示。
+  assert.equal(watermarkSlice(rows, Number.NaN).rows.length, 0)
+})
+
+/** 构造一条最近会话行，只写水位测试关心的字段。 */
+function recentRow(id: string, status: 'warning' | 'ongoing' | 'done' | 'idle', active: boolean) {
+  return { id, title: 'title-' + id, meta: '', updatedAt: 0, active, status }
+}
+
+test('requiredWatermark: the last attention row decides the floor', () => {
+  // 宿主 requiredWatermark：只在水位上限之内找「最后一条值得注意的会话」。
+  const rows = [
+    recentRow('a', 'idle', false),
+    recentRow('b', 'ongoing', false),
+    recentRow('c', 'idle', false),
+    recentRow('d', 'done', false),
+    recentRow('e', 'idle', true),
+  ]
+  assert.equal(requiredWatermark(rows, undefined, recentRowNeedsAttention), 5, 'the highlighted row is the deepest')
+  assert.equal(requiredWatermark(rows.slice(0, 3), undefined, recentRowNeedsAttention), 2)
+  // 没有任何注意力行 → 0（有效水位由 PAGE_SIZE 兜底）。
+  assert.equal(requiredWatermark([recentRow('x', 'idle', false)], undefined, recentRowNeedsAttention), 0)
+  // currentId 命中即值得注意，即便回调说不用管。
+  assert.equal(requiredWatermark(rows, 'c', () => false), 3)
+  // 空白行不计数、不贡献水位（宿主行为：blank 恒显示）。
+  const withBlank = [{ ...recentRow('blank', 'ongoing', true), blank: true }, ...rows]
+  assert.equal(requiredWatermark(withBlank, undefined, recentRowNeedsAttention), 5)
+  // 超出 autoMax 的行不能抬高水位。
+  assert.equal(requiredWatermark(rows, undefined, recentRowNeedsAttention, 2), 2)
+  assert.deepEqual(requiredWatermark(null, undefined, recentRowNeedsAttention), 0)
+})
+
+test('recentRowNeedsAttention: highlight or any status mark counts', () => {
+  assert.equal(recentRowNeedsAttention(recentRow('a', 'idle', false)), false)
+  assert.equal(recentRowNeedsAttention(recentRow('b', 'idle', true)), true, 'the active row always matters')
+  for (const mark of ['warning', 'ongoing', 'done'] as const) {
+    assert.equal(recentRowNeedsAttention(recentRow('c', mark, false)), true, mark + ' is worth surfacing')
+  }
+})
+
+test('projectRowNeedsAttention: only the current project session matters', () => {
+  const base = { title: 't', meta: '', archived: false }
+  assert.equal(projectRowNeedsAttention({ ...base, id: 'a', current: true }), true)
+  assert.equal(projectRowNeedsAttention({ ...base, id: 'b', current: false }), false)
 })
 
 test('normalizeTasks: unwraps RemoteResult, keeps every status, reads fallback fields', () => {
