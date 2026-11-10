@@ -7,17 +7,17 @@ DeepSeek Harness 的 **macOS Desktop 折叠态增量图标轨**。开工前读 [
 ## 范围
 
 - 纯 Client 插件：源码在 `src/`（TypeScript / TSX，按职责分模块），由 `esbuild` 生成 `lib/client.js`（`window.__ModuleLoader__.load()` 的单份静态模块）与 `lib/index.js`（空 `apply()` 的 Host 入口）；`cordis.patch.yml` 插一行。`lib/` 是生成目录，不提交 Git，改完 `src/` 必须 `npm run build`。运行时依赖仍为零——客户端只向宿主 `require` `react` / `react-dom`；开发依赖与构建步骤按 [ADR-0006](docs/adr/0006-typescript-source-and-build.md) 允许。
-- 图标轨只在 **macOS Desktop + 宿主侧栏折叠 + 视口 ≥ 768px** 时渲染；其他状态轨组件一律 `return null`。Web 端宿主自带折叠轨，不得重复绘制；Windows/Linux 未验证，不得宣称支持。插件详情页的设置块独立注册，不受轨道显隐控制。
+- 图标轨只在 **macOS Desktop + 宿主侧栏折叠 + 视口 ≥ 768px** 时渲染；其他状态轨组件一律 `return null`。Web 端宿主自带折叠轨，不得重复绘制；Windows/Linux 未验证，不得宣称支持。插件没有插件详情页设置块（唯一的设置项已随分页整项移除）。
 - 安装/启用插件、改用户 profile、发布 npm，都只在任务明确授权时执行。
 
 ## 硬约束（违反即否决）
 
 1. **不得重新引入替换 `sidebar` 单槽的实现**。单槽替换会让 `sidebar.settings` 一起消失，宿主 `SettingsRoot` 不再挂载，设置（账号、主题、插件管理）整体不可达；搜索、视图选项、添加工作区、账号菜单也会丢。这是硬性否决理由，不是风格取舍。
-2. **图标轨只通过 `shell.overlay` 增量注册**（`id: 'dsh-sidebar-rail.rail'`），不声明 `children`；自己的偏好设置块注册到 `plugins.bundle.config`。
+2. **图标轨只通过 `shell.overlay` 增量注册**（`id: 'dsh-sidebar-rail.rail'`），不声明 `children`。不注册 `plugins.bundle.config`——插件已无自己的设置项（可调的 `recentCount` 在 0.5.1 被分页取代，设置块与其注册一并删除）。
 3. **不得改宿主栅格列宽，不得用 `!important` 覆盖宿主样式**；浮轨只能 `createPortal(document.body)` + `position: fixed`。
 4. **轨默认隐藏（`translateX(-100%)`），由 12px 左边条热区或键盘焦点唤出，不得改回常驻显示**。宿主折叠时主区占满窗口，而标签行没有左侧避让（只有标题行应用了 `--dsh-frame-leading-clearance`），常驻会把会话页首个「对话」标签连同点击区域一起盖住。
 5. **窄窗判定不得改回 CSS 媒体查询**。阈值与推导见 [ADR-0001](docs/adr/0001-narrow-viewport-predicate.md)；判定必须是可单测的纯函数。
-6. **折叠状态归宿主**：只读 `data-sidebar-collapsed`，不持久化、不在挂载时纠正。插件偏好只写 `localStorage['dsh.sidebar-rail.v1']` 的 `pinnedWorkspaceIds` 与 `recentCount`。
+6. **折叠状态归宿主**：只读 `data-sidebar-collapsed`，不持久化、不在挂载时纠正。插件偏好只写 `localStorage['dsh.sidebar-rail.v1']` 的 `pinnedWorkspaceIds` 与 `expandedProjectIds`；分区折叠态与列表水位（分页）都不落盘。
 7. **运行时依赖必须保持为零**：客户端运行期只向宿主 `require` `react` 与 `react-dom`，不得新增 `dependencies` 或任何运行时实现库。**构建步骤与开发依赖按 [ADR-0006](docs/adr/0006-typescript-source-and-build.md) 允许**：`devDependencies` 仅限 TypeScript / esbuild / tsx / React 与 `@types/*`，构建由 `scripts/build.mjs` 负责；新增工具链或运行时依赖必须先改 ADR-0006，不得「顺手接入」。机械规则加进 `scripts/check-source.mjs`（源码约束）或 `scripts/check-artifact.mjs`（产物约束），判断类写进 `CODING_STANDARDS.md`。
 8. **可选的 Host 调用必须有超时与失败态**，不得把「服务不存在/不返回」呈现成永久加载。
 9. **账号浮层只通过宿主服务读取头像、余额与跳转链接，不向插件本地存储写入账号数据**。登录、退出、付款及完整账号设置留给宿主或目标网页。

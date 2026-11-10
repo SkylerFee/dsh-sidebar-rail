@@ -11,12 +11,12 @@ The rail starts hidden. Collapse the host sidebar, then move the pointer into th
 <a id="screenshots"></a>
 ## Screenshots
 
-These cropped screenshots show the real macOS Desktop client in Chinese, with a dark appearance and the Catppuccin skin. Workspace names and session titles are blurred. Recent count is set to 9 in the images; its default remains 5.
+These cropped screenshots show the real macOS Desktop client in Chinese, with a dark appearance and the Catppuccin skin. Workspace names and session titles are blurred. They were captured before 0.5.1, so the recent-count stepper at the foot of the workspace flyout no longer exists.
 
 <table>
   <tr><th>Workspaces, pins and recent sessions</th><th>My plugins</th></tr>
   <tr>
-    <td valign="top"><img src="docs/images/workspace-flyout.png" alt="Collapsed rail workspace flyout with pinned projects, recent session status and the count setting" width="330"></td>
+    <td valign="top"><img src="docs/images/workspace-flyout.png" alt="Collapsed rail workspace flyout with pinned projects and recent sessions; the screenshot predates 0.5.1, so the count stepper at its foot has since been removed" width="330"></td>
     <td valign="top"><img src="docs/images/plugins-flyout.png" alt="My plugins flyout showing enabled user plugins and their versions" width="330"></td>
   </tr>
 </table>
@@ -86,7 +86,7 @@ Enabling is a profile configuration switch and belongs to the Plugins page; the 
 | Enable again | Turn the same switch on |
 | Uninstall | Choose **Uninstall** on the detail page, or run `dsh plugin --profile desktop remove @skylerfee/dsh-sidebar-rail` |
 
-The assistant can also call `plugin_manager` with `set_bundle` (enable/disable) or `remove_bundle` (uninstall). Local preferences in `localStorage` (pinned projects, recent count) survive disabling or uninstalling.
+The assistant can also call `plugin_manager` with `set_bundle` (enable/disable) or `remove_bundle` (uninstall). Local preferences in `localStorage` (pinned projects, expanded projects) survive disabling or uninstalling.
 
 <a id="usage"></a>
 ## Usage
@@ -97,8 +97,8 @@ The assistant can also call `plugin_manager` with `set_bundle` (enable/disable) 
 
 | Entry | Available actions |
 | --- | --- |
-| Workspaces | Three sections — pinned projects, projects, recent sessions. A project row expands to its own session list (unfiltered, in host order) and can start a new session; Add project registers a directory without navigating |
-| Recent sessions | Listed at the foot of the workspace flyout, newest first, excluding archived, blank and subagent sessions; open an existing session and see its relative time and host-provided status mark |
+| Workspaces | Three sections — pinned projects, projects, recent sessions. A project row expands to its own session list (host order, paged, archived rows still listed) and can start a new session; Add project registers a directory without navigating |
+| Recent sessions | Listed at the foot of the workspace flyout, newest first, excluding archived and subagent sessions; of blank sessions only the current one is listed. Open an existing session and see its relative time and host-provided status mark. A clock glyph marks a session that has an active scheduled task (shown only while that row has no status mark of its own) |
 | Scheduled tasks | Three sections — running, paused, ended; only running opens by default. Choose a row or Open panel to enter the task panel |
 | My plugins | Two sections — enabled, and installed but switched off; host bundles are excluded and no switch is offered. Choose a row to enter the plugin manager |
 | More | Open other host panels or expand the native sidebar |
@@ -109,20 +109,18 @@ Keyboard: `Tab` to an icon reveals the rail. On a top-row function icon, press `
 <a id="preferences"></a>
 ## Preferences and local data
 
-Recent count defaults to **5**, with a range of **1–20**. Adjust it with the stepper at the foot of the workspace flyout or on the plugin detail page.
+Session lists are paged: the first **10** rows show, and a **Show more** button at the end of the list appends 10 more each time. A row that needs attention (running, waiting for your input, unread completion, or the current session) is lifted above the watermark automatically, so it is never hidden behind Show more. Project session lists page the same way, counting independently.
 
-Every flyout fills the column from below the window chrome to the bottom edge. Its content scrolls as one list: sections are groupings with a title row, not separate scroll areas, so a long list scrolls as a whole and the titles scroll with it. Sections fold, and folding never changes the panel height; the recent-count stepper stays in a fixed footer so it is reachable however far you scroll.
-
-![Recent count setting on the plugin detail page, showing 9 with decrease and increase buttons](docs/images/plugin-settings.png)
+Every flyout fills the column from below the window chrome to the bottom edge. Its content scrolls as one list: sections are groupings with a title row, not separate scroll areas, so a long list scrolls as a whole and the titles scroll with it. Sections fold, and folding never changes the panel height. Show more is an ordinary row at the end of the list and scrolls with the content; it does not sit in a fixed footer. Paging is not persisted: closing and reopening a flyout starts again at 10 rows.
 
 Preferences belong to this client and use `localStorage['dsh.sidebar-rail.v1']`:
 
 | Field | Purpose |
 | --- | --- |
 | `pinnedWorkspaceIds` | Pinned workspace IDs, most recently pinned first |
-| `recentCount` | Number of recent rows, normalised to an integer from 1 to 20; unparseable values use the default |
+| `expandedProjectIds` | Project rows whose session list is expanded; kept across flyout opens |
 
-The host owns the collapse state; the plugin only reads it. Account and balance data come from host services and are not written to these preferences. Clearing client storage loses local settings. Both settings surfaces share this preference; see the [verification log](docs/verify.md) for real Desktop checks of immediate synchronisation between them.
+The host owns the collapse state; the plugin only reads it. Account and balance data come from host services and are not written to these preferences. Clearing client storage loses local settings. A store written by an older version may still contain a `recentCount` field; nothing reads it any more and it is left untouched.
 
 <a id="troubleshooting"></a>
 ## Troubleshooting and limitations
@@ -130,13 +128,13 @@ The host owns the collapse state; the plugin only reads it. Account and balance 
 | Symptom | Check or recovery |
 | --- | --- |
 | No rail after installation | Confirm macOS Desktop, the enabled plugin, a collapsed sidebar and viewport width ≥ 768px; the rail starts hidden and needs the left-edge strip |
-| A recent session is missing | Check Recent count; archived, blank and subagent sessions are excluded |
+| A recent session is missing | Choose Show more at the end of the list; archived and subagent sessions are excluded, and blank sessions are listed only while they are the current session |
 | Task or plugin loading fails | Missing services, structured failures and requests exceeding 5s enter the failure state; use Open panel for the host page, or close and reopen the flyout to retry |
 | No avatar or balance | A missing avatar uses a fallback glyph; unavailable balances get a hint. Account data are read on component mount and are not guaranteed to refresh live; use the host account page for full details |
 | A revealed rail covers the page's left edge | It is a temporary overlay that reserves no host grid space; the hidden default preserves the conversation tab entry, and moving the pointer away lets the rail retract |
 | Sidebar rail unavailable or a boot import error | Keep the visible error and host diagnostics, disable the plugin through the native sidebar, and report the host version, plugin version and reproduction steps in this repository; omit credentials and conversation content |
 
-The plugin keeps the expanded host sidebar and its column width. The top 48px remain clear for macOS window controls; reduced-motion preferences are respected. For light themes, other platforms, real remote failures, plugin-detail settings interactions and the primary balance row on a funded account, rely on the actual results and unverified items in the [verification log](docs/verify.md).
+The plugin keeps the expanded host sidebar and its column width. The top 48px remain clear for macOS window controls; reduced-motion preferences are respected. For light themes, other platforms, real remote failures, paging and scheduled-task marks on a real Desktop window, and the primary balance row on a funded account, rely on the actual results and unverified items in the [verification log](docs/verify.md).
 
 <a id="development"></a>
 ## Development and contributions

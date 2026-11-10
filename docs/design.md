@@ -25,7 +25,7 @@
 | Web 展开态 | 完整原生侧栏 | 不渲染 |
 | Windows / Linux | 未验证 | 不渲染 |
 
-判据是 `document.documentElement.dataset.platform === 'darwin'`、宿主 frame 带 `data-sidebar-collapsed` 且视口宽度 ≥ 768px，任一不成立就 `return null`。插件详情页的设置块独立注册到 `plugins.bundle.config`，不受轨道显隐控制。
+判据是 `document.documentElement.dataset.platform === 'darwin'`、宿主 frame 带 `data-sidebar-collapsed` 且视口宽度 ≥ 768px，任一不成立就 `return null`。插件**没有设置块**：唯一的设置项（可调最近会话条数）在 0.5.1 被分页取代，`plugins.bundle.config` 的注册与 `RailSettings` 组件一并删除。
 
 ## 2. 挂载点：`shell.overlay` list 槽
 
@@ -82,10 +82,10 @@ transform: translateX(-100%);
 - **显式 `-webkit-app-region: no-drag`**：Electron 的 app-region 是**几何**而不是 stacking，浮轨盖住窗口拖拽带时必须自己 opt out（即便 body 级 portal 通常已继承 no-drag），否则点图标会拖窗口。
 - **窄窗口不渲染**：判定不是 CSS 媒体查询，而是纯函数 `shouldRenderRail(platform, collapsed, viewportWidth)`（阈值 `RAIL_MIN_VIEWPORT = 768`），`RailOverlay` 用 `window.innerWidth` + `resize` 监听驱动；不满足即 `return null`，组件整体卸载。768 = 680（宿主正文最小宽）+ 56（轨宽）+ 32（两侧安全）。为什么不用 CSS：阈值语义是「正文是否还放得下」，与轨自身盒模型无关；做成纯函数还能被单测覆盖边界（`src/client/model/geometry.ts`，由 `test/*.test.ts` 直接导入执行）。为什么不是 900：旧实现的 900 是拍的，与宿主 drawer 断点（768）无对应关系；按 680 正文可读宽推导更可解释。
 - **浮层位置**：`.dsr-flyout` 也是 `position: fixed`（portal 到 body），宽 288px，`left = rect.right + 8`。`flyoutPlacement` 根据触发按钮与视口计算顶部或底部距离，并以内联 `maxHeight` 限制剩余可视高度；账号浮层从头像底边向上展开。
-- **浮层定高的来历**：0.3.x 曾用「视口 70%」给工作区浮层定高（`workspaceFlyoutHeight` + `WORKSPACE_FLYOUT_VIEWPORT_RATIO`），因为该浮层内容长度差异最大（两条或二十条最近会话）。0.4.0 起改为**从 chrome 带下沿占到底边**（`flyoutSectionedHeight`），两个函数都已不在源码里。定高的目的没变——调「最近会话条数」只改变列表是否滚动，不改变浮层高度。
-- **单一滚动容器（0.5.0 目标形态，决策见 ADR-0007；实现于票 #11）**：浮层 body 用 `.dsr-sections` 承载所有分区，整块内容共用一个 `overflow-y:auto` 滚动区。分区（`.dsr-section`）只是「标题行 + 条目组」，**不是滚动单元**，也没有高度上限：内容多就整页一起滚，标题跟着滚走；内容少就没有滚动条。分区之间的分隔线已移除，分组靠标题字重与留白区分。
-- **浮层高度仍钉死**：`.dsr-flyout` 的 `height` 由 `flyoutSectionedHeight(innerHeight, topClearance)` 算出（chrome 带之下到底边），不随内容与 `recentCount` 变化。分区收起/展开只让滚动内容变短，不改变面板高度。底部条数步进器在固定底栏（`.dsr-flyout-foot`），不参与滚动——这是标题滚走之后仍能找到条数设置的前提。
-- **为什么不再分区独立滚动**：0.4.0 的三段式（固定标题 + 独立滚动 + 1/3 限高）在真机上让列表被切碎、多个滚动条并存，与宿主侧栏「一个列表 + 分组标题」的习惯相反。见 [ADR-0007](adr/0007-single-scroll-flyout.md)。注意：本节描述的是 0.5.0 的目标形态；0.4.0 的旧结构（`.dsr-section` 的 `max-height: 33.3333%`、分区 `border-top`、分区独立 `overflow`）在票 #11 落地前仍存在于源码中。
+- **浮层定高的来历**：0.3.x 曾用「视口 70%」给工作区浮层定高（`workspaceFlyoutHeight` + `WORKSPACE_FLYOUT_VIEWPORT_RATIO`），因为该浮层内容长度差异最大（两条或二十条最近会话）。0.4.0 起改为**从 chrome 带下沿占到底边**（`flyoutSectionedHeight`），两个函数都已不在源码里。定高的目的没变——「显示更多」只让列表变长、交给整体滚动，不改变浮层高度。
+- **单一滚动容器（ADR-0007 的形态；票 #11 已落地）**：浮层 body 用 `.dsr-sections` 承载所有分区，整块内容共用一个 `overflow-y:auto` 滚动区。分区（`.dsr-section`）只是「标题行 + 条目组」，**不是滚动单元**，也没有高度上限：内容多就整页一起滚，标题跟着滚走；内容少就没有滚动条。分区之间的分隔线已移除，分组靠标题字重与留白区分。
+- **浮层高度仍钉死**：`.dsr-flyout` 的 `height` 由 `flyoutSectionedHeight(innerHeight, topClearance)` 算出（chrome 带之下到底边），不随内容变化。分区收起/展开、列表分页只让滚动内容变短或变长，都不改变面板高度。
+- **为什么不再分区独立滚动**：0.4.0 的三段式（固定标题 + 独立滚动 + 1/3 限高）在真机上让列表被切碎、多个滚动条并存，与宿主侧栏「一个列表 + 分组标题」的习惯相反。见 [ADR-0007](adr/0007-single-scroll-flyout.md)。0.4.0 的旧结构（分区 `max-height`、分区 `border-top`、分区独立 `overflow`）已随票 #11 从源码移除，不再存在两套并行的滚动模型。
 
 ## 5. 为什么不改宿主列宽
 
@@ -128,7 +128,7 @@ transform: translateX(-100%);
 | 轨道显隐 | 12px 热区或轨内焦点唤出；在图标间移动只关闭或切换浮层，导航动作同时收起轨道 | 收起定时器及窗口 `pointermove` 监听随组件清理 |
 | Escape | `open !== null` 时挂 `window` keydown，关闭浮层 | effect cleanup 摘除监听 |
 | 键盘进入 | 顶部功能图标上按 `↓` / `→`，打开浮层并聚焦首个按钮；浮层内 Escape 关闭并返回触发图标 | 焦点只移到当前浮层节点 |
-| 定时任务 / 插件数据 | 每次打开拉取（`idle → loading → ready/failed`），5s 超时或服务不可用进入失败态；Promise resolve 后仍判断 `RemoteResult.ok` | `live` 标记隔离过期结果，清理超时并重置请求标记，切回入口可重试 |
+| 定时任务 / 插件数据 | 每次打开拉取（`idle → loading → ready/failed`），5s 超时或服务不可用进入失败态；Promise resolve 后仍判断 `RemoteResult.ok`。任务列表在**任务浮层与工作区浮层**都会加载：后者的用途是给会话行标定时任务时钟（`useFlyoutList` 的 `when: ['tasks', 'workspace']`），两个入口共用同一份状态，只取一次 | `live` 标记隔离过期结果，清理超时并重置请求标记，切回入口可重试 |
 | 账号数据 | 组件挂载后读取登录态；登录时并行读取 profile 与余额，各自保留失败占位。**按 PRD 非目标，不订阅 `account/watch`**，挂载期间切换登录态不会自动刷新，完整信息以宿主账号页为准 | 清理后忽略晚到结果 |
 | 槽注册与订阅 | `ctx.effect(...)` 包裹 overlay 注册、locale 字典、panel 条目订阅、locale 订阅 | effect dispose 自动回收 |
 | 样式 | `<style data-dsh-sidebar-rail>` 注入 `head` | 卸载时 `style.remove()` |
@@ -136,7 +136,7 @@ transform: translateX(-100%);
 
 ## 9. 卸载恢复
 
-插件卸载 / 禁用后，overlay 与设置块的注册释放，组件 effect 清理 keydown、pointermove、定时器和 MutationObserver，样式节点与 portal DOM 随之移除。宿主侧栏与正文结构不由插件修改；`localStorage['dsh.sidebar-rail.v1']` 中的置顶及条数偏好保留，不写宿主存储。实际卸载验收范围见 [verify.md](verify.md)。
+插件卸载 / 禁用后，overlay 注册释放，组件 effect 清理 keydown、pointermove、定时器和 MutationObserver，样式节点与 portal DOM 随之移除。宿主侧栏与正文结构不由插件修改；`localStorage['dsh.sidebar-rail.v1']` 中的置顶与展开项目偏好保留，不写宿主存储。实际卸载验收范围见 [verify.md](verify.md)。
 
 ## 10. 数据来源（全部只读）
 
@@ -147,11 +147,12 @@ transform: translateX(-100%);
 | 归档会话 | `useWorkspaces(state => state.archivedSessionIds)` |
 | 当前面板 | `usePanelInfo(info => info.activePanelId)` |
 | 其他面板条目 | `ctx.slots.entriesOfSlot('sidebar.panellist')` + `ctx.slots.subscribe`（只读别人声明的槽，不注册、不声明） |
-| 定时任务 | `ctx.get('remote.schedule')?.catalog()`（可选，失败降级） |
+| 定时任务 | `ctx.get('remote.schedule')?.catalog()`（可选，失败降级）。打开任务浮层或工作区浮层时各取一次；归一化时额外读出 `involvedSessionIds` / `target` / `lastDelivery.targetSessionId` / `status`，供会话行的时钟标记判定，**不新增远程调用** |
 | 插件 | `ctx.get('remote.pluginManager')?.listBundles()`（可选）。用 bundle 列表而非 `pluginInventory/list`：只有它带 `official` 与 `availability`，这是宿主区分「自带 / 用户安装」的结构化依据 |
 | 账号头像与余额 | `remote.account.getState()` 判登录态；登录后用 `getProfile(metadata)` 与 `getBalance(metadata)` 读取头像、主钱包和赠金钱包；元数据版本取自 `__DSH_BOOT__.release.version` |
 | 账号链接 | 宿主账号状态提供的用量及充值地址，只接受绝对 http(s) 链接，使用新窗口打开 |
 | 会话状态标识 | 标准 prop `useSessionStatus` 提供会话状态，缺失时仅使用 summary 中可用的运行信息 |
+| 定时任务标记 | 由上面同一份任务列表推导：`sessionHasActiveTask(tasks, sessionId)` = 存在 `status === 'active'` 且「涉及」该会话的任务（`involvedSessionIds` 命中，或目标会话就是它）。纯函数在 `model/remote.ts` |
 | 语言 | `ctx.locale.subscribe` 包装成可订阅快照，驱动相对时间文案 |
 
 **已知细节**：`SessionSummary` 没有 `workspaceId`，也没有归档 / 置顶字段。归属工作区靠 `WorkspaceView.sessionIds` 反查；归档靠 `archivedSessionIds` 过滤；置顶是**工作区级**的插件本地概念，宿主无对应字段。
@@ -164,10 +165,10 @@ transform: translateX(-100%);
 | --- | --- | --- |
 | 置顶项目 | 命中 `pinnedWorkspaceIds` 的工作区 | 置顶顺序（最近置顶在前） |
 | 项目 | 其余工作区 | 宿主返回顺序 |
-| 最近会话 | 未归档、非空白、非子代理的会话 | `updatedAt` 倒序，按 `recentCount` 截取；默认 5，范围 1–20 |
+| 最近会话 | 未归档、非子代理的会话；空白会话只保留当前那一个 | `updatedAt` 倒序，分页显示：默认 10 条，注意力行自动突破水位，点「显示更多」再 +10 |
 
-- 置顶持久化：`localStorage['dsh.sidebar-rail.v1'] = { pinnedWorkspaceIds: string[] }`，行内图钉按钮切换，写入用合并语义（`{ ...readStore(), ...patch }`）。
-- 最近条数同存在该键的 `recentCount`，工作区浮层底部与插件详情页均可修改；两处通过 `useSyncExternalStore` 订阅共享快照，修改后发布新值并持久化。该同步路径的真机结果与未验证项见 [verify.md](verify.md)。
+- 置顶持久化：`localStorage['dsh.sidebar-rail.v1'] = { pinnedWorkspaceIds: string[] }`，行内图钉按钮切换，写入用合并语义（`{ ...readStore(), ...patch }`）。展开的项目存在同一键的 `expandedProjectIds`（0.5.0 起），写入同样走合并语义，两个字段互不覆盖。
+- 列表分页是组件内状态，不落盘：基础 `PAGE_SIZE = 10`，自动提升上限 `PAGE_SIZE_AUTO_MAX = 50`，只升不降，浮层 `dismiss` / `retract` 时复位。实现见 `hooks/use-flyout.ts`（水位控制器）与 `model/workspaces.ts`（`watermarkSlice` / `requiredWatermark`），照抄宿主 `WorkspaceBrowser` 的同名机制。
 - 折叠状态**不再**由插件持久化：宿主自己持有并持久化，插件只读 `data-sidebar-collapsed`。
 
 ## 12. 重构中删除的能力
@@ -179,17 +180,18 @@ transform: translateX(-100%);
 | 插件自己的折叠状态持久化（store 里的 `collapsed`、挂载时 `toggleSidebar()` 校正） | 删除。折叠状态归宿主 |
 | `openSettings` 命令探测 | 删除。账号 / 更多浮层只给「展开侧栏」，把设置入口交回宿主 |
 | `workspaceSessions` 辅助函数 | 删除。会话归属改用 `WorkspaceView.sessionIds` 反查 |
+| 可调的最近会话条数（`recentCount`）、浮层底部步进器、插件详情页设置块 | 删除（0.5.1）。改为分页：`PAGE_SIZE = 10` + 「显示更多」，注意力行自动突破水位；`RailSettings` 组件与 `plugins.bundle.config` 注册一并移除 |
 
 ## 13. 容错
 
 | 场景 | 行为 |
 | --- | --- |
 | 组件渲染抛错 | 自有 `Boundary` 拦截并渲染 `.dsr-fallback` 占位；overlay 条目不会把宿主侧栏或正文拖崩 |
-| `remote.schedule` 缺失 / 失败 | 任务浮层显示失败文案 + 「打开面板」，成功空列表另显示空态 |
+| `remote.schedule` 缺失 / 失败 | 任务浮层显示失败文案 + 「打开面板」，成功空列表另显示空态；工作区浮层里则只是**不显示定时任务时钟**，会话列表照常渲染 |
 | `remote.pluginManager` 缺失 / 失败 | 插件浮层同上 |
 | 头像或余额不可用 | 头像使用占位；主钱包不可用显示「余额暂不可用」；账号完整信息留给宿主账号页 |
 | 标准 hooks 缺失 | `selectorHook` 回退到常量读取器，不会白屏 |
-| `localStorage` 不可用 / 内容损坏 | 置顶不持久但界面可用 |
+| `localStorage` 不可用 / 内容损坏 | 置顶与项目展开不持久但界面可用（分页状态本就不落盘） |
 | `apply` 整体异常 | `try/catch` 包住注册，只 `console.error` 一次，宿主侧栏不受影响 |
 | 无工作区 / 无会话 | 对应段不渲染；空态文案 |
 
@@ -206,4 +208,5 @@ transform: translateX(-100%);
 - 圆角用 `--dsw-radius-sm`（按钮、行）与 `--dsw-radius-lg`（浮层），阴影用 `--dsw-shadow-lv3`，与宿主 `HoverCard` 的组合一致。这些变量由 `ui-theme`（`styles/base.css`、`styles/gradient-shadow-text.css`，经 `styles.ts` 内联注入）全局提供，但**不在 Theme token 注册表**里，因此 `Theme.listTokens` 查不到它们——不能据此判断变量不存在。仅当变量缺失时才落到括号里的 fallback。
 - 几何：浮轨 56px、按钮 36×36、图标 20px、头像 26px、浮层 288px。
 - 可访问性：每个图标按钮有 `aria-label`；当前面板用 `aria-current="page"`；浮层 `role="dialog"` + `aria-label`；顶部功能图标支持方向键进入浮层，浮层内 Escape 返回触发按钮；`prefers-reduced-motion: reduce` 关闭浮层入场与轨道滑动动画。实现支持不等于完整键盘路径已验收，具体结果见 [verify.md](verify.md)。
+- **会话行首那一格**（`.dsr-row-mark`，16×16）：定时任务时钟与状态点**互斥**——只有该行状态为 `idle` 且存在活跃定时任务时才画时钟，否则画状态点。时钟 SVG 自绘（16px 视框、`stroke-width: 1`、`currentColor`，照抄宿主 `clock-outline` artwork），不 import 宿主包；图标 `aria-hidden`，含义由 `.dsr-visually-hidden` 文本送达读屏。点击时钟 `stopPropagation`，不触发行的打开。
 - 样式作用域统一 `.dsr-*` 前缀，样式节点带 `data-dsh-sidebar-rail` 标记，避免影响其他插件。
