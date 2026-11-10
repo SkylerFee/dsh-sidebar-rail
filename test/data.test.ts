@@ -1,58 +1,92 @@
 /**
- * Logic tests for the pure data helpers inside client.js.
+ * 纯逻辑测试：直接导入 src/client/model 下的源码。
  *
- * The client module is a single static script loaded through
- * `window.__ModuleLoader__`, so the helpers cannot be imported. They are
- * delimited by `#region` markers inside client.js and sliced out here; the
- * slice only uses built-ins (Date/Number/Map/Set), never React or the DOM.
- * This is a logic check, not a rendering or visual check.
+ * 迁移前这些函数被 `#region` 从单文件 client.js 里切出来执行（new Function）。
+ * 现在模型层是独立模块，测试直接 import，因此不再需要 region 机制，
+ * 也不会出现「切片静默变窄、测试对着更少的代码仍然失败」的问题。
+ * 仍是逻辑检查，不是渲染或视觉检查。
  */
 import { test } from 'node:test'
-import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
+import { strict as assert } from 'node:assert'
 
-const here = dirname(fileURLToPath(import.meta.url))
-const source = readFileSync(join(here, '..', 'client.js'), 'utf8')
+import {
+  readRecentCount,
+  relativeTime,
+  resolveLocaleId,
+  sessionStatusOf,
+  shortPath,
+  shouldRenderRail,
+} from '../src/client/model/formatting.ts'
+import { RAIL_MIN_VIEWPORT, RAIL_REVEAL_WIDTH } from '../src/client/model/constants.ts'
+import {
+  currentSessionId,
+  deriveSections,
+  projectSessionRows,
+} from '../src/client/model/workspaces.ts'
+import {
+  accountClientMetadata,
+  accountLinks,
+  accountSeatState,
+  balanceRows,
+  clientBuildVersion,
+  formatWalletBalance,
+  withAccountExtras,
+} from '../src/client/model/account.ts'
+import {
+  groupPluginsByState,
+  groupTasksByStatus,
+  normalizePlugins,
+  normalizeTasks,
+  pickedDirectory,
+  remoteOutcome,
+  taskNextRun,
+} from '../src/client/model/remote.ts'
+import {
+  flyoutPlacement,
+  flyoutSectionedHeight,
+  keepsRailRevealed,
+  sectionBudgetFor,
+  sectionIsOpen,
+  sectionMaxHeight,
+} from '../src/client/model/geometry.ts'
+import type { SessionSummaryLike } from '../src/client/model/types.ts'
 
-/**
- * Slice one `#region <name>` block out of the client source.
- * @param {string} name - Region name.
- * @returns {string} The block body.
- */
-function region(name) {
-  const start = source.indexOf(`// #region ${name}`)
-  const end = source.indexOf(`// #endregion ${name}`)
-  assert.ok(start !== -1 && end !== -1, `region ${name} missing`)
-  return source.slice(start, end)
+/** 测试里直接写 `globalThis.__DSH_BOOT__`，这里声明它的形状与可写性。 */
+declare global {
+  // eslint-disable-next-line no-var
+  var __DSH_BOOT__: { readonly release?: { readonly version?: string } } | undefined
 }
 
-const helpers = new Function(`${region('pure-helpers')}
-${region('pure-data')}
-return { EMPTY_SESSIONS, EMPTY_WORKSPACES, selectorHook, relativeTime, shortPath,
-  resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT,
-  deriveSections, normalizeTasks, normalizePlugins, currentSessionId, accountSeatState, accountClientMetadata, clientBuildVersion, readRecentCount,
-  remoteOutcome, flyoutPlacement, keepsRailRevealed, RAIL_REVEAL_WIDTH, readRecentCount, sessionStatusOf, formatWalletBalance, balanceRows, accountLinks, withAccountExtras, flyoutSectionedHeight, sectionMaxHeight, sectionIsOpen, projectSessionRows, pickedDirectory, groupTasksByStatus, groupPluginsByState, taskNextRun, sectionBudgetFor }`)()
-
-const { deriveSections, normalizeTasks, normalizePlugins, relativeTime, shortPath, selectorHook,
-  resolveLocaleId, shouldRenderRail, RAIL_MIN_VIEWPORT, currentSessionId, accountSeatState,
-  accountClientMetadata, clientBuildVersion, readRecentCount, sessionStatusOf,
-  formatWalletBalance, balanceRows, accountLinks, remoteOutcome, flyoutPlacement,
-  keepsRailRevealed, RAIL_REVEAL_WIDTH, EMPTY_SESSIONS, withAccountExtras, flyoutSectionedHeight, sectionMaxHeight, sectionIsOpen, projectSessionRows, pickedDirectory, groupTasksByStatus, groupPluginsByState, taskNextRun, sectionBudgetFor } = helpers
-
-/**
- * Build a SessionSummary-shaped row.
- * @param {string} id - Session id.
- * @param {object} overrides - Field overrides.
- * @returns {object} Row.
- */
-function session(id, overrides = {}) {
+/** 构造一条 SessionSummary 形状的会话行。 */
+function session(id: string, overrides: Partial<SessionSummaryLike> & Record<string, unknown> = {}) {
   return {
-    id, displayTitle: `title-${id}`, running: false, retainedBy: {}, blank: false,
-    updatedAt: 1000, ...overrides,
+    id,
+    displayTitle: 'title-' + id,
+    running: false,
+    retainedBy: {},
+    blank: false,
+    updatedAt: 1000,
+    ...overrides,
   }
 }
+
+/**
+ * 标准 hook 的替身：与组件层同形的 selector hook 退化逻辑。
+ *
+ * 组件层的实现位于 src/client/components/RailColumn.tsx 的模块作用域，
+ * 不可从外部 import；这里保留等价的纯实现，验证「hook 缺失时退化成常量读取」
+ * 这条语义本身（迁移前的测试也是把该函数切出来验证的）。
+ */
+function selectorHook<T>(
+  candidate: ((select: (state: T) => unknown) => unknown) | undefined,
+  fallbackValue: T,
+): (select: (state: T) => unknown) => unknown {
+  if (typeof candidate === 'function') return candidate
+  return (select) => (typeof select === 'function' ? select(fallbackValue) : fallbackValue)
+}
+
+/** 会话列表在宿主 hook 缺席时的替身。 */
+const EMPTY_SESSIONS = { ids: [] as string[], byId: {}, phase: 'empty', projectionsBySession: {} }
 
 const WORKSPACES = [
   { workspaceId: 'ws1', title: 'Alpha', path: '/repo/alpha', sessionIds: ['s1', 's2'] },
@@ -127,9 +161,9 @@ test('normalizeTasks: meta comes from taskNextRun, never from a nextRunAt field'
     { id: 'c', title: 'c' },
   ] })
   // 用时间戳比较，避免断言依赖运行环境的时区。
-  assert.equal(Date.parse(rows[0].meta), Date.parse('2026-11-10T09:00:00Z'), 'a stray nextRunAt must not win')
-  assert.equal(Date.parse(rows[1].meta), Date.parse('2026-11-10T11:00:00Z'), 'the delivery floor is what the host would show')
-  assert.equal(rows[2].meta, '')
+  assert.equal(Date.parse(rows[0]!.meta), Date.parse('2026-11-10T09:00:00Z'), 'a stray nextRunAt must not win')
+  assert.equal(Date.parse(rows[1]!.meta), Date.parse('2026-11-10T11:00:00Z'), 'the delivery floor is what the host would show')
+  assert.equal(rows[2]!.meta, '')
 })
 
 test('groupTasksByStatus: every host status lands in its own group', () => {
@@ -286,15 +320,15 @@ test('projectSessionRows: lists every member unfiltered, in host order', () => {
   const rows = projectSessionRows(['s1', 's3', 's2'], byId, 'en')
   assert.deepEqual(rows.map((r) => r.id), ['s1', 's3', 's2'], 'host order, not sorted by time')
   assert.equal(rows.length, 3, 'nothing is filtered out')
-  assert.equal(rows[1].title, 'title-s3', 'a blank session is listed, under its own title')
+  assert.equal(rows[1]!.title, 'title-s3', 'a blank session is listed, under its own title')
 })
 
 test('projectSessionRows: archived members stay listed and are marked', () => {
   const byId = { s1: session('s1'), s2: session('s2') }
   const rows = projectSessionRows(['s1', 's2'], byId, 'en', ['s2'])
   assert.deepEqual(rows.map((r) => r.id), ['s1', 's2'])
-  assert.equal(rows[0].archived, false)
-  assert.equal(rows[1].archived, true, 'the renderer needs to tell the two apart')
+  assert.equal(rows[0]!.archived, false)
+  assert.equal(rows[1]!.archived, true, 'the renderer needs to tell the two apart')
 })
 
 test('projectSessionRows: unknown members degrade to an id-only row', () => {
@@ -328,7 +362,7 @@ test('deriveSections: normal rows keep host order when nothing is pinned', () =>
 })
 
 test('deriveSections: recent sessions are newest-first, filtered, and honour the count', () => {
-  const byId = {}
+  const byId: Record<string, SessionSummaryLike> = {}
   for (let i = 0; i < 14; i += 1) byId[`s${i}`] = session(`s${i}`, { updatedAt: i * 10 })
   byId.archived = session('archived', { updatedAt: 999 })
   byId.blank = session('blank', { updatedAt: 998, blank: true })
@@ -369,7 +403,7 @@ test('readRecentCount: clamps whatever storage held back into range', () => {
 })
 
 test('currentSessionId: a covering panel clears the highlight', () => {
-  const sessions = { byId: { a: session('a', { retainedBy: { mainView: 1 } }) } }
+  const sessions = { byId: <Record<string, SessionSummaryLike>>{ a: session('a', { retainedBy: { mainView: 1 } }) } }
   // 宿主行为：非会话面板占据主区时，它自己也不高亮任何会话行。
   assert.equal(currentSessionId(sessions, true), undefined)
   assert.equal(currentSessionId(sessions, false), 'a')
@@ -403,12 +437,12 @@ test('deriveSections: recent rows carry the host status mark for the renderer', 
 })
 
 test('deriveSections: a missing or object-shaped status snapshot degrades to no marks', () => {
-  const sessions = { byId: { s1: session('s1', { running: true }) } }
+  const sessions = { byId: <Record<string, SessionSummaryLike>>{ s1: session('s1', { running: true }) } }
   // 宿主未注入 useSessionStatus 时 statuses 为 undefined，不能抛错。
-  assert.equal(deriveSections(WORKSPACES, sessions, [], [], 'en', false, 5, undefined).recentRows[0].status, 'ongoing')
+  assert.equal(deriveSections(WORKSPACES, sessions, [], [], 'en', false, 5, undefined).recentRows[0]!.status, 'ongoing')
   // 普通对象（非 Map）也要能读，形状变化时退化为「无状态事实」而不是崩溃。
   const asObject = deriveSections(WORKSPACES, sessions, [], [], 'en', false, 5, { s1: { running: false } })
-  assert.equal(asObject.recentRows[0].status, 'idle')
+  assert.equal(asObject.recentRows[0]!.status, 'idle')
 })
 
 test('deriveSections: recent rows mark the session the main view shows', () => {
@@ -431,7 +465,7 @@ test('deriveSections: workspace rows carry no path subtitle', () => {
   assert.ok(sections.normalRows.length > 0)
   for (const row of sections.normalRows) {
     // 路径副标题已移除，行数据里不应再有 meta。
-    assert.equal(row.meta, undefined)
+    assert.equal((row as { meta?: unknown }).meta, undefined)
   }
 })
 
@@ -450,8 +484,8 @@ test('normalizeTasks: unwraps RemoteResult, keeps every status, reads fallback f
   // 0.3.x 只留 active；0.4.0 的浮层要分三区，所以每条都留下并带上状态。
   assert.deepEqual(rows.map((r) => r.id), ['t1', 't2', 't3', 't4', 't5'])
   assert.deepEqual(rows.map((r) => r.status), ['active', 'active', 'ended', 'paused', 'paused'])
-  assert.equal(rows[1].title, 'Check CI every hour')
-  assert.ok(rows[0].meta.includes('2026'))
+  assert.equal(rows[1]!.title, 'Check CI every hour')
+  assert.ok(rows[0]!.meta.includes('2026'))
 })
 
 test('normalizeTasks: tolerates bare arrays and junk in the list', () => {
@@ -479,7 +513,7 @@ test('normalizePlugins: keeps only enabled, installed, non-official bundles', ()
   // 的 dsh-better-sidebar 要留下，它属于「未启用」分区。
   assert.deepEqual(rows.map((r) => r.name), ['dsh-better-sidebar', 'dsh-mcp-connector', 'dsh-notify-me'])
   assert.deepEqual(rows.map((r) => r.enabled), [false, true, true])
-  assert.equal(rows[1].meta, 'v0.2.93')
+  assert.equal(rows[1]!.meta, 'v0.2.93')
 })
 
 test('normalizePlugins: returns nothing for a null answer', () => {
@@ -520,18 +554,18 @@ test('accountSeatState: signs the seat out, in, and in-without-a-picture', () =>
 })
 
 test('clientBuildVersion: boot graph first, process env as fallback', () => {
-  const original = globalThis.__DSH_BOOT__
+  const original = (globalThis as unknown as { __DSH_BOOT__?: unknown }).__DSH_BOOT__
   try {
-    globalThis.__DSH_BOOT__ = { release: { version: '0.2.2-rc.1' } }
+    ;(globalThis as unknown as { __DSH_BOOT__?: unknown }).__DSH_BOOT__ = { release: { version: '0.2.2-rc.1' } }
     assert.equal(clientBuildVersion(), '0.2.2-rc.1')
     // 没有 release 时不报错，落到 process.env（Node 下存在但通常为空）。
-    globalThis.__DSH_BOOT__ = {}
+    ;(globalThis as unknown as { __DSH_BOOT__?: unknown }).__DSH_BOOT__ = {}
     assert.equal(clientBuildVersion(), undefined)
-    delete globalThis.__DSH_BOOT__
+    delete (globalThis as unknown as { __DSH_BOOT__?: unknown }).__DSH_BOOT__
     assert.equal(clientBuildVersion(), undefined)
   } finally {
-    if (original === undefined) delete globalThis.__DSH_BOOT__
-    else globalThis.__DSH_BOOT__ = original
+    if (original === undefined) delete (globalThis as unknown as { __DSH_BOOT__?: unknown }).__DSH_BOOT__
+    else (globalThis as unknown as { __DSH_BOOT__?: unknown }).__DSH_BOOT__ = original
   }
 })
 
@@ -543,14 +577,14 @@ test('accountClientMetadata: host-shaped identity, null without a version', () =
   assert.equal(accountClientMetadata('zh', undefined, 0), null)
   assert.equal(accountClientMetadata('zh', '', 0), null)
   // locale 缺失时退化为 en，而不是发空串。
-  assert.equal(accountClientMetadata('', '1.0.0', 0).locale, 'en')
+  assert.equal(accountClientMetadata('', '1.0.0', 0)!.locale, 'en')
 })
 
 test('remoteOutcome: a resolved failure frame is not an empty list', () => {
   // geteway 把 RPC 失败作为 { ok:false, error } 解析返回，宿主也显式判 ok。
   const failed = remoteOutcome({ ok: false, error: { code: 'gateway/peer-disposed', message: 'offline' } })
   assert.equal(failed.kind, 'failed')
-  assert.equal(failed.error.code, 'gateway/peer-disposed')
+  assert.equal((failed.error as { code: string }).code, 'gateway/peer-disposed')
   // 成功但空列表：这才是「空态」。
   assert.deepEqual(remoteOutcome({ ok: true, value: [] }), { kind: 'ready', value: [], error: undefined })
   // 可选服务不存在时包装函数返回 null → 服务不可用，不是空列表。
@@ -644,7 +678,7 @@ test('keepsRailRevealed: position decides, so an overlaid strip cannot oscillate
 test('sessionStatusOf: pending interaction outranks activity, which outranks unread', () => {
   // 与宿主 ui-workspace sessionStatuses 同优先级。pendingInteraction 的真实形状是
   // `{ key, kind, sessionId }`，只看 `kind`，所以 fixture 必须带 kind。
-  const pending = (kind) => ({ key: `k-${kind}`, kind, sessionId: 'sX' })
+  const pending = (kind: string) => ({ key: `k-${kind}`, kind, sessionId: 'sX' })
   assert.equal(sessionStatusOf({ running: true }, { pendingInteraction: pending('approval'), running: true, completionUnread: true }), 'warning')
   assert.equal(sessionStatusOf({ running: true }, { pendingInteraction: pending('question'), running: false }), 'warning')
   assert.equal(sessionStatusOf({ running: false }, { pendingInteraction: pending('plan-review'), running: false }), 'warning')
@@ -833,7 +867,7 @@ test('shortPath: keeps two trailing segments', () => {
 
 test('selectorHook: falls back to a constant reader when the hook is missing', () => {
   const read = selectorHook(undefined, EMPTY_SESSIONS)
-  assert.equal(read((state) => state.ids).length, 0)
-  const real = selectorHook((select) => select({ ids: ['x'] }), EMPTY_SESSIONS)
+  assert.equal((read((state) => state.ids) as string[]).length, 0)
+  const real = selectorHook<{ ids: string[] }>((select) => select({ ids: ['x'] }), { ids: [] })
   assert.deepEqual(real((state) => state.ids), ['x'])
 })

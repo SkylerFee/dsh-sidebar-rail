@@ -1,0 +1,174 @@
+.dsr-rail { display:flex; flex-direction:column; align-items:center; height:100%; padding:10px 0 8px; gap:4px; }
+.dsr-rail-top { display:flex; flex-direction:column; align-items:center; gap:4px; }
+.dsr-rail-spacer { flex:1 1 auto; min-height:8px; }
+/* macOS Desktop only: the host clips the collapsed column to 0 width, so the
+   rail is portalled beside #root and pinned below the window-chrome strip —
+   the traffic lights and the host's own reopen controls live in the top 48px
+   (--dsh-frame-top-clearance, declared on the root element so portalled
+   overlays inherit it). Clicking must not drag the window: -webkit-app-region
+   is opted out explicitly even though body-level portals already are. */
+.dsr-rail-float { position:fixed; left:0; top:var(--dsh-frame-top-clearance, 48px); bottom:0; width:56px;
+  z-index:60; display:flex; flex-direction:column; align-items:center;
+  background:var(--dsw-specific-sidebar-fill);
+  border-right:.5px solid var(--dsw-alias-border-l3);
+  -webkit-app-region:no-drag; }
+.dsr-rail-float .dsr-rail { width:100%; }
+/* Default state: the rail is slid out of the window, leaving only a thin edge
+   strip. It covers the host's first conversation tab otherwise — the frame's
+   collapsed column is zero-width and the tab row carries no leading clearance
+   (ui-conversation ConversationRoot.module.css ".tabs" rule), so anything wider
+   than this strip hides the tab's text and hit area. */
+.dsr-rail-float { transform:translateX(-100%); transition:transform 160ms ease; }
+.dsr-rail-float[data-dsr-revealed="true"] { transform:translateX(0); }
+@media (prefers-reduced-motion: reduce) { .dsr-rail-float { transition:none; } }
+/* The edge strip stays clickable/hoverable while the rail is out, which is what
+   lets the pointer "find" it without a visible handle. */
+/* 12px rather than 8px: macOS keeps an invisible resize band along the window
+   edge, so a narrower strip left the pointer on the resize cursor and its events
+   never reached the page. This width stays clear of that band while still being
+   far narrower than the 56px rail it reveals. */
+.dsr-rail-hotzone { position:fixed; left:0; top:var(--dsh-frame-top-clearance, 48px); bottom:0;
+  width:12px; z-index:59; -webkit-app-region:no-drag; }
+.dsr-rail-btn { display:flex; align-items:center; justify-content:center; width:36px; height:36px; padding:0;
+  border:none; background:transparent; border-radius:var(--dsw-radius-sm, 8px);
+  color:var(--dsw-alias-label-primary); cursor:pointer;
+  transition:background-color 120ms ease, color 120ms ease; }
+.dsr-rail-btn:hover, .dsr-rail-btn:focus-visible { background:var(--dsw-alias-interactive-bg-hover);
+  color:var(--dsw-alias-label-primary); outline:none; }
+.dsr-rail-btn[aria-current="page"], .dsr-rail-btn[data-dsr-open="true"] {
+  background:var(--dsw-specific-sidebar-nav-item-active); color:var(--dsw-alias-label-primary); }
+.dsr-avatar { display:flex; align-items:center; justify-content:center; width:26px; height:26px;
+  border-radius:50%; overflow:hidden;
+  background:var(--dsw-alias-interactive-bg-active); color:var(--dsw-alias-label-primary); }
+.dsr-avatar-img { width:100%; height:100%; object-fit:cover; display:block; }
+
+.dsr-flyout { position:fixed; z-index:2147483000; width:288px; max-height:calc(100vh - 32px);
+  display:flex; flex-direction:column;
+  background:var(--dsw-alias-bg-overlay); color:var(--dsw-alias-label-primary);
+  border:1px solid var(--dsw-alias-border-l1);
+  border-radius:var(--dsw-radius-lg, 16px);
+  box-shadow:var(--dsw-shadow-lv3, 0 12px 32px rgba(0,0,0,.18));
+  overflow:hidden; animation:dsr-in 120ms ease-out; }
+@keyframes dsr-in { from { opacity:0; transform:translateX(-2px); } to { opacity:1; transform:none; } }
+@media (prefers-reduced-motion: reduce) { .dsr-flyout { animation:none; } }
+.dsr-flyout-head { padding:10px 12px 4px; font-size:12px; font-weight:600;
+  color:var(--dsw-alias-label-primary); }
+.dsr-flyout-body { overflow-y:auto; padding:2px 6px 8px; min-height:0; }
+.dsr-flyout-foot { border-top:1px solid var(--dsw-alias-border-l1); padding:6px; }
+/* Sections (0.4.0). Each section is a header that never scrolls plus a body that
+   scrolls on its own, so folding or scrolling one leaves the others put.
+   flex:0 1 auto keeps a short section at its content height instead of stretching
+   it; without the cap below, one long list fills the whole panel -- that was
+   acceptance B3's failure (566px against a 316px third).
+   The cap is applied twice on purpose: a pixel value from sectionBudgetFor() lands
+   inline per section and outranks this rule, while the percentage here is the
+   fallback that still bounds a section if the inline value ever goes missing. The
+   container is a definite-height flex column, which is what that percentage
+   resolves against. */
+.dsr-sections { display:flex; flex-direction:column; flex:1 1 auto; min-height:0; overflow:hidden; }
+.dsr-section { display:flex; flex-direction:column; flex:0 1 auto; min-height:0;
+  max-height:33.3333%; }
+.dsr-section + .dsr-section { border-top:1px solid var(--dsw-alias-border-l1); }
+.dsr-section-head { flex:none; display:flex; align-items:center; gap:4px; padding:8px 8px 5px 10px; }
+.dsr-section-toggle { display:flex; align-items:center; gap:6px; flex:1 1 auto; min-width:0;
+  padding:0; border:none; background:transparent; font:inherit; font-size:11px; font-weight:600;
+  letter-spacing:.04em; color:var(--dsw-alias-label-secondary); text-align:left; cursor:pointer; }
+.dsr-section-toggle:hover, .dsr-section-toggle:focus-visible { color:var(--dsw-alias-label-primary); outline:none; }
+.dsr-section-caret { flex:none; display:flex; align-items:center; justify-content:center;
+  width:10px; height:10px; transition:transform 120ms ease; }
+.dsr-section[data-dsr-open="false"] .dsr-section-caret { transform:rotate(-90deg); }
+.dsr-section-title-text { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dsr-section-body { flex:1 1 auto; min-height:0; overflow-y:auto; padding:0 6px 8px; }
+@media (prefers-reduced-motion: reduce) { .dsr-section-caret { transition:none; } }
+.dsr-stepper { display:flex; align-items:center; gap:6px; padding:6px 6px 0; font-size:11px;
+  color:var(--dsw-alias-label-primary); }
+.dsr-stepper-label { flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dsr-stepper-btn { display:flex; align-items:center; justify-content:center; width:20px; height:20px; flex:none;
+  border:1px solid var(--dsw-alias-border-l1); background:transparent; border-radius:var(--dsw-radius-sm, 8px);
+  color:var(--dsw-alias-label-primary); font:inherit; line-height:1; cursor:pointer; }
+.dsr-stepper-btn:hover:not(:disabled) { background:var(--dsw-alias-interactive-bg-hover); }
+.dsr-stepper-btn:disabled { opacity:.4; cursor:default; }
+.dsr-stepper-value { min-width:1.6em; text-align:center; font-variant-numeric:tabular-nums; }
+/* Status markers: same shapes and tokens as the host's StateDot, so a session
+   reads the same in the rail and in the shipped sidebar. */
+.dsr-settings { display:flex; flex-direction:column; gap:2px; }
+.dsr-settings-title { margin:0 0 2px; font-size:13px; font-weight:600; color:var(--dsw-alias-label-primary); }
+.dsr-account-balance { display:flex; align-items:baseline; gap:8px; padding:6px 6px 2px; }
+.dsr-account-balance-label { font-size:11px; color:var(--dsw-alias-label-primary); }
+.dsr-account-balance-value { font-size:13px; font-weight:600; font-variant-numeric:tabular-nums;
+  color:var(--dsw-alias-label-primary); }
+.dsr-account-links { display:flex; gap:10px; padding:6px 6px 0; }
+.dsr-account-link { font-size:12px; color:var(--dsw-alias-brand-primary); text-decoration:none; }
+.dsr-account-link:hover { text-decoration:underline; }
+.dsr-dot { display:inline-flex; align-items:center; justify-content:center; width:10px; height:10px; flex:none; }
+.dsr-dot::after { content:''; width:6px; height:6px; border-radius:50%; background:currentColor; }
+.dsr-dot-done { color:var(--dsw-alias-state-success-primary); }
+.dsr-dot-warning { color:var(--dsw-alias-state-warn-primary); }
+.dsr-dot-ongoing { color:var(--dsw-alias-label-tertiary); }
+.dsr-dot-ongoing::after { content:none; }
+.dsr-ring-track, .dsr-ring-arc { fill:none; stroke:currentColor; stroke-width:2; }
+.dsr-ring-track { opacity:.25; }
+.dsr-ring-arc { stroke-linecap:round; stroke-dasharray:14 46; transform-origin:12px 12px;
+  animation:dsr-spin 1.5s linear infinite; }
+@keyframes dsr-spin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .dsr-ring-arc { animation:none; } }
+.dsr-section-title { padding:10px 6px 4px; font-size:11px; font-weight:600; letter-spacing:.04em;
+  text-transform:uppercase; color:var(--dsw-alias-label-primary); }
+.dsr-row { display:flex; align-items:center; gap:6px; width:100%; min-height:30px; padding:4px 6px;
+  border:none; background:transparent; border-radius:var(--dsw-radius-sm, 8px); color:inherit;
+  font:inherit; font-size:13px; text-align:left; cursor:pointer; }
+.dsr-row:hover, .dsr-row:focus-visible { background:var(--dsw-alias-interactive-bg-hover); outline:none; }
+/* The session the main view is showing. The host paints its own selected
+   session row with --dsw-alias-interactive-bg-hover (ui-workspace
+   Rows.module.css), so matching that token keeps both surfaces consistent;
+   --dsw-specific-sidebar-nav-item-active belongs to the settings nav. */
+.dsr-row[data-dsr-current="true"] { background:var(--dsw-alias-interactive-bg-hover); }
+.dsr-row-wrap { display:flex; align-items:center; border-radius:var(--dsw-radius-sm, 8px); }
+.dsr-row-wrap:hover { background:var(--dsw-alias-interactive-bg-hover); }
+.dsr-row-wrap:hover .dsr-row { background:transparent; }
+.dsr-row-main { display:flex; flex-direction:column; min-width:0; flex:1 1 auto; }
+.dsr-row-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dsr-row-meta { font-size:11px; font-weight:400; color:var(--dsw-alias-label-primary);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dsr-row-action { display:flex; align-items:center; justify-content:center; width:22px; height:22px; flex:none;
+  margin-right:4px; border:none; background:transparent; border-radius:var(--dsw-radius-sm, 8px);
+  cursor:pointer; color:var(--dsw-alias-label-primary); opacity:0; }
+.dsr-row-wrap:hover .dsr-row-action, .dsr-row-action:focus-visible { opacity:1; }
+.dsr-row-action:hover { background:var(--dsw-alias-interactive-bg-active);
+  color:var(--dsw-alias-label-primary); }
+.dsr-row-wrap[data-pinned="true"] .dsr-row-action { opacity:1; }
+/* Project rows (0.4.0). The caret is always present, unlike the pin, because a
+   project's "can I open this?" answer must not depend on the pointer being over
+   it. The two trailing actions sit beside the name and stop propagation so they
+   never fold the row as a side effect. */
+.dsr-project-row { display:flex; flex-direction:column; }
+.dsr-project-main { gap:4px; }
+.dsr-project-caret { flex:none; display:flex; align-items:center; justify-content:center;
+  width:10px; height:10px; color:var(--dsw-alias-label-secondary);
+  transition:transform 120ms ease; }
+.dsr-project-main[aria-expanded="false"] .dsr-project-caret { transform:rotate(-90deg); }
+/* Both actions stay visible, unlike a session row's pin which appears on hover:
+   spec 3.2 says the caret AND the new-session button are always shown, so their
+   discoverability must not depend on the pointer resting on the row. */
+.dsr-project-action { display:flex; align-items:center; justify-content:center; width:22px; height:22px; flex:none;
+  border:none; background:transparent; border-radius:var(--dsw-radius-sm, 8px);
+  cursor:pointer; color:var(--dsw-alias-label-secondary); }
+.dsr-project-action:hover, .dsr-project-action:focus-visible {
+  background:var(--dsw-alias-interactive-bg-active); color:var(--dsw-alias-label-primary); }
+/* The expanded session list is indented under its project: the extra leading
+   space is what reads as "these belong to the row above". */
+.dsr-project-sessions { display:flex; flex-direction:column; padding-left:14px; }
+@media (prefers-reduced-motion: reduce) { .dsr-project-caret { transition:none; } }
+/* Section-header action (the projects section's Add button). It sits beside the
+   fold button, so its click must not also fold the section it belongs to. */
+.dsr-section-action { flex:none; max-width:96px; padding:3px 8px; border:1px solid var(--dsw-alias-border-l1);
+  border-radius:var(--dsw-radius-sm, 8px); background:transparent; color:var(--dsw-alias-label-primary);
+  font:inherit; font-size:11px; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dsr-section-action:hover:not(:disabled) { background:var(--dsw-alias-interactive-bg-hover); }
+.dsr-section-action:disabled { opacity:.6; cursor:default; }
+.dsr-project-error { color:var(--dsw-alias-state-warn-primary); text-align:left; }
+.dsr-empty { padding:14px 8px; font-size:12px; color:var(--dsw-alias-label-primary); text-align:center; }
+.dsr-hint { padding:4px 6px 8px; font-size:11px; line-height:1.5;
+  color:var(--dsw-alias-label-primary); }
+
+.dsr-fallback { padding:12px; font-size:12px; color:var(--dsw-alias-label-primary); }
