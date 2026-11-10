@@ -1,6 +1,7 @@
 # 0002 零依赖、无构建：客户端是手写静态模块
 
-- 状态：已采纳（2026-11-04）
+- 状态：已被 [ADR-0006](0006-typescript-source-and-build.md) 取代（工具链维度）
+- 历史状态：已采纳（2026-11-04）
 - 相关：`client.js`、`package.json`（无 `dependencies`/`devDependencies`）、`scripts/check.mjs`
 
 ## 背景

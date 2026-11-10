@@ -36,7 +36,7 @@
 | Web（任意平台） | 不渲染图标轨，保留宿主已有的折叠轨 |
 | Windows / Linux Desktop | 不渲染图标轨，未验证支持 |
 
-已记录的真机环境为 macOS Desktop `0.2.2-rc.1`；其他宿主版本的兼容范围见 [package.json](package.json) 的 `peerDependencies`。部分新设置与余额显示尚有未验证项，见[验证记录](docs/verify.md)。源码开发与检查需要 Node.js ≥ 22.19.0，无需安装项目依赖或构建。
+已记录的真机环境为 macOS Desktop `0.2.2-rc.1`；其他宿主版本的兼容范围见 [package.json](package.json) 的 `peerDependencies`。部分新设置与余额显示尚有未验证项，见[验证记录](docs/verify.md)。发布包内是已构建的 `lib/` 入口，安装时不需要编译器；源码开发与检查需要 Node.js ≥ 22.19.0，并要先 `npm ci`、再构建（见[开发与贡献](#development)）。
 
 <a id="install"></a>
 ## 安装与启停
@@ -52,6 +52,8 @@
 ```
 
 该输入框接受 npm 包名、Git 仓库地址和本地目录，本插件用 npm 包名即可。安装完成后按提示重启或刷新 DSH，再确认「侧栏图标轨」处于启用状态。
+
+npm 包内是预构建的 `lib/index.js` 与 `lib/client.js`，安装或升级都不需要编译器，消费方 profile 里也不需要有构建步骤。若改为直接从 Git 源码安装，则依赖目标包管理器允许执行本仓库的构建脚本；不允许时请在本地构建或改用已发布的 tarball。
 
 ### 方式二：命令行
 
@@ -72,7 +74,7 @@ dsh plugin --profile desktop add @skylerfee/dsh-sidebar-rail
 }
 ```
 
-本地开发时把 `target` 换成本仓库的绝对目录，即安装一条 `link:` 依赖，改完代码重启即可看到效果。
+本地开发时把 `target` 换成本仓库的绝对目录，即安装一条 `link:` 依赖，profile 会加载该目录当前的 `lib/`。首次先执行 `npm ci`，改完 `src/` 后跑 `npm run build`（或保持 `npm run dev` 的 watch），再重启 DSH。
 
 ### 启停与卸载
 
@@ -140,16 +142,24 @@ dsh plugin --profile desktop add @skylerfee/dsh-sidebar-rail
 ## 开发与贡献
 
 ```bash
-npm test               # 纯逻辑与客户端工厂注册测试
-npm run check          # 仓库规则、两个入口的语法检查与测试
+npm ci                 # 按 package-lock.json 安装开发工具链
+npm run typecheck      # tsc --noEmit，对 src/ 与测试做严格类型检查
+npm run build          # esbuild 生成 lib/index.js 与 lib/client.js
+npm run dev            # 同一构建的 --watch 模式
+npm run test:unit      # 由 tsx 直接跑 test/*.test.ts，导入 src/ 源码
+npm run test:artifact  # Node 跑 test/*.test.mjs，消费已构建的 lib/
+npm test               # 单测 → 构建 → 产物测试
+npm run check:source   # 源码规则与字典检查
+npm run check:artifact # 入口、文件白名单、外部模块与注册元数据检查
+npm run check          # 类型检查 → check:source → test:unit → 构建 → check:artifact → 产物测试
 npm run hooks:install  # 可选：启用本仓库的提交钩子
 ```
 
-客户端是手写静态模块，没有依赖安装和构建步骤。测试从 `client.js` 的 `#region` 区域提取纯函数，注册测试检查工厂 ID 与完整作用域包名一致；这些检查不能替代 Desktop 真实界面验收。
+脚本以 [package.json](package.json) 为准，上面与之一致。源码在 `src/`，按职责拆成 TypeScript / TSX 模块，esbuild 只做转换与打包、不做类型检查。`lib/` 是生成目录，不提交 Git，改完 `src/` 必须重新构建，因此本地 checkout 不再「改完即生效」。运行时依赖仍为零：客户端只向宿主 `require` `react` 与 `react-dom`。注册测试检查工厂 ID 与完整作用域包名一致；这些检查不能替代 Desktop 真实界面验收。
 
 PR 标题遵循 Conventional Commits，摘要、说明与验证结果使用简体中文，代码标识符和原始诊断保留英文。按 [PR 模板](.github/pull_request_template.md)填写问题、改动、验证与未验证项；中英文 README 的行为描述同步维护。UI、加载或注册变更需在 [docs/verify.md](docs/verify.md) 记录真实环境与操作结果。详细约束见 [AGENTS.md](AGENTS.md) 和 [CODING_STANDARDS.md](CODING_STANDARDS.md)。
 
-发布按 [ADR-0003](docs/adr/0003-release-pipeline.md)：更新版本并推送后，创建 `v<version>` 的 GitHub Release，由 `publish.yml` 校验并使用 npm OIDC 信任发布；npm 端需配置允许直接发布的 Trusted Publisher。
+发布按 [ADR-0003](docs/adr/0003-release-pipeline.md)：更新版本并推送后，创建 `v<version>` 的 GitHub Release，由 `publish.yml` 校验并使用 npm OIDC 信任发布；npm 端需配置允许直接发布的 Trusted Publisher。发布执行的是 `npm publish --ignore-scripts`，不会在发布流程里触发构建：创建 Release 之前必须已完成 `npm ci` 与完整 `npm run check`（其中包含构建与 `lib/` 校验）。
 
 <a id="docs"></a>
 ## 详细文档
@@ -161,7 +171,8 @@ PR 标题遵循 Conventional Commits，摘要、说明与验证结果使用简�
 | [验证记录](docs/verify.md) | 各轮真实结果、历史缺陷与未验证项 |
 | [0.2.0 审查报告](docs/desktop-audit-0.2.0-2026-11-04.md) | 当时发现的问题与复现证据，修复进展见后续验证记录 |
 | [术语表](GLOSSARY.md) | 轨、侧栏、浮层、当前会话等统一用词 |
-| [架构决策](docs/adr/) | 窄窗判定、零依赖与发布流程 |
+| [TypeScript 迁移指南](docs/typescript-migration.md) | 模块划分、构建协议、测试迁移与分阶段计划 |
+| [架构决策](docs/adr/) | 窄窗判定、TypeScript 源码与构建工具链（[ADR-0006](docs/adr/0006-typescript-source-and-build.md)）、发布流程 |
 
 ## 许可证
 

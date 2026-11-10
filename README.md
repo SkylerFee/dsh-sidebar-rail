@@ -36,7 +36,7 @@ These cropped screenshots show the real macOS Desktop client in Chinese, with a 
 | Web, any platform | No rail; the host keeps its existing collapsed rail |
 | Windows / Linux Desktop | No rail; support is untested |
 
-Recorded Desktop checks used macOS Desktop `0.2.2-rc.1`. See `peerDependencies` in [package.json](package.json) for other compatible host versions. Some new settings and balance displays still have unverified paths; see the [verification log](docs/verify.md). Source development and checks require Node.js ≥ 22.19.0, with no dependency installation or build step.
+Recorded Desktop checks used macOS Desktop `0.2.2-rc.1`. See `peerDependencies` in [package.json](package.json) for other compatible host versions. Some new settings and balance displays still have unverified paths; see the [verification log](docs/verify.md). The published package ships prebuilt `lib/` entries, so installing it needs no compiler. Source development and checks require Node.js ≥ 22.19.0 plus `npm ci` and a build step (see [Development](#development)).
 
 <a id="install"></a>
 ## Install and manage
@@ -52,6 +52,8 @@ Open the **Plugins** page from the DSH sidebar, choose **Add plugin** in the top
 ```
 
 That field accepts an npm package name, a Git repository address or a local directory; this plugin needs only the npm name. Restart or reload DSH when prompted, then confirm Sidebar rail is enabled.
+
+The npm package ships the prebuilt `lib/index.js` and `lib/client.js`, so installing or upgrading needs no compiler, no `node_modules` in the consuming profile beyond the package itself, and no local build step. Installing straight from a Git checkout instead depends on the target package manager running this repository's build script; when it does not, build locally or install the published tarball.
 
 ### Option 2: Command line
 
@@ -72,7 +74,7 @@ A profile with plugin management enabled can install it for you (this is a tool 
 }
 ```
 
-For local development, replace `target` with this repository's absolute path — that installs a `link:` dependency, so code changes appear after a restart.
+For local development, replace `target` with this repository's absolute path — that installs a `link:` dependency, so the profile loads whatever `lib/` currently contains. Run `npm ci` once and `npm run build` (or keep `npm run dev` watching) after changing `src/`, then restart.
 
 ### Disable and uninstall
 
@@ -140,16 +142,24 @@ The plugin keeps the expanded host sidebar and its column width. The top 48px re
 ## Development and contributions
 
 ```bash
-npm test               # Pure logic and client factory registration tests
-npm run check          # Repository rules, syntax checks for both entries, and tests
+npm ci                 # Install the dev toolchain from package-lock.json
+npm run typecheck      # tsc --noEmit — strict type checking of src/ and tests
+npm run build          # esbuild → lib/index.js and lib/client.js
+npm run dev            # Same build in --watch mode
+npm run test:unit      # tsx runs test/*.test.ts against src/ directly
+npm run test:artifact  # Node runs test/*.test.mjs against the built lib/
+npm test               # Unit tests → build → artifact tests
+npm run check:source   # Source rules and dictionary checks
+npm run check:artifact # Entry, file list, external module and registration checks
+npm run check          # typecheck → check:source → test:unit → build → check:artifact → test:artifact
 npm run hooks:install  # Optional: enable this repository's commit hooks
 ```
 
-The client is a hand-written static module with no dependency installation or build step. Tests extract pure functions from the `#region` sections of `client.js`; the registration test requires the factory ID to match the full scoped package name. These checks do not replace real Desktop validation.
+Scripts are defined in [package.json](package.json), which is authoritative; the list above mirrors it. Source lives in `src/` as TypeScript / TSX split by responsibility, and esbuild only transpiles and bundles — it does not type-check. `lib/` is a generated directory: it is not committed to Git and must be rebuilt after any `src/` change, so a local checkout is no longer "edit and it runs". Runtime dependencies remain zero: the client only requires the host-provided `react` / `react-dom`. The registration test requires the factory ID to match the full scoped package name. These checks do not replace real Desktop validation.
 
 Use Conventional Commits for PR titles, with the summary, description and verification results in Simplified Chinese. Keep code identifiers and original diagnostics in English. Follow the [PR template](.github/pull_request_template.md) for the problem, changes, validation and unverified items; update both README languages when behaviour changes. UI, loading or registration changes require real environment and operation results in [docs/verify.md](docs/verify.md). See [AGENTS.md](AGENTS.md) and [CODING_STANDARDS.md](CODING_STANDARDS.md) for the full rules.
 
-Follow [ADR-0003](docs/adr/0003-release-pipeline.md) to release: update and push the version, then create a GitHub Release tagged `v<version>`. `publish.yml` validates it and uses npm OIDC trusted publishing; the npm Trusted Publisher must allow direct publishing.
+Follow [ADR-0003](docs/adr/0003-release-pipeline.md) to release: update and push the version, then create a GitHub Release tagged `v<version>`. `publish.yml` validates it and uses npm OIDC trusted publishing; the npm Trusted Publisher must allow direct publishing. Publishing runs `npm publish --ignore-scripts`, so no build hook fires inside it: the full `npm ci` + `npm run check` (which builds and validates `lib/`) must already have passed before the release is created.
 
 <a id="docs"></a>
 ## Documentation
@@ -161,7 +171,8 @@ Follow [ADR-0003](docs/adr/0003-release-pipeline.md) to release: update and push
 | [Verification log](docs/verify.md) | Recorded results, historical defects and unverified paths |
 | [0.2.0 audit report](docs/desktop-audit-0.2.0-2026-11-04.md) | Findings and reproduction evidence from that version; later verification entries track fixes |
 | [Glossary](GLOSSARY.md) | Shared terms for the rail, sidebar, flyout and current session |
-| [Architecture decisions](docs/adr/) | Narrow-window eligibility, zero dependencies and release workflow |
+| [TypeScript migration](docs/typescript-migration.md) | Module layout, build protocol, test migration and staged plan |
+| [Architecture decisions](docs/adr/) | Narrow-window eligibility, TypeScript source plus build toolchain ([ADR-0006](docs/adr/0006-typescript-source-and-build.md)) and release workflow |
 
 ## License
 

@@ -4,6 +4,14 @@
 
 客户端静态模块的 `window.__ModuleLoader__.load({ id, factory })` 使用完整包名 `@skylerfee/dsh-sidebar-rail` 作为 `id`，与 `package.json.name` 和 bundle patch 的模块 `name` 一致。宿主按该包名导入工厂；不能把注册 ID 改成去掉作用域的短名。`shell.overlay` 条目 ID 和本地存储键仍使用各自已有的值。
 
+## 实现形态：`src/` 源码 → `lib/` 产物
+
+源码在 `src/`，按职责拆成 TypeScript / TSX 模块：`src/index.ts` 是空的 Host 入口，`src/client/index.tsx` 组织 `inject` / `apply`、locale 与两处槽注册，`client/host-adapter.ts` 封装宿主服务调用与公开类型适配，`client/preferences.ts`、`client/locales.ts`、`client/styles.css` 各自独立，`client/model/*` 是不依赖 React 与 DOM 的纯逻辑，`client/hooks/*` 与 `client/components/*.tsx` 承载交互与渲染。依赖方向是「入口 → 适配器与组件 → 模型」，模型不反向依赖入口或 UI。
+
+`scripts/build.mjs` 用 esbuild 只做转换与打包（类型检查由 `tsc --noEmit` 单独负责），生成 `lib/index.js`（ESM，保留空 `apply`）与 `lib/client.js`（单份静态脚本）。后者把包内相对模块静态打进来，再包进一次 `window.__ModuleLoader__.load({ id, factory })`：包装里的 `module` / `exports` 是工厂局部变量，注册阶段不执行插件副作用，工厂经传入的 `require` 取得宿主 `react` / `react-dom` 并返回客户端的 `inject` / `apply`。JSX 用 classic 转换生成 `React.createElement`，运行时不额外请求 `react/jsx-runtime`；CSS 作为文本进入产物，仍由 `apply` 的 effect 创建带 `data-dsh-sidebar-rail` 标记的 `<style>` 并在卸载时删除。
+
+`lib/` 是生成目录，不提交 Git、不手工维护；改完 `src/` 必须 `npm run build`（开发时用 `npm run dev` 的 watch）。发布包内是这份预构建产物，安装者不需要编译器。工具链决定的背景与被取代的旧选择见 [ADR-0006](adr/0006-typescript-source-and-build.md)；下面的章节描述的是设计与约束，不因源码形态改变而改变。
+
 ## 1. 定位：增量插件，只补一个状态
 
 宿主在 **macOS Desktop + 侧栏折叠** 时没有折叠图标轨。此时 `AppFrame` 把左侧列折到 0 宽（`const collapsedWidth = drawer || darwin || windowsTitlebar ? 0 : SIDEBAR_COLLAPSED`，`SIDEBAR_COLLAPSED = 56`），列上还有 `overflow: hidden`。本插件添加默认隐藏、按需唤出的 56px 图标轨，不为轨道占用宿主布局空间。
@@ -21,15 +29,15 @@
 
 ## 2. 挂载点：`shell.overlay` list 槽
 
-ui-layout 在 frame 上把 `shell.overlay` 声明为 **`kind: 'list'`、`scope: 'root'`** 的增量座位，专门给「自己的整帧浮动面」用：条目按 `id` 并存，不需要声明 `children`，不会和别的插件抢位。实际注册写法（见 `client.js` 的 `apply`）：
+ui-layout 在 frame 上把 `shell.overlay` 声明为 **`kind: 'list'`、`scope: 'root'`** 的增量座位，专门给「自己的整帧浮动面」用：条目按 `id` 并存，不需要声明 `children`，不会和别的插件抢位。实际注册写法（见 `src/client/index.tsx` 的 `apply`；下面按源码简写，`h` 是 classic JSX 工厂）：
 
-```js
+```ts
 ctx.effect(() => ctx.slots.inject('shell.overlay', () => ctx.slots.register({
   name: 'shell.overlay',
   id: 'dsh-sidebar-rail.rail',
   order: 10,
   locale: NS,
-  inject: injectProps,
+  inject: () => face,
 }, (props) => h(Boundary, { fallbackText: props.fallbackText }, h(RailOverlay, props)))),
 'dsh-sidebar-rail: rail overlay')
 ```
@@ -72,7 +80,7 @@ transform: translateX(-100%);
   - 宿主自己挂在 `shell.leading` 的重开 / 新会话控件（`.leadingSeat { top: 11px; left: 88px; z-index: 15 }`，`leadingMounted = drawer || darwin && sidebarCollapsed`）。
   从 48px 起排就同时避开两者；`var(..., 48px)` 的 fallback 保证变量缺失时也不压 chrome。
 - **显式 `-webkit-app-region: no-drag`**：Electron 的 app-region 是**几何**而不是 stacking，浮轨盖住窗口拖拽带时必须自己 opt out（即便 body 级 portal 通常已继承 no-drag），否则点图标会拖窗口。
-- **窄窗口不渲染**：判定不是 CSS 媒体查询，而是纯函数 `shouldRenderRail(platform, collapsed, viewportWidth)`（阈值 `RAIL_MIN_VIEWPORT = 768`），`RailOverlay` 用 `window.innerWidth` + `resize` 监听驱动；不满足即 `return null`，组件整体卸载。768 = 680（宿主正文最小宽）+ 56（轨宽）+ 32（两侧安全）。为什么不用 CSS：阈值语义是「正文是否还放得下」，与轨自身盒模型无关；做成纯函数还能被单测覆盖边界（`test/data.test.mjs`）。为什么不是 900：旧实现的 900 是拍的，与宿主 drawer 断点（768）无对应关系；按 680 正文可读宽推导更可解释。
+- **窄窗口不渲染**：判定不是 CSS 媒体查询，而是纯函数 `shouldRenderRail(platform, collapsed, viewportWidth)`（阈值 `RAIL_MIN_VIEWPORT = 768`），`RailOverlay` 用 `window.innerWidth` + `resize` 监听驱动；不满足即 `return null`，组件整体卸载。768 = 680（宿主正文最小宽）+ 56（轨宽）+ 32（两侧安全）。为什么不用 CSS：阈值语义是「正文是否还放得下」，与轨自身盒模型无关；做成纯函数还能被单测覆盖边界（`src/client/model/geometry.ts`，由 `test/*.test.ts` 直接导入执行）。为什么不是 900：旧实现的 900 是拍的，与宿主 drawer 断点（768）无对应关系；按 680 正文可读宽推导更可解释。
 - **浮层位置**：`.dsr-flyout` 也是 `position: fixed`（portal 到 body），宽 288px，`left = rect.right + 8`。`flyoutPlacement` 根据触发按钮与视口计算顶部或底部距离，并以内联 `maxHeight` 限制剩余可视高度；账号浮层从头像底边向上展开。
 - **工作区浮层定高**：该浮层内容长度差异最大（两条或二十条最近会话），因此改为**视口比例定高**——`workspaceFlyoutHeight(innerHeight, 预算)` 取 `0.7 × 视口` 且不超过 `flyoutPlacement` 的预算，再以内联 `height` 固定。这样调「最近会话条数」只改变列表是否滚动，不改浮动层高度。任务/插件/账号浮层列表短，仍保持内容自适应。
 - **两区分栏**：浮层 body 用 `.dsr-split-body`（flex 列）承载两个 `.dsr-pane`，各自 `flex:1 1 0` 平分扣除头部与步进器后的高度，因此两区大小基本一致（实测 314.5 / 351.0 px）。每个 pane 内再拆成固定标题 `.dsr-pane-head`（`flex:none`，不随内容滚动）与独立滚动区 `.dsr-pane-scroll`（`overflow-y:auto`）；`pane + pane` 之间的 `border-top` 用宿主 `--dsw-alias-border-l1`，即两区之间的分隔线。分栏用 flex 而非 JS 常数：真实 head/步进器高度只有 CSS 知道，常数估算会偏。
