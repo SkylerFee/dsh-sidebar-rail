@@ -1,5 +1,5 @@
 #!/bin/sh
-# 提交前跑仓库检查（语法 + 仓库规则 + 单测）。
+# 提交前跑仓库检查（类型检查 + 源码规则 + 单测 + 构建 + 产物规则 + 产物测试）。
 # 紧急情况可 `git commit --no-verify` 跳过，但 CI 会再跑一次同样的命令。
 set -e
 root=$(git rev-parse --show-toplevel)

@@ -47,6 +47,11 @@ jobs:
             exit 1
           fi
 
+      # 迁移后发布包带预构建的 lib/。发布走 `npm publish --ignore-scripts`，
+      # 因此 prepack / prepare 都不会跑：构建与检查必须在这里显式完成。
+      - name: Install
+        run: npm ci
+
       - name: Check
         run: npm run check
 

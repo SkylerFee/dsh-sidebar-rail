@@ -17,8 +17,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
-      # The package has no dependencies and no build step, so there is nothing
-      # to install: `check` is syntax validation on both entries plus the tests.
+      # 迁移后仓库有开发依赖（TypeScript / esbuild / tsx / React 类型），但**运行时**
+      # 依赖仍为零。用 npm ci 按 package-lock.json 精确安装，再跑完整 check：
+      # typecheck → 源码规则 → 单测 → build → 产物规则 → 产物测试。
+      - name: Install
+        run: npm ci
+
       - name: Check
         run: npm run check
