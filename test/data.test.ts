@@ -16,7 +16,7 @@ import {
   shortPath,
   shouldRenderRail,
 } from '../src/client/model/formatting.ts'
-import { RAIL_MIN_VIEWPORT, RAIL_REVEAL_WIDTH } from '../src/client/model/constants.ts'
+import { PAGE_SIZE, RAIL_MIN_VIEWPORT, RAIL_REVEAL_WIDTH } from '../src/client/model/constants.ts'
 import {
   currentSessionId,
   deriveSections,
@@ -541,6 +541,80 @@ test('recentRowNeedsAttention: highlight or any status mark counts', () => {
   for (const mark of ['warning', 'ongoing', 'done'] as const) {
     assert.equal(recentRowNeedsAttention(recentRow('c', mark, false)), true, mark + ' is worth surfacing')
   }
+})
+
+test('pagination: a current blank session at the tail does not blow up the watermark', () => {
+  // 回归锁（task-6）：行构造器曾经不写 `blank`，于是 watermarkSlice /
+  // requiredWatermark 的 blank 分支永不命中。实测后果：30 个会话、当前那个空白
+  // 会话排第 30 位时，requiredWatermark = 30、列表一次性全展开、隐藏 0 条，
+  // 「显示更多」也不出现。新建会话就是空白会话，这是最常见路径。
+  const ids: string[] = []
+  const byId: Record<string, SessionSummaryLike> = {}
+  for (let i = 0; i < 29; i += 1) {
+    const id = `s${i}`
+    ids.push(id)
+    byId[id] = session(id, { updatedAt: 1000 - i })
+  }
+  // 第 30 个是空白会话，且正是主视图当前显示的那一个。
+  ids.push('blankCur')
+  byId.blankCur = session('blankCur', { updatedAt: 1, blank: true, retainedBy: { mainView: 1 } })
+
+  const rows = projectSessionRows(ids, byId, 'en', [], 'blankCur')
+  assert.equal(rows.length, 30, 'every non-blank member plus the current blank one')
+  assert.equal(rows.at(-1)!.blank, true, 'the surviving blank row must be marked, or pagination breaks')
+  assert.equal(rows.at(-1)!.current, true)
+
+  // 空白行不贡献水位：30 行里只有 29 条非空白，最后一条注意力行是……没有注意力行
+  // （普通会话既不在跑也没未读），因此自动需求水位是 0。
+  assert.equal(requiredWatermark(rows, 'blankCur', projectRowNeedsAttention), 0)
+  // 水位 10 → 10 条普通 + 1 条当前空白 = 11 行，其余 19 条被挡住。
+  const sliced = watermarkSlice(rows, 10)
+  assert.equal(sliced.rows.length, 11, 'ten counted rows plus the always-visible blank one')
+  assert.equal(sliced.hiddenCount, 19, 'the rest stays hidden, so Show more renders')
+  assert.equal(sliced.rows.at(-1)!.id, 'blankCur', 'the current blank session stays visible')
+})
+
+test('pagination: a blank session in the middle behaves the same way', () => {
+  // 位置无关：空白行排在第 3 位时同样只占 0 个名额。
+  const ids = ['a', 'b', 'blankCur', ...Array.from({ length: 27 }, (_, i) => `n${i}`)]
+  const byId: Record<string, SessionSummaryLike> = {
+    a: session('a'),
+    b: session('b'),
+    blankCur: session('blankCur', { blank: true, retainedBy: { mainView: 1 } }),
+  }
+  for (let i = 0; i < 27; i += 1) byId[`n${i}`] = session(`n${i}`)
+  const rows = projectSessionRows(ids, byId, 'en', [], 'blankCur')
+  assert.equal(rows.length, 30, '29 non-blank members plus the current blank one')
+  assert.equal(rows[2]!.blank, true)
+  const sliced = watermarkSlice(rows, PAGE_SIZE)
+  assert.equal(sliced.rows.length, PAGE_SIZE + 1, 'still one page plus the blank row')
+  assert.equal(sliced.rows.filter((r) => r.blank === true).length, 1)
+  assert.equal(requiredWatermark(rows, 'blankCur', projectRowNeedsAttention), 0)
+})
+
+test('pagination: the recent list marks its current blank session too', () => {
+  // 同一条缝隙也存在于最近会话区：行不写 blank，当前空白会话会被水位挡住。
+  const byId: Record<string, SessionSummaryLike> = {}
+  const ids: string[] = []
+  for (let i = 0; i < 29; i += 1) {
+    byId[`s${i}`] = session(`s${i}`, { updatedAt: 1000 - i })
+    ids.push(`s${i}`)
+  }
+  byId.blankCur = session('blankCur', { updatedAt: 1, blank: true, retainedBy: { mainView: 1 } })
+  byId.blankOther = session('blankOther', { updatedAt: 2, blank: true })
+  const sections = deriveSections(WORKSPACES, { byId }, [], [], 'en', false)
+  const rows = sections.recentRows
+  // 非当前的空白会话仍被过滤掉；当前那个留下并带 blank。
+  assert.ok(!rows.some((r) => r.id === 'blankOther'), 'non-current blank sessions stay hidden')
+  const blankRow = rows.find((r) => r.id === 'blankCur')
+  assert.ok(blankRow !== undefined, 'the current blank session is in the recent list')
+  assert.equal(blankRow.blank, true, 'and it is marked for the watermark')
+  assert.equal(blankRow.active, true)
+  // 水位 10 → 10 条普通 + 1 条空白；空白行不占名额。
+  const sliced = watermarkSlice(rows, PAGE_SIZE)
+  assert.equal(sliced.rows.length, PAGE_SIZE + 1)
+  assert.ok(sliced.rows.some((r) => r.id === 'blankCur'), 'the blank row survives slicing')
+  assert.equal(requiredWatermark(rows, 'blankCur', recentRowNeedsAttention), 0)
 })
 
 test('projectRowNeedsAttention: only the current project session matters', () => {

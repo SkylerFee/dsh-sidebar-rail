@@ -90,6 +90,9 @@ export function projectSessionRows(
       meta: relativeTime(entry.updatedAt, language),
       archived: archived.has(id),
       current: id === shownSessionId,
+      // 走到这里的空白行只可能是「当前那一个」。标记出来，水位函数才会让它
+      // 恒显示且不占名额（宿主 watermarkRows 的 blank 分支）。
+      blank: entry.blank === true,
     })
   }
   if (missing > 0) {
@@ -142,8 +145,9 @@ export interface WatermarkRow {
 /**
  * 判断一行是不是空白会话。
  *
- * 本插件产出的行**不带** `blank` 字段（行构造时已经过滤过），但水位函数也接受
- * 宿主形状的行，于是这里按结构化字段判断，而不是依赖某个具体类型。
+ * 两个行构造器都会如实写出 `blank`（`ProjectSessionRow.blank` /
+ * `RecentSessionRow.blank`），所以本判定在真实渲染路径上会命中；同时也接受宿主
+ * 形状的行，因此按结构化字段判断而不是依赖某个具体类型。
  * @param row - 待判定的行。
  * @returns 是否为空白会话。
  */
@@ -316,6 +320,9 @@ export function deriveSections(
       active: entry.id === shownSessionId,
       // 渲染层据此画状态标记；`idle` 什么都不画。
       status: sessionStatusOf(entry, statusOf(entry.id)),
+      // 留下的是非当前空白之外的会话；这里如实标出「当前那个空白会话」，
+      // 水位函数才会让它恒显示且不占名额。
+      blank: entry.blank === true,
     })
   }
   recentRows.sort((a, b) => b.updatedAt - a.updatedAt)

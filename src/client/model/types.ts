@@ -108,6 +108,14 @@ export interface ProjectSessionRow {
   readonly meta: string
   readonly archived: boolean
   readonly current: boolean
+  /**
+   * 该行是否为空白会话。
+   *
+   * 只有「主视图当前的空白会话」会被保留下来（非当前的空白会话在
+   * `projectSessionRows` 里就被过滤掉），因此这一位在本列表里最多命中一行。
+   * 水位函数据此让它**恒显示且不占名额**（宿主 `watermarkRows` 的 blank 分支）。
+   */
+  readonly blank?: boolean | undefined
 }
 
 /** 最近会话区的一行。 */
@@ -118,6 +126,13 @@ export interface RecentSessionRow {
   readonly updatedAt: number
   readonly active: boolean
   readonly status: SessionMark
+  /**
+   * 该行是否为空白会话。
+   *
+   * 同 `ProjectSessionRow.blank`：只有当前那个空白会话会留下来，水位函数据此
+   * 让它恒显示且不占名额，否则它会把水位顶高、让整列一次性全展开。
+   */
+  readonly blank?: boolean | undefined
 }
 
 /** `deriveSections` 的返回值。 */
