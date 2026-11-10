@@ -122,6 +122,15 @@
 .dsr-account-links { display:flex; gap:10px; padding:6px var(--dsh-sidebar-row-padding) 0; }
 .dsr-account-link { font-size:13px; color:var(--dsw-alias-brand-primary); text-decoration:none; }
 .dsr-account-link:hover { text-decoration:underline; }
+/* The row's leading cell: the scheduled-task clock and the state dot share it.
+   The host gives this cell 16px and only lends it to the clock while the row's
+   own state is idle, so the two never appear together. */
+.dsr-row-mark { display:inline-flex; align-items:center; justify-content:center;
+  width:16px; height:16px; flex:none; color:var(--dsw-alias-label-tertiary); }
+/* Text for assistive technology only: the clock glyph is aria-hidden, so the
+   marker's meaning has to reach a screen reader some other way. */
+.dsr-visually-hidden { position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; }
 .dsr-dot { display:inline-flex; align-items:center; justify-content:center; width:10px; height:10px; flex:none; }
 .dsr-dot::after { content:''; width:6px; height:6px; border-radius:50%; background:currentColor; }
 .dsr-dot-done { color:var(--dsw-alias-state-success-primary); }

@@ -98,6 +98,13 @@ export interface WorkspaceFlyoutProps extends FlyoutCommonProps {
   readonly noteWatermark: (key: string, required: number) => void
   /** 主视图正在显示的会话 id，供最近会话区的注意力判定。 */
   readonly currentSessionId: string | undefined
+  /**
+   * 某个会话是否有活跃的定时任务，供行首的时钟标记判定。
+   *
+   * 作为回调传入而不是每行自己去遍历任务数组：任务列表在工作区浮层里也加载了
+   * （spec-0.5.1 §5），行只问「我这一条要不要标」。
+   */
+  readonly hasActiveTask: (sessionId: string) => boolean
   readonly shell: FlyoutShell
 }
 
@@ -145,6 +152,7 @@ export function WorkspaceFlyout(props: WorkspaceFlyoutProps): ReactNode {
         effectiveWatermark: props.effectiveWatermark,
         raiseWatermark: props.raiseWatermark,
         noteWatermark: props.noteWatermark,
+        hasActiveTask: props.hasActiveTask,
       })
       : null)
   }
@@ -193,6 +201,8 @@ export function WorkspaceFlyout(props: WorkspaceFlyoutProps): ReactNode {
         current: row.active === true,
         status: row.status,
         statusLabel: t(row.status === 'idle' ? 'status.idle' : `status.${row.status}` as never),
+        scheduledTask: props.hasActiveTask(row.id),
+        scheduledTaskLabel: t('row.scheduledTask'),
         onClick: () => props.openSession(row.id),
       })),
       recentVisible.hiddenCount > 0
@@ -222,6 +232,8 @@ export interface ProjectSessionsProps {
   readonly currentSessionId: string | undefined
   /** 打开一条会话。 */
   readonly openSession: (sessionId: string) => void
+  /** 该会话是否有活跃的定时任务，供行首时钟判定。 */
+  readonly hasActiveTask: (sessionId: string) => boolean
   /** 当前有效水位 = max(抬高值, required, PAGE_SIZE)。 */
   readonly effectiveWatermark: (key: string, required?: number) => number
   /** 「显示更多」：在当前有效水位上 + PAGE_SIZE。 */
@@ -256,6 +268,10 @@ export function ProjectSessions(props: ProjectSessionsProps): ReactNode {
       // 不会被读成「不见了」。
       meta: [entry.meta, entry.archived ? t('status.archived') : ''].filter(Boolean).join(' · '),
       current: entry.current === true,
+      // 项目会话行没有状态点（项目列表本就不过滤、也不展示运行状态），
+      // 因此这里只可能显示定时任务时钟。
+      scheduledTask: props.hasActiveTask(entry.id),
+      scheduledTaskLabel: t('row.scheduledTask'),
       onClick: () => props.openSession(entry.id),
     })),
     visible.hiddenCount > 0

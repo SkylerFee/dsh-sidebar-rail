@@ -23,7 +23,7 @@ import {
 } from '../src/client/preferences.ts'
 import { RAIL_REVEAL_WIDTH, STORE_KEY } from '../src/client/model/constants.ts'
 import { DEFAULT_FLYOUT_ANCHOR, flyoutAnchorFrom, sectionIsOpen } from '../src/client/model/geometry.ts'
-import { pickedDirectory, remoteOutcome } from '../src/client/model/remote.ts'
+import { normalizeTasks, pickedDirectory, remoteOutcome, sessionHasActiveTask } from '../src/client/model/remote.ts'
 
 /**
  * 装一个可控的 localStorage 替身。
@@ -233,4 +233,82 @@ test('KNOWN K2: a default-closed section needs two clicks before it opens', { to
   // 第一次点击：期望展开（true），实际仍收起。
   folded = toggle(folded, 'tasks.paused')
   assert.equal(sectionIsOpen(folded, 'tasks.paused', false), true, 'the first click should open it')
+})
+// ------------------------------------------------- 定时任务时钟标记 --
+
+/**
+ * 构造一条宿主 catalog 形状的任务（只带本插件读取的字段）。
+ * @param overrides - 字段覆盖。
+ * @returns 任务对象。
+ */
+function task(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'task-1',
+    title: 'task',
+    scheduledAt: '2026-11-10T09:00:00Z',
+    status: 'active',
+    involvedSessionIds: [] as string[],
+    target: { kind: 'session', sessionId: 'sX' },
+    ...overrides,
+  }
+}
+
+test('sessionHasActiveTask: a session target is hit through target.sessionId', () => {
+  const tasks = normalizeTasks({ ok: true, value: [task({ target: { kind: 'session', sessionId: 's1' } })] })
+  assert.equal(tasks.length, 1)
+  assert.equal(sessionHasActiveTask(tasks, 's1'), true)
+  assert.equal(sessionHasActiveTask(tasks, 'other'), false)
+})
+
+test('sessionHasActiveTask: a new_once target is hit through target.sessionId too', () => {
+  // new_once 有预留的 sessionId，走「非 new」分支，不是靠 lastDelivery。
+  const tasks = normalizeTasks({
+    ok: true,
+    value: [task({ target: { kind: 'new_once', sessionId: 's2', create: { title: 'x' } } })],
+  })
+  assert.equal(sessionHasActiveTask(tasks, 's2'), true)
+})
+
+test('sessionHasActiveTask: a new target is hit only through lastDelivery', () => {
+  // kind:'new' 每次投递新建会话，没有固定目标；involvedSessionIds 也明确不含它。
+  const tasks = normalizeTasks({
+    ok: true,
+    value: [task({
+      target: { kind: 'new', create: { title: 'x' } },
+      involvedSessionIds: ['creator'],
+      lastDelivery: { scheduledAt: '2026-11-10T09:00:00Z', deliveredAt: '2026-11-10T09:00:01Z', messageId: 'm1', targetSessionId: 's3' },
+    })],
+  })
+  assert.equal(sessionHasActiveTask(tasks, 's3'), true, 'the delivered session is hit')
+  assert.equal(sessionHasActiveTask(tasks, 'creator'), true, 'the creating session is hit via involvedSessionIds')
+  assert.equal(sessionHasActiveTask(tasks, 's4'), false)
+})
+
+test('sessionHasActiveTask: involvedSessionIds alone can hit a session', () => {
+  const tasks = normalizeTasks({
+    ok: true,
+    value: [task({ target: { kind: 'session', sessionId: 'target' }, involvedSessionIds: ['creator'] })],
+  })
+  assert.equal(sessionHasActiveTask(tasks, 'creator'), true, 'the editing Agent session counts')
+  assert.equal(sessionHasActiveTask(tasks, 'target'), true)
+})
+
+test('sessionHasActiveTask: only an active task marks the row', () => {
+  for (const status of ['paused', 'ended']) {
+    const tasks = normalizeTasks({ ok: true, value: [task({ status, target: { kind: 'session', sessionId: 's1' } })] })
+    assert.equal(sessionHasActiveTask(tasks, 's1'), false, `${status} must not mark the row`)
+  }
+  const active = normalizeTasks({ ok: true, value: [task({ status: 'active', target: { kind: 'session', sessionId: 's1' } })] })
+  assert.equal(sessionHasActiveTask(active, 's1'), true)
+})
+
+test('sessionHasActiveTask: missing or malformed data marks nothing', () => {
+  // catalog 读取失败 / 超时会落成空列表：列表照常渲染，只是没有时钟。
+  assert.equal(sessionHasActiveTask([], 's1'), false)
+  assert.equal(sessionHasActiveTask(undefined, 's1'), false)
+  assert.equal(sessionHasActiveTask(null, 's1'), false)
+  // 畸形任务与畸形目标都不能抛错。
+  const junk = normalizeTasks({ ok: true, value: [null, 42, { id: 'x', status: 'active', target: 'nope' }, task({ involvedSessionIds: 'nope' })] })
+  assert.doesNotThrow(() => sessionHasActiveTask(junk, 's1'))
+  assert.equal(sessionHasActiveTask(junk, ''), false, 'an empty session id never matches')
 })

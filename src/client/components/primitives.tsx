@@ -95,6 +95,23 @@ export function IconPlus(): ReactNode {
 }
 
 /**
+ * 定时任务标记的时钟图标。
+ *
+ * 形状照抄宿主 `IconClockOutlineRegular`（ui-primitives artwork 的 `clock-outline`）：
+ * 16px 视框、1px 描边、currentColor。自绘而不是 import，因为产物只能 require
+ * 宿主的 react / react-dom。
+ * @returns 时钟图标元素。
+ */
+export function IconClock(): ReactNode {
+  return h('svg', {
+    viewBox: '0 0 16 16', width: 14, height: 14, fill: 'none', stroke: 'currentColor',
+    strokeWidth: 1, 'aria-hidden': true, focusable: false,
+  },
+  h('path', { d: 'M8 14C11.3137 14 14 11.3137 14 8C14 4.68629 11.3137 2 8 2C4.68629 2 2 4.68629 2 8C2 11.3137 4.68629 14 8 14Z' }),
+  h('path', { d: 'M8 4.31V8.46L11 10.08' }))
+}
+
+/**
  * 可折叠分区标题的展开箭头。
  *
  * 展开时朝下；收起时由分区 CSS 旋转四分之一圈，因此一个图形覆盖两种状态，
@@ -165,6 +182,10 @@ export interface RowProps {
   readonly current?: boolean | undefined
   readonly status?: SessionMark | undefined
   readonly statusLabel?: string | undefined
+  /** 该会话是否有活跃的定时任务；仅行状态为 idle 时显示时钟（宿主同款互斥）。 */
+  readonly scheduledTask?: boolean | undefined
+  /** 时钟标记的无障碍文案。 */
+  readonly scheduledTaskLabel?: string | undefined
 }
 
 /**
@@ -190,7 +211,14 @@ export function Row(props: RowProps): ReactNode {
   h('span', { className: 'dsr-row-main' },
     h('span', { className: 'dsr-row-title' }, props.title),
     props.meta === undefined || props.meta === '' ? null : h('span', { className: 'dsr-row-meta' }, props.meta)),
-  props.status === undefined ? null : h(StateMark, { status: props.status, label: props.statusLabel ?? '' }))
+  // 行首那一格是状态标记与定时任务时钟的共用位置，两者互斥：宿主只在行
+  // 自身状态为 idle 时才把这一格让给时钟（侧栏行在审批/未读/运行中时状态点优先）。
+  h(SessionMarkCell, {
+    status: props.status,
+    statusLabel: props.statusLabel,
+    scheduledTask: props.scheduledTask,
+    scheduledTaskLabel: props.scheduledTaskLabel,
+  }))
   if (props.onTogglePin === undefined) return main
   return h('div', { className: 'dsr-row-wrap', 'data-pinned': props.pinned === true ? 'true' : undefined },
     main,
@@ -410,6 +438,45 @@ export function FlyoutSection(props: FlyoutSectionProps): ReactNode {
  */
 export function Empty(props: { readonly children?: ReactNode }): ReactNode {
   return h('div', { className: 'dsr-empty' }, props.children)
+}
+
+/** 行首标记格的入参。 */
+export interface SessionMarkCellProps {
+  /** 会话状态；undefined 表示宿主未提供状态快照。 */
+  readonly status?: SessionMark | undefined
+  /** 状态的无障碍文案。 */
+  readonly statusLabel?: string | undefined
+  /** 该会话是否有活跃的定时任务。 */
+  readonly scheduledTask?: boolean | undefined
+  /** 时钟标记的无障碍文案。 */
+  readonly scheduledTaskLabel?: string | undefined
+}
+
+/**
+ * 行首那一格：状态点与定时任务时钟二选一。
+ *
+ * 复刻宿主的行为：定时任务的时钟标记坐在行首 16px 格里，但**只有行自身状态
+ * 是 idle 时**才挂载——审批请求、未读完成或正在运行会占用同一格，此时状态点
+ * 优先，时钟不出现（宿主 SessionScheduleMark 的槽位注释就是这么写的）。
+ * @param props - 状态、定时任务标志与两者各自的文案。
+ * @returns 时钟、状态点，或什么都不渲染。
+ */
+export function SessionMarkCell(props: SessionMarkCellProps): ReactNode {
+  const status = props.status ?? 'idle'
+  if (props.scheduledTask === true && status === 'idle') {
+    return h('span', {
+      className: 'dsr-row-mark',
+      title: props.scheduledTaskLabel,
+      // 点时钟不应激活会话：这一格借的是行按钮内部的点击区域。
+      onClick: (event: { stopPropagation(): void }) => {
+        event.stopPropagation()
+      },
+    },
+    h(IconClock),
+    h('span', { className: 'dsr-visually-hidden' }, props.scheduledTaskLabel ?? ''))
+  }
+  if (props.status === undefined) return null
+  return h(StateMark, { status: props.status, label: props.statusLabel ?? '' })
 }
 
 /** 整行动作按钮的入参。 */

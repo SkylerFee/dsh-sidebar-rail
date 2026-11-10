@@ -31,8 +31,14 @@ export const IDLE_LIST: { readonly phase: 'idle'; readonly rows: readonly never[
 export interface FlyoutListOptions<Row> {
   /** 当前打开的浮层 id；null 表示没有打开。 */
   readonly open: string | null
-  /** 该列表属于哪个浮层；`open` 等于它时才加载。 */
-  readonly when: string
+  /**
+   * 哪个浮层打开时加载这份列表。
+   *
+   * 可以是单个浮层 id，也可以是一组——任务列表就是一组：任务浮层要它来画分区，
+   * 工作区浮层要它来给会话行标定时任务时钟（spec-0.5.1 §5）。两处共用同一份
+   * 状态，因此只加载一次。
+   */
+  readonly when: string | readonly string[]
   /** 远程调用；服务缺席时 resolve null（于是归为 unavailable→failed）。 */
   readonly load: () => Promise<unknown>
   /** 就绪行的归一化函数。 */
@@ -50,7 +56,12 @@ export interface FlyoutListOptions<Row> {
  * @returns 当前列表状态。
  */
 export function useFlyoutList<Row>(options: FlyoutListOptions<Row>): ListState<Row> {
-  const { open, when, load, normalize, label } = options
+  const { open, load, normalize, label } = options
+  // 数组 join 成稳定字符串：它进 effect 依赖，引用不稳会每次渲染重跑。
+  const when = Array.isArray(options.when) ? options.when.join(',') : options.when
+  const whenKey = String(when)
+  /** 当前打开的浮层是否属于这份列表的主人。 */
+  const active = open !== null && whenKey.split(',').includes(open)
   const [state, setState] = useState<ListState<Row>>(IDLE_LIST)
   /** 加载器经 ref 读取，避免函数身份进入 effect 依赖。 */
   const loader = useRef(load)
@@ -61,7 +72,7 @@ export function useFlyoutList<Row>(options: FlyoutListOptions<Row>): ListState<R
 
   useEffect(() => {
     // 关闭的浮层忘掉自己的尝试，于是重开会重试一次挂起的调用。
-    if (open !== when) {
+    if (!active) {
       started.current = false
       return undefined
     }
@@ -104,7 +115,7 @@ export function useFlyoutList<Row>(options: FlyoutListOptions<Row>): ListState<R
       live = false
       window.clearTimeout(timer)
     }
-  }, [open, when, label])
+  }, [open, active, whenKey, label])
 
   return state
 }

@@ -148,6 +148,20 @@ export interface TaskRow {
   readonly title: string
   readonly meta: string
   readonly status: string
+  /**
+   * 该任务「涉及」的会话 id。
+   *
+   * 来源是宿主 `ScheduleCatalogEntry.involvedSessionIds`：创建/编辑该任务的 Agent
+   * 会话，加上每个已存在或预留的目标会话。**`kind: 'new'` 目标创建的会话不在其中**
+   * ——那种任务每次投递都新建会话，只能靠 `lastDeliveryTargetSessionId` 命中。
+   */
+  readonly involvedSessionIds?: readonly string[] | undefined
+  /** 投递目标的形态；`new` 没有 sessionId，其余两种的 sessionId 见下一字段。 */
+  readonly targetKind?: 'session' | 'new_once' | 'new' | undefined
+  /** 目标会话；`kind: 'new'` 时缺席（它没有固定目标）。 */
+  readonly targetSessionId?: string | undefined
+  /** 最近一次已确认投递落到的会话；`kind: 'new'` 只能靠它命中。 */
+  readonly lastDeliveryTargetSessionId?: string | undefined
 }
 
 /** 任务行的三个分组；三个键恒存在，空分区仍要渲染标题与空态。 */

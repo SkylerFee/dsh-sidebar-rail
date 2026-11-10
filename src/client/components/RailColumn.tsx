@@ -36,6 +36,7 @@ import {
   normalizePlugins,
   normalizeTasks,
   pickedDirectory,
+  sessionHasActiveTask,
 } from '../model/remote.ts'
 import {
   currentSessionId,
@@ -269,9 +270,11 @@ export function RailColumn(props: RailColumnProps): ReactNode {
   }, [props])
 
   // 任务与插件的懒加载远程读取：每次浮层打开只跑一次，切走后旧答案不算数。
+  // 任务列表在两个浮层里都要用：任务浮层画分区，工作区浮层给会话行标定时任务
+  // 时钟（spec-0.5.1 §5）。共用同一份状态，因此只加载一次。
   const taskList = useFlyoutList({
     open,
-    when: 'tasks',
+    when: ['tasks', 'workspace'],
     load: scheduleCatalog,
     normalize: normalizeTasks,
     label: 'tasks',
@@ -461,6 +464,17 @@ export function RailColumn(props: RailColumnProps): ReactNode {
     projectSessionRows(row.sessionIds, byId, language, archivedIds, shownSessionId),
   [byId, language, archivedIds, shownSessionId])
 
+  /**
+   * 某个会话是否有活跃的定时任务，供行首的时钟标记判定。
+   *
+   * 读的是工作区浮层也会加载的那份任务列表；读取失败或超时时列表为空，
+   * 于是所有行都返回 false——时钟不出现，但会话列表照常渲染。
+   */
+  const hasActiveTask = useCallback(
+    (sessionId: string) => sessionHasActiveTask(taskList.rows, sessionId),
+    [taskList.rows],
+  )
+
   /** 关闭浮层并回到展开的宿主侧栏。 */
   const expandSidebar = useCallback(() => {
     retract()
@@ -496,6 +510,7 @@ export function RailColumn(props: RailColumnProps): ReactNode {
         raiseWatermark,
         noteWatermark,
         currentSessionId: shownSessionId,
+        hasActiveTask,
         shell,
       })
     }

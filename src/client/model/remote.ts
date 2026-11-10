@@ -104,9 +104,121 @@ export function normalizeTasks(answer: unknown): TaskRow[] {
     // 宿主自己的公式（见 taskNextRun）；不存在 nextRunAt 字段。
     const next = taskNextRun(task)
     const meta = next === '' ? '' : new Date(next).toLocaleString()
-    rows.push({ id: String(id), title: String(title).slice(0, 120), meta, status: taskStatusOf(task) })
+    rows.push({
+      id: String(id),
+      title: String(title).slice(0, 120),
+      meta,
+      status: taskStatusOf(task),
+      involvedSessionIds: readInvolvedSessionIds(record['involvedSessionIds']),
+      targetKind: readTargetKind(record['target']),
+      targetSessionId: readTargetSessionId(record['target']),
+      lastDeliveryTargetSessionId: readLastDeliveryTargetSessionId(record['lastDelivery']),
+    })
   }
   return rows
+}
+
+/**
+ * 读出任务涉及的全部会话 id。
+ *
+ * 宿主 `ScheduleCatalogEntry.involvedSessionIds` 是 `SessionId[]`，但这条边界是
+ * 远程答案，仍要逐项收窄：只保留非空字符串。
+ * @param raw - 原始字段值。
+ * @returns 会话 id 数组；字段缺失或不是数组时为空数组。
+ */
+function readInvolvedSessionIds(raw: unknown): readonly string[] {
+  if (!Array.isArray(raw)) return []
+  const out: string[] = []
+  for (const entry of raw) {
+    if (typeof entry === 'string' && entry !== '') out.push(entry)
+  }
+  return out
+}
+
+/**
+ * 读出投递目标的形态。
+ *
+ * 宿主 `ScheduleTarget` 是三种形态的判别联合，只保留 `kind` 供判定用。
+ * @param raw - 原始 `target` 字段。
+ * @returns 识别出的 kind；不认识时返回 undefined。
+ */
+function readTargetKind(raw: unknown): 'session' | 'new_once' | 'new' | undefined {
+  if (raw === null || typeof raw !== 'object') return undefined
+  const kind = (raw as Record<string, unknown>)['kind']
+  return kind === 'session' || kind === 'new_once' || kind === 'new' ? kind : undefined
+}
+
+/**
+ * 读出目标会话 id。
+ *
+ * `kind: 'new'` 没有固定目标，因此没有该字段；`session` 与 `new_once` 都有。
+ * @param raw - 原始 `target` 字段。
+ * @returns 会话 id，或 undefined。
+ */
+function readTargetSessionId(raw: unknown): string | undefined {
+  if (raw === null || typeof raw !== 'object') return undefined
+  const value = (raw as Record<string, unknown>)['sessionId']
+  return typeof value === 'string' && value !== '' ? value : undefined
+}
+
+/**
+ * 读出最近一次投递落到的会话。
+ * @param raw - 原始 `lastDelivery` 字段。
+ * @returns 目标会话 id，或 undefined。
+ */
+function readLastDeliveryTargetSessionId(raw: unknown): string | undefined {
+  if (raw === null || typeof raw !== 'object') return undefined
+  const value = (raw as Record<string, unknown>)['targetSessionId']
+  return typeof value === 'string' && value !== '' ? value : undefined
+}
+
+/**
+ * 求一个任务「投递到的会话」。
+ *
+ * 逐字复刻宿主 `task-record.ts` 的 `taskSessionId`：`kind: 'new'` 的任务每次投递
+ * 都新建会话，因此只有 `lastDelivery.targetSessionId` 能回答；另外两种形态都有
+ * 固定的 `target.sessionId`。
+ * @param task - 归一化后的任务行。
+ * @returns 目标会话 id，或 undefined。
+ */
+function taskSessionIdOf(task: TaskRow): string | undefined {
+  return task.targetKind === 'new' ? task.lastDeliveryTargetSessionId : task.targetSessionId
+}
+
+/**
+ * 判断一个任务是否「涉及」某个会话。
+ *
+ * 复刻宿主 `taskInvolvesSession`：命中 `involvedSessionIds`，或者目标会话就是它。
+ * 两者都要查——`new` 类型创建的会话不进 `involvedSessionIds`，只能由目标会话命中；
+ * 而创建该任务的 Agent 会话只会出现在 `involvedSessionIds` 里。
+ * @param task - 归一化后的任务行。
+ * @param sessionId - 待判定的会话。
+ * @returns 该任务是否涉及这个会话。
+ */
+export function taskInvolvesSession(task: TaskRow, sessionId: string): boolean {
+  if (typeof sessionId !== 'string' || sessionId === '') return false
+  if (Array.isArray(task.involvedSessionIds) && task.involvedSessionIds.includes(sessionId)) return true
+  return taskSessionIdOf(task) === sessionId
+}
+
+/**
+ * 判断某个会话是否有**活跃**的定时任务。
+ *
+ * 对应宿主 Sidebar 行首的时钟标记：只有 `status === 'active'` 的任务算数，
+ * 暂停与已结束不显示（宿主 `ScheduleCatalogEntry.status` 的注释：只有 active
+ * 有定时器义务，另两种只是「仍然可见」）。
+ * @param tasks - 归一化后的任务行。
+ * @param sessionId - 待判定的会话。
+ * @returns 存在活跃任务时为 true；空数组或畸形输入为 false。
+ */
+export function sessionHasActiveTask(tasks: readonly TaskRow[] | null | undefined, sessionId: string): boolean {
+  if (!Array.isArray(tasks)) return false
+  for (const task of tasks) {
+    if (task === null || task === undefined || typeof task !== 'object') continue
+    if (task.status !== 'active') continue
+    if (taskInvolvesSession(task, sessionId)) return true
+  }
+  return false
 }
 
 /**
