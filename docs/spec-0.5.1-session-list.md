@@ -20,7 +20,7 @@
 | 2 | 「显示更多」作用范围 | **最近会话区 + 每个项目的展开列表**都用同一套分页。 |
 | 3 | 设置项移除范围 | **两处都移除**：浮层底部步进器与插件详情页设置块。设置块因此没有内容，连 `plugins.bundle.config` 的注册一起移除。 |
 | 4 | 时钟图标数据源 | **复用现有 `remote.schedule.catalog()`**，扩展归一化读出 `involvedSessionIds` / `target` / `status`，不新增远程调用。 |
-| 5 | 时钟图标位置 | **完全照抄宿主**：行首 16px 格，且仅当行自身状态为 idle 时显示（状态点与时钟互斥）。 |
+| 5 | 时钟图标位置 | ~~完全照抄宿主：行首 16px 格~~ **实际实现为行尾**（见下方「实现结果」）。仅当行自身状态为 idle 时显示（状态点与时钟互斥）这条照抄正确。 |
 | 6 | 分支 | 继续在 `refactor/typescript-migration`。 |
 
 ## 3. 需求一：空会话可见性（照抄宿主）
@@ -86,7 +86,7 @@ hasActive = catalog 中该会话的活跃任务数 > 0
 其中 taskSessionId = target.kind === 'new' ? lastDelivery?.targetSessionId : target.sessionId
 ```
 
-显示位置：行首 16px 格，**仅在行自身状态为 idle 时**。有审批请求、未读、运行中时那一格让给状态点，时钟不挂载。
+显示位置：**行尾**（规格原写「行首 16px 格」，实现未达成；2026-11-11 验收报告 F5 指出，按用户裁决保持现状并调整约束），**仅在行自身状态为 idle 时**。有审批请求、未读、运行中时那一格让给状态点，时钟不挂载。
 
 标记是 `<IconClockOutlineRegular size={14} />`，点击 `stopPropagation` 不触发行的打开。
 
@@ -94,7 +94,7 @@ hasActive = catalog 中该会话的活跃任务数 > 0
 
 - 扩展 `normalizeTasks` 的归一化：额外读出每个任务的 `involvedSessionIds`、`target`、`lastDelivery.targetSessionId`、`status`。
 - 新增纯函数：给一个 `sessionId` 与任务列表，返回「是否有活跃任务」。放在 `model/remote.ts` 或新建 `model/schedule.ts`。
-- 行渲染：行首 16px 格；若该会话有活跃任务**且**行状态为 `idle`，显示时钟图标；否则显示状态点（现有 `StateMark`）。
+- 行渲染：**行尾**一格；若该会话有活跃任务**且**行状态为 `idle`，显示时钟图标；否则显示状态点（现有 `StateMark`）。
 - 自绘时钟 SVG（不能 import 宿主 ui-primitives），形状照抄宿主 `clock-outline` artwork。
 - 点击 `stopPropagation`。
 - 无数据时（catalog 未取到）不显示标记，不报错。
@@ -135,4 +135,4 @@ hasActive = catalog 中该会话的活跃任务数 > 0
 2. 多个项目同时展开时，各自独立分页还是共享计数？**倾向前者**（各自独立）。
 3. 时钟标记与 `status.warning` 的优先级：宿主是「非 idle 就不显示时钟」，我们照抄，因此 warning 时无时钟。确认这符合预期。
 
-**实现结果**（#16 #17 #18）：1 → 「显示更多」作为该项目会话列表的最后一个元素，紧跟其后；2 → 每个展开项目各自独立计数（水位键 `project:<workspaceId>`，最近会话区固定键 `recent`）；3 → 照抄「非 idle 不显示时钟」，因此 `status.warning` 时行首是状态点、没有时钟。以上是代码事实，**真机表现待 #19 确认**。
+**实现结果**（#16 #17 #18）：0 → **时钟实际渲染在行尾**。`Row()` 里 `SessionMarkCell` 排在 `.dsr-row-main` 之后，与规格写的「行首 16px 格」不符。这是 2026-11-11 验收报告 F5 指出的规格落差；按用户裁决**保持现状**，改为如实记录行为，不再追求行首位置。1 → 「显示更多」作为该项目会话列表的最后一个元素，紧跟其后；2 → 每个展开项目各自独立计数（水位键 `project:<workspaceId>`，最近会话区固定键 `recent`）；3 → 照抄「非 idle 不显示时钟」，因此 `status.warning` 时行首是状态点、没有时钟。以上是代码事实，**真机表现待 #19 确认**。

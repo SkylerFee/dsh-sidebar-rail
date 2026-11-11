@@ -237,5 +237,5 @@ transform: translateX(-100%);
 - 几何：浮轨 56px、按钮 36×36、图标 20px、头像 26px、浮层 288px。
 - 可访问性：每个图标按钮有 `aria-label`；当前面板用 `aria-current="page"`；浮层 `role="dialog"` + `aria-label`；顶部功能图标支持方向键进入浮层，浮层内 Escape 返回触发按钮；`prefers-reduced-motion: reduce` 关闭浮层入场与轨道滑动动画。实现支持不等于完整键盘路径已验收，具体结果见 [verify.md](verify.md)。
 - **添加项目**：调用宿主公开的 `uiWorkspace.pickDirectory()` 与 `workspaces.create({ path })`。选择器标题由宿主硬编码为英文（`NSOpenPanel.message` 不参与本地化），插件层无法覆盖——纯 Client 模块没有 Node 权限自行调起选择器。这是已知的宿主侧本地化缺口，记录在 README 与 GLOSSARY，不作为本插件待办。
-- **会话行首那一格**（`.dsr-row-mark`，16×16）：定时任务时钟与状态点**互斥**——只有该行状态为 `idle` 且存在活跃定时任务时才画时钟，否则画状态点。时钟 SVG 自绘（16px 视框、`stroke-width: 1`、`currentColor`，照抄宿主 `clock-outline` artwork），不 import 宿主包；图标 `aria-hidden`，含义由 `.dsr-visually-hidden` 文本送达读屏。点击时钟 `stopPropagation`，不触发行的打开。
+- **会话行尾那一格**（`.dsr-row-mark`，16×16）：定时任务时钟与状态点**互斥**。规格原写「行首 16px 格」，但 `Row()` 里 `SessionMarkCell` 排在 `.dsr-row-main` 之后，实际渲染在行尾；2026-11-11 验收报告 F5 指出该落差，按用户裁决保持现状、如实记录——只有该行状态为 `idle` 且存在活跃定时任务时才画时钟，否则画状态点。时钟 SVG 自绘（16px 视框、`stroke-width: 1`、`currentColor`，照抄宿主 `clock-outline` artwork），不 import 宿主包；图标 `aria-hidden`，含义由 `.dsr-visually-hidden` 文本送达读屏。点击时钟 `stopPropagation`，不触发行的打开。
 - 样式作用域统一 `.dsr-*` 前缀，样式节点带 `data-dsh-sidebar-rail` 标记，避免影响其他插件。
