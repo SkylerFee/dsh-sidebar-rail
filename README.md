@@ -33,9 +33,9 @@ Captured on macOS Desktop `0.2.2-rc.1` on 2026-11-11, using Catppuccin Latte (li
 | macOS Desktop, sidebar collapsed, viewport width ≥ 768px | Hidden rail, revealed by the edge strip or keyboard focus |
 | macOS Desktop, sidebar collapsed, viewport width < 768px | No rail; the host button still expands the sidebar |
 | macOS Desktop, sidebar expanded | No rail; the host sidebar remains available |
-| Web, any platform | No rail; the host keeps its existing collapsed rail |
-| Windows Desktop | Rail is drawn through the same code path as macOS; verified on Windows 11 |
-| Linux Desktop | No rail (host behaviour unverified) |
+| Windows Desktop, sidebar collapsed, viewport width ≥ 768px | Rail is drawn through the same code path as macOS; verified on Windows 11 |
+| Linux Desktop | No rail: the host keeps its own 56px collapsed rail there, so the plugin stands down by column width |
+| Web (any OS) | No rail: the host draws its own collapsed rail |
 
 Recorded Desktop checks used macOS Desktop `0.2.2-rc.1`. See `peerDependencies` in [package.json](package.json) for other compatible host versions. Version 0.4.0 is a full rewrite that ships the TypeScript source, the host-native flyout model, paged session lists and the scheduled-task mark together; it has not been published to npm yet (the registry still shows 0.3.3). See the [current acceptance report](docs/desktop-audit-2026-11-11.md) for results and limitations. The published package ships prebuilt `lib/` entries, so installing it needs no compiler. Source development and checks require Node.js ≥ 22.19.0 plus `npm ci` and a build step (see [Development](#development)).
 

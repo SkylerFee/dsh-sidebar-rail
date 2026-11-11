@@ -14,7 +14,7 @@ import {
   resolveLocaleId,
   sessionStatusOf,
   shortPath,
-  platformNeedsRail,
+  hostCollapsedColumnIsEmpty,
   shouldRenderRail,
 } from '../src/client/model/formatting.ts'
 import { PAGE_SIZE, RAIL_MIN_VIEWPORT, RAIL_REVEAL_WIDTH } from '../src/client/model/constants.ts'
@@ -988,30 +988,36 @@ test('resolveLocaleId: reads the host `active` field, not a missing `id`', () =>
   assert.equal(resolveLocaleId('zh'), 'en')
 })
 
-test('shouldRenderRail: both Desktop platforms, collapsed and wide enough', () => {
-  // 宽度边界：768 是「680 正文最小 + 56 轨 + 32 安全」推出的阈值。
-  for (const platform of ['darwin', 'win32']) {
-    assert.equal(shouldRenderRail(platform, true, RAIL_MIN_VIEWPORT), true, `${platform} at the threshold`)
-    assert.equal(shouldRenderRail(platform, true, RAIL_MIN_VIEWPORT + 400), true, `${platform} comfortably wide`)
-    assert.equal(shouldRenderRail(platform, true, RAIL_MIN_VIEWPORT - 1), false, `${platform} just too narrow`)
-    // 展开态交还宿主，浮轨不得出现。
-    assert.equal(shouldRenderRail(platform, false, 1600), false, `${platform} expanded`)
-    // 宽度未知（NaN/undefined）时宁可不画，也不要画一条盖住正文的轨。
-    assert.equal(shouldRenderRail(platform, true, Number.NaN), false, `${platform} NaN width`)
-    assert.equal(shouldRenderRail(platform, true, undefined), false, `${platform} unknown width`)
-  }
+test('hostCollapsedColumnIsEmpty: the only gate for taking over the rail', () => {
+  // 宿主 foldedWidth = drawer || darwin || windowsTitlebar ? 0 : 56。
+  // macOS / Windows Desktop 折叠后是 0 宽，需要本插件补一条轨。
+  assert.equal(hostCollapsedColumnIsEmpty(0), true)
+  // 亚像素布局下 0 宽可能读成小数，留半像素容差。
+  assert.equal(hostCollapsedColumnIsEmpty(0.5), true)
+  assert.equal(hostCollapsedColumnIsEmpty(0.51), false)
+  // Linux Desktop 与 Web 保留 56px，宿主自己画着轨，绝不能叠第二条。
+  assert.equal(hostCollapsedColumnIsEmpty(56), false)
+  assert.equal(hostCollapsedColumnIsEmpty(300), false)
+  // 读不到宽度时不接管：重复绘制比缺一条更糟。
+  assert.equal(hostCollapsedColumnIsEmpty(undefined), false)
+  assert.equal(hostCollapsedColumnIsEmpty(Number.NaN), false)
+  assert.equal(hostCollapsedColumnIsEmpty(Number.POSITIVE_INFINITY), false)
 })
 
-test('platformNeedsRail: only the Desktop platforms whose collapsed column is zero', () => {
-  // 宿主 AppFrame：collapsedWidth = drawer || darwin || windowsTitlebar ? 0 : 56。
-  // macOS 与 Windows Desktop 折叠后没有任何轨，正是本插件要补的洞。
-  assert.equal(platformNeedsRail('darwin'), true)
-  assert.equal(platformNeedsRail('win32'), true)
-  // Web 自己画 56px 折叠轨，再画一条会重复，必须排除。
-  assert.equal(platformNeedsRail('web'), false)
-  assert.equal(platformNeedsRail('linux'), false)
-  assert.equal(platformNeedsRail(''), false)
-  assert.equal(platformNeedsRail('freebsd'), false)
+test('shouldRenderRail: collapsed, host column empty, and wide enough', () => {
+  // 宽度边界：768 是「680 正文最小 + 56 轨 + 32 安全」推出的阈值。
+  assert.equal(shouldRenderRail(true, 0, RAIL_MIN_VIEWPORT), true)
+  assert.equal(shouldRenderRail(true, 0, RAIL_MIN_VIEWPORT + 400), true)
+  assert.equal(shouldRenderRail(true, 0, RAIL_MIN_VIEWPORT - 1), false)
+  // 展开态交还宿主，浮轨不得出现。
+  assert.equal(shouldRenderRail(false, 0, 1600), false)
+  // 宿主自己保留折叠轨的平台（Linux Desktop / Web 都是 56px）不接管。
+  assert.equal(shouldRenderRail(true, 56, 1600), false)
+  // 宽度未知（NaN/undefined）时宁可不画，也不要画一条盖住正文的轨。
+  assert.equal(shouldRenderRail(true, 0, Number.NaN), false)
+  assert.equal(shouldRenderRail(true, 0, undefined), false)
+  // 列宽未知时不接管。
+  assert.equal(shouldRenderRail(true, undefined, 1600), false)
 })
 
 test('shortPath: keeps two trailing segments', () => {

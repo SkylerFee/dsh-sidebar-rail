@@ -1,15 +1,15 @@
 /**
  * `shell.overlay` 的入口组件：只在需要图标轨的状态下渲染它。
  *
- * Desktop（macOS 与 Windows）把折叠列压到零宽并裁掉
- * （`AppFrame: collapsedWidth = drawer || darwin || windowsTitlebar ? 0 : 56`），
- * 所以已发布构建在那里没有任何轨——这正是本插件要补的洞。Web 已经自己画
- * 56px 轨，因此本入口在 Web 上保持为空，绝不重复画一条。
- * 平台白名单见 `platformNeedsRail`。
+ * 是否接管**由宿主折叠列的实际宽度决定，不按平台名**：宿主把折叠列算成
+ * `drawer || darwin || windowsTitlebar ? 0 : SIDEBAR_COLLAPSED`——归零的平台
+ * （macOS / Windows Desktop）折叠后没有任何轨可点，正是本插件要补的洞；
+ * 仍保留 56px 的平台（Linux Desktop、Web）宿主自己画着一条轨，本入口必须保持
+ * 为空，否则会叠成双轨。判定见 `shouldRenderRail`。
  */
 import type { ReactNode } from 'react'
 import { h } from '../jsx.ts'
-import { useHostCollapsed, useViewportWidth } from '../hooks/use-rail-visibility.ts'
+import { useHostCollapsed, useHostSidebarWidth, useViewportWidth } from '../hooks/use-rail-visibility.ts'
 import { shouldRenderRail } from '../model/formatting.ts'
 import { RailColumn } from './RailColumn.tsx'
 import type { RailColumnProps } from '../contracts.ts'
@@ -22,7 +22,7 @@ import type { RailColumnProps } from '../contracts.ts'
 export function RailOverlay(props: RailColumnProps): ReactNode {
   const collapsed = useHostCollapsed()
   const viewportWidth = useViewportWidth()
-  const platform = typeof document === 'undefined' ? '' : (document.documentElement.dataset['platform'] ?? '')
-  if (!shouldRenderRail(platform, collapsed, viewportWidth)) return null
+  const sidebarWidth = useHostSidebarWidth(collapsed)
+  if (!shouldRenderRail(collapsed, sidebarWidth, viewportWidth)) return null
   return h(RailColumn, props)
 }

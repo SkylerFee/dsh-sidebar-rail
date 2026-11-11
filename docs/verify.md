@@ -15,7 +15,7 @@
 
 **本轮为 Windows 做的改动**（提交 `b40da10`）
 
-- 把平台判定从写死 `darwin` 改为白名单 `platformNeedsRail`：`darwin` 与 `win32`。
+- 平台判定先由写死 `darwin` 改为白名单。**随后**（同一轮内）又改为按宿主折叠列的**实际宽度**判断（`hostCollapsedColumnIsEmpty`）：读 frame 的 `grid-template-columns` 第一列，归零才接管。理由是宿主对 Linux Desktop 与 Web 保留 56px 折叠轨，按平台名会叠成双轨；按宽度判断在任何平台都对，宿主调整也不用改插件。
   依据是宿主 `AppFrame` 的实际行为——两个 Desktop 平台都把折叠列压到零宽
   （`collapsedWidth = drawer || darwin || windowsTitlebar ? 0 : 56`），折叠后没有
   任何轨可点；Web 自带 56px 折叠轨，因此必须排除。
@@ -42,7 +42,7 @@ Windows Desktop 与 macOS 走同一渲染路径，表现一致。平台的已知
 
 **仍未验证**
 
-- Linux Desktop：未纳入平台白名单（宿主行为未核实）。
+- Linux Desktop：自动不接管——宿主在该平台保留 56px 折叠轨（`collapsedWidth` 非零），列宽探测据此跳过，不会双轨。该结论来自宿主源码，未做 Linux 真机验证。
 - Windows 上的其余分支（真实慢网络、未登录账号、多屏环境）本轮未覆盖，
   其结论沿用 macOS 轮次。
 

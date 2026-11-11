@@ -52,41 +52,51 @@ export function resolveLocaleId(snapshot: unknown): string {
 }
 
 /**
- * 该平台是否由本插件负责画折叠态图标轨。
+ * 宿主折叠后是否把侧栏列压到了零宽。
  *
- * 只有 **Desktop 应用** 需要：宿主在 macOS 与 Windows Desktop 上都把折叠列压到
- * 零宽（`AppFrame: collapsedWidth = drawer || darwin || windowsTitlebar ? 0 : 56`），
- * 折叠后没有任何轨可点，这正是本插件要补的洞。
+ * **这是本插件要不要接管折叠态轨的唯一判据，不再按平台名判断。** 各端是否
+ * 保留自己的 56px 折叠轨由宿主决定，且这个决定写在它的列宽计算里：
  *
- * **Web 必须排除**：宿主自己就画了一条 56px 折叠轨，再画一条会重复。Web 的
- * `dataset.platform` 不是 `darwin`/`win32`（宿主只在 Desktop 上设置该属性），
- * 因此按「已知 Desktop 平台白名单」判断，未知平台一律不画——宁可不出轨，
- * 也不要盖住正文或与宿主重复。
- * @param platform - `document.documentElement.dataset.platform`。
- * @returns 该平台是否需要本插件补这条轨。
+ *     collapsedWidth = drawer || darwin || windowsTitlebar ? 0 : SIDEBAR_COLLAPSED
+ *
+ * 也就是说 macOS 与 Windows Desktop 折叠后是 0 宽（没有轨可点，需要本插件补），
+ * 而 Linux Desktop 与 Web 仍保留 56px（宿主自己画了一条轨）；同一平台上也可能
+ * 随宿主版本变化。硬编码平台名会在宿主调整时悄悄变成「两条轨叠在一起」，
+ * 而按实际列宽判断在任何平台上都对，宿主改了也不用改这里。
+ * @param sidebarColumnWidth - 宿主 frame 第一列的实际宽度（CSS 像素）。
+ * @returns 宿主折叠列已归零、需要本插件接管时为 true。
  */
-export function platformNeedsRail(platform: string): boolean {
-  // 白名单而非黑名单：只有确认「宿主折叠列归零」的 Desktop 平台才画。
-  return platform === 'darwin' || platform === 'win32'
+export function hostCollapsedColumnIsEmpty(sidebarColumnWidth: number | undefined): boolean {
+  // 读不到宽度时不接管：宿主可能正画着自己的轨，重复绘制比缺一条更糟。
+  if (typeof sidebarColumnWidth !== 'number' || !Number.isFinite(sidebarColumnWidth)) return false
+  // 留半像素容差：亚像素布局下 0 宽可能被读成 0.5 之类的小数。
+  return sidebarColumnWidth <= 0.5
 }
 
 /**
  * 判断当前世界状态是否应该画出图标轨。
  *
- * 图标轨浮在主列之上，因此只在视口仍能容下可读中列时才出现（宿主把会话列
- * 下限设为 680px）。更窄时宿主 `shell.leading` 里的重开按钮仍然可用，隐藏
- * 图标轨不会让人失去回到侧栏的入口。
- * @param platform - `document.documentElement.dataset.platform`。
+ * 三个条件缺一不可：
+ *
+ * 1. **宿主侧栏处于折叠态**——展开态交还宿主，浮轨不得出现。
+ * 2. **宿主折叠列确实归零**——否则宿主自己画着 56px 折叠轨（Linux Desktop、
+ *    Web 都是这样），再叠一条就是双轨。判据见
+ *    {@link hostCollapsedColumnIsEmpty}，按实际列宽而非平台名。
+ * 3. **视口仍容得下可读中列**——图标轨浮在主列之上，宿主把会话列下限设为
+ *    680px；更窄时宿主 `shell.leading` 里的重开按钮仍然可用，隐藏图标轨不会
+ *    让人失去回到侧栏的入口。
  * @param collapsed - 宿主侧栏是否折叠。
+ * @param sidebarColumnWidth - 折叠后宿主侧栏列的实际宽度。
  * @param viewportWidth - 视口宽度（CSS 像素）。
  * @returns 是否渲染图标轨。
  */
 export function shouldRenderRail(
-  platform: string,
   collapsed: boolean,
+  sidebarColumnWidth: number | undefined,
   viewportWidth: number | undefined,
 ): boolean {
-  if (!platformNeedsRail(platform) || collapsed !== true) return false
+  if (collapsed !== true) return false
+  if (!hostCollapsedColumnIsEmpty(sidebarColumnWidth)) return false
   return typeof viewportWidth === 'number' && Number.isFinite(viewportWidth) && viewportWidth >= RAIL_MIN_VIEWPORT
 }
 

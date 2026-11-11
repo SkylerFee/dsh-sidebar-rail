@@ -33,9 +33,9 @@
 | macOS Desktop，侧栏折叠，视口宽度 ≥ 768px | 默认隐藏图标轨，由左缘热区或键盘焦点唤出 |
 | macOS Desktop，侧栏折叠，视口宽度 < 768px | 不渲染图标轨；仍可用宿主按钮展开侧栏 |
 | macOS Desktop，侧栏展开 | 不渲染图标轨，保留原生侧栏 |
-| Web（任意平台） | 不渲染图标轨，保留宿主已有的折叠轨 |
-| Windows Desktop | 会渲染图标轨（与 macOS 同一代码路径），已在 Windows 11 真机验证 |
-| Linux Desktop | 不渲染图标轨（宿主行为未核实） |
+| Windows Desktop，侧栏折叠，视口宽度 ≥ 768px | 会渲染图标轨（与 macOS 同一代码路径），已在 Windows 11 真机验证 |
+| Linux Desktop | 不渲染：宿主在该平台自己保留 56px 折叠轨，插件按列宽探测自动让位 |
+| Web（任意系统） | 不渲染：宿主自带折叠轨，避免叠成第二条 |
 
 已记录的真机环境为 macOS Desktop `0.2.2-rc.1`；其他宿主版本的兼容范围见 [package.json](package.json) 的 `peerDependencies`。0.4.0 是一次完整重写：TypeScript 源码、贴近宿主的浮层结构、分页会话列表与定时任务标记都在这个版本里；它尚未发布到 npm（registry 上仍是 0.3.3）。实际结果与限制见[本轮验收报告](docs/desktop-audit-2026-11-11.md)。发布包内是已构建的 `lib/` 入口，安装时不需要编译器；源码开发与检查需要 Node.js ≥ 22.19.0，并要先 `npm ci`、再构建（见[开发与贡献](#development)）。
 

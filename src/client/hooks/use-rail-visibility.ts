@@ -115,3 +115,56 @@ export function useWindowFocused(): boolean {
   }, [])
   return focused
 }
+/**
+ * 读宿主折叠后侧栏列的实际宽度。
+ *
+ * **这是「要不要接管折叠态轨」的判据，取代了早期的平台白名单。** 宿主把折叠列
+ * 宽度算成 `drawer || darwin || windowsTitlebar ? 0 : SIDEBAR_COLLAPSED`：
+ * macOS 与 Windows Desktop 归零（没有轨可点，需要本插件补），Linux Desktop 与
+ * Web 仍留 56px（宿主自己画着一条）。按平台名猜会在宿主调整时悄悄变成双轨，
+ * 按实际宽度判断则在任何平台上都对。
+ *
+ * 探测路径与折叠判定一致：frame 是 `.overlayLayer`（带 `data-shell-overlay`）
+ * 的父元素；它的 `grid-template-columns` 第一列就是侧栏列宽，由 AppFrame 以内联
+ * 样式写入（`${cols.sidebar}px minmax(...) ...`）。
+ *
+ * 宽度读不到时返回 undefined——调用方据此选择**不接管**，因为重复绘制比缺一条
+ * 更糟。resize 与折叠状态变化都会重新测量。
+ * @returns 侧栏列宽度（CSS 像素），或 undefined 表示无法测量。
+ */
+export function useHostSidebarWidth(collapsed: boolean): number | undefined {
+  /** 读一次第一列宽度；找不到 frame 时返回 undefined。 */
+  const measure = (): number | undefined => {
+    if (typeof document === 'undefined') return undefined
+    const overlay = document.querySelector('[data-shell-overlay]')
+    const frame = overlay?.parentElement ?? null
+    if (frame === null) return undefined
+    const tracks = window.getComputedStyle(frame).gridTemplateColumns
+    if (tracks === '' || tracks === 'none') return undefined
+    // 宿主的 frame 恒为三列（`${sidebar}px minmax(...) minmax(...)`），由 AppFrame
+    // 以内联样式写入。列数不足说明 DOM 结构变了，此时**不解析**——把单列宽度
+    // 误当成折叠列宽会得出「宿主没画轨」的错误结论，进而叠出双轨。
+    const parts = tracks.split(' ').filter((part) => part !== '')
+    if (parts.length < 3) return undefined
+    const first = Number.parseFloat(parts[0] ?? '')
+    return Number.isFinite(first) ? first : undefined
+  }
+  const [width, setWidth] = useState<number | undefined>(measure)
+  useEffect(() => {
+    /** 重新测量并写入状态。 */
+    const update = (): void => {
+      setWidth(measure())
+    }
+    update()
+    // 折叠动画会改列宽，resize 也会；两者都要跟。transitionend 覆盖动画落定那次。
+    window.addEventListener('resize', update)
+    const overlay = document.querySelector('[data-shell-overlay]')
+    const frame = overlay?.parentElement ?? null
+    frame?.addEventListener('transitionend', update)
+    return () => {
+      window.removeEventListener('resize', update)
+      frame?.removeEventListener('transitionend', update)
+    }
+  }, [collapsed])
+  return width
+}

@@ -1,13 +1,13 @@
 # dsh-sidebar-rail 项目规则
 
-DeepSeek Harness 的 **Desktop（macOS / Windows）折叠态增量图标轨**。开工前读 [README](README.md) 与[设计说明](docs/design.md)；需求见 [PRD](docs/PRD.md)，判断类编码规范见 [CODING_STANDARDS.md](CODING_STANDARDS.md)。
+DeepSeek Harness 的 **折叠态增量图标轨**（适用于宿主把折叠列压到零宽的平台，目前是 macOS 与 Windows Desktop）。开工前读 [README](README.md) 与[设计说明](docs/design.md)；需求见 [PRD](docs/PRD.md)，判断类编码规范见 [CODING_STANDARDS.md](CODING_STANDARDS.md)。
 
 实现细节（注册写法、observer、z-index、token 清单、数据来源、分组规则）一律以 [docs/design.md](docs/design.md) 为准，本文件不再重复，只保留**否决性约束**与**导航**。
 
 ## 范围
 
 - 纯 Client 插件：源码在 `src/`（TypeScript / TSX，按职责分模块），由 `esbuild` 生成 `lib/client.js`（`window.__ModuleLoader__.load()` 的单份静态模块）与 `lib/index.js`（空 `apply()` 的 Host 入口）；`cordis.patch.yml` 插一行。`lib/` 是生成目录，不提交 Git，改完 `src/` 必须 `npm run build`。运行时依赖仍为零——客户端只向宿主 `require` `react` / `react-dom`；开发依赖与构建步骤按 [ADR-0006](docs/adr/0006-typescript-source-and-build.md) 允许。
-- 图标轨只在 **Desktop 应用 + 宿主侧栏折叠 + 视口 ≥ 768px** 时渲染；其他状态轨组件一律 `return null`。平台白名单是 `platformNeedsRail`：`darwin` 与 `win32`——宿主在这两个平台都把折叠列压到零宽（`AppFrame: collapsedWidth = drawer || darwin || windowsTitlebar ? 0 : 56`），折叠后没有任何轨可点。**Web 端宿主自带 56px 折叠轨，必须排除**，不得重复绘制；Linux Desktop 未纳入白名单（宿主行为未核实）。Windows 已在 Windows 11 真机验证通过（轨的滑出与点击、顶部标题栏避让、鼠标热区、浮层位置均正常）。插件没有插件详情页设置块（唯一的设置项已随分页整项移除）。
+- 图标轨只在 **Desktop 应用 + 宿主侧栏折叠 + 视口 ≥ 768px** 时渲染；其他状态轨组件一律 `return null`。**是否接管由宿主折叠列的实际宽度决定，不按平台名**（`hostCollapsedColumnIsEmpty` + `useHostSidebarWidth`）：宿主把折叠列算成 `drawer || darwin || windowsTitlebar ? 0 : SIDEBAR_COLLAPSED`，归零的平台（macOS / Windows Desktop）折叠后没有任何轨可点，本插件补一条；仍保留 56px 的平台（Linux Desktop、Web）宿主自己画着轨，本插件必须保持为空，否则会叠成双轨。读不到列宽时同样不接管——重复绘制比缺一条更糟。禁止改回按平台名判断：宿主一调整就会悄悄变成双轨。Windows 已在 Windows 11 真机验证通过（轨的滑出与点击、顶部标题栏避让、鼠标热区、浮层位置均正常）。插件没有插件详情页设置块（唯一的设置项已随分页整项移除）。
 - 安装/启用插件、改用户 profile、发布 npm，都只在任务明确授权时执行。
 
 ## 硬约束（违反即否决）
