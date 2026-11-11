@@ -1,12 +1,15 @@
 .dsr-rail { display:flex; flex-direction:column; align-items:center; height:100%; padding:10px 0 8px; gap:4px; }
 .dsr-rail-top { display:flex; flex-direction:column; align-items:center; gap:4px; }
 .dsr-rail-spacer { flex:1 1 auto; min-height:8px; }
-/* macOS Desktop only: the host clips the collapsed column to 0 width, so the
-   rail is portalled beside #root and pinned below the window-chrome strip —
-   the traffic lights and the host's own reopen controls live in the top 48px
-   (--dsh-frame-top-clearance, declared on the root element so portalled
-   overlays inherit it). Clicking must not drag the window: -webkit-app-region
-   is opted out explicitly even though body-level portals already are. */
+/* Desktop only (macOS and Windows): the host clips the collapsed column to 0
+   width, so the rail is portalled beside #root and pinned below the window-chrome
+   strip. That strip is platform-specific but reaches us through one variable:
+   --dsh-frame-top-clearance is 48px on macOS (traffic lights) and the caption
+   height on Windows ([data-windows-titlebar]) — both declared on the root
+   element so portalled overlays inherit them, with a 48px fallback. Clicking
+   must not drag the window: -webkit-app-region is opted out explicitly even
+   though body-level portals already are (a no-op off Electron-on-Windows, kept
+   for the platforms that honour it). */
 .dsr-rail-float { position:fixed; left:0; top:var(--dsh-frame-top-clearance, 48px); bottom:0; width:56px;
   z-index:60; display:flex; flex-direction:column; align-items:center;
   background:var(--dsw-specific-sidebar-fill);
@@ -26,7 +29,8 @@
 /* 12px rather than 8px: macOS keeps an invisible resize band along the window
    edge, so a narrower strip left the pointer on the resize cursor and its events
    never reached the page. This width stays clear of that band while still being
-   far narrower than the 56px rail it reveals. */
+   far narrower than the 56px rail it reveals. Windows draws no such band inside
+   the client area, so the same width is simply a slightly generous target there. */
 .dsr-rail-hotzone { position:fixed; left:0; top:var(--dsh-frame-top-clearance, 48px); bottom:0;
   width:12px; z-index:59; -webkit-app-region:no-drag; }
 .dsr-rail-btn { display:flex; align-items:center; justify-content:center; width:36px; height:36px; padding:0;

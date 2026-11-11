@@ -52,6 +52,25 @@ export function resolveLocaleId(snapshot: unknown): string {
 }
 
 /**
+ * 该平台是否由本插件负责画折叠态图标轨。
+ *
+ * 只有 **Desktop 应用** 需要：宿主在 macOS 与 Windows Desktop 上都把折叠列压到
+ * 零宽（`AppFrame: collapsedWidth = drawer || darwin || windowsTitlebar ? 0 : 56`），
+ * 折叠后没有任何轨可点，这正是本插件要补的洞。
+ *
+ * **Web 必须排除**：宿主自己就画了一条 56px 折叠轨，再画一条会重复。Web 的
+ * `dataset.platform` 不是 `darwin`/`win32`（宿主只在 Desktop 上设置该属性），
+ * 因此按「已知 Desktop 平台白名单」判断，未知平台一律不画——宁可不出轨，
+ * 也不要盖住正文或与宿主重复。
+ * @param platform - `document.documentElement.dataset.platform`。
+ * @returns 该平台是否需要本插件补这条轨。
+ */
+export function platformNeedsRail(platform: string): boolean {
+  // 白名单而非黑名单：只有确认「宿主折叠列归零」的 Desktop 平台才画。
+  return platform === 'darwin' || platform === 'win32'
+}
+
+/**
  * 判断当前世界状态是否应该画出图标轨。
  *
  * 图标轨浮在主列之上，因此只在视口仍能容下可读中列时才出现（宿主把会话列
@@ -67,7 +86,7 @@ export function shouldRenderRail(
   collapsed: boolean,
   viewportWidth: number | undefined,
 ): boolean {
-  if (platform !== 'darwin' || collapsed !== true) return false
+  if (!platformNeedsRail(platform) || collapsed !== true) return false
   return typeof viewportWidth === 'number' && Number.isFinite(viewportWidth) && viewportWidth >= RAIL_MIN_VIEWPORT
 }
 

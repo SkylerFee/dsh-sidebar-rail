@@ -23,7 +23,8 @@
 | macOS Desktop 展开态 | 完整原生侧栏（搜索、视图选项、添加工作区、设置座位、账号菜单） | 不渲染任何节点 |
 | Web 折叠态 | 宿主自带 56px 折叠轨（`ui-sidebar` 的 `.collapsed` rail 布局） | 不渲染，避免出现第二条轨 |
 | Web 展开态 | 完整原生侧栏 | 不渲染 |
-| Windows / Linux | 未验证 | 不渲染 |
+| Windows Desktop | 代码路径已就绪、真机未验证 | 渲染（与 macOS 同一路径；顶部留白取 `--dsh-windows-titlebar-height`） |
+| Linux Desktop | 宿主行为未核实 | 不渲染 |
 
 判据是 `document.documentElement.dataset.platform === 'darwin'`、宿主 frame 带 `data-sidebar-collapsed` 且视口宽度 ≥ 768px，任一不成立就 `return null`。插件**没有设置块**：唯一的设置项（可调最近会话条数）在 0.4.0 被分页取代，`plugins.bundle.config` 的注册与 `RailSettings` 组件一并删除。
 

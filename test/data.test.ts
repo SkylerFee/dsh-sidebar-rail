@@ -14,6 +14,7 @@ import {
   resolveLocaleId,
   sessionStatusOf,
   shortPath,
+  platformNeedsRail,
   shouldRenderRail,
 } from '../src/client/model/formatting.ts'
 import { PAGE_SIZE, RAIL_MIN_VIEWPORT, RAIL_REVEAL_WIDTH } from '../src/client/model/constants.ts'
@@ -987,19 +988,30 @@ test('resolveLocaleId: reads the host `active` field, not a missing `id`', () =>
   assert.equal(resolveLocaleId('zh'), 'en')
 })
 
-test('shouldRenderRail: macOS + collapsed + wide enough, nothing else', () => {
+test('shouldRenderRail: both Desktop platforms, collapsed and wide enough', () => {
   // 宽度边界：768 是「680 正文最小 + 56 轨 + 32 安全」推出的阈值。
-  assert.equal(shouldRenderRail('darwin', true, RAIL_MIN_VIEWPORT), true)
-  assert.equal(shouldRenderRail('darwin', true, RAIL_MIN_VIEWPORT + 400), true)
-  assert.equal(shouldRenderRail('darwin', true, RAIL_MIN_VIEWPORT - 1), false)
-  // 展开态交还宿主，浮轨不得出现。
-  assert.equal(shouldRenderRail('darwin', false, 1600), false)
-  // Web 宿主自带 56px 折叠轨；Windows 未验证——两者都不画，避免重复轨。
-  assert.equal(shouldRenderRail('web', true, 1600), false)
-  assert.equal(shouldRenderRail('win32', true, 1600), false)
-  // 宽度未知（NaN/undefined）时宁可不画，也不要画一条盖住正文的轨。
-  assert.equal(shouldRenderRail('darwin', true, Number.NaN), false)
-  assert.equal(shouldRenderRail('darwin', true, undefined), false)
+  for (const platform of ['darwin', 'win32']) {
+    assert.equal(shouldRenderRail(platform, true, RAIL_MIN_VIEWPORT), true, `${platform} at the threshold`)
+    assert.equal(shouldRenderRail(platform, true, RAIL_MIN_VIEWPORT + 400), true, `${platform} comfortably wide`)
+    assert.equal(shouldRenderRail(platform, true, RAIL_MIN_VIEWPORT - 1), false, `${platform} just too narrow`)
+    // 展开态交还宿主，浮轨不得出现。
+    assert.equal(shouldRenderRail(platform, false, 1600), false, `${platform} expanded`)
+    // 宽度未知（NaN/undefined）时宁可不画，也不要画一条盖住正文的轨。
+    assert.equal(shouldRenderRail(platform, true, Number.NaN), false, `${platform} NaN width`)
+    assert.equal(shouldRenderRail(platform, true, undefined), false, `${platform} unknown width`)
+  }
+})
+
+test('platformNeedsRail: only the Desktop platforms whose collapsed column is zero', () => {
+  // 宿主 AppFrame：collapsedWidth = drawer || darwin || windowsTitlebar ? 0 : 56。
+  // macOS 与 Windows Desktop 折叠后没有任何轨，正是本插件要补的洞。
+  assert.equal(platformNeedsRail('darwin'), true)
+  assert.equal(platformNeedsRail('win32'), true)
+  // Web 自己画 56px 折叠轨，再画一条会重复，必须排除。
+  assert.equal(platformNeedsRail('web'), false)
+  assert.equal(platformNeedsRail('linux'), false)
+  assert.equal(platformNeedsRail(''), false)
+  assert.equal(platformNeedsRail('freebsd'), false)
 })
 
 test('shortPath: keeps two trailing segments', () => {
