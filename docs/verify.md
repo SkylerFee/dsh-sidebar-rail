@@ -1,5 +1,59 @@
 # 验证记录
 
+## 0.4.0 发版前复验（2026-11-11，第 25 轮）
+
+> 状态：**功能验收通过**。环境：macOS Desktop `0.2.2-rc.1`、macOS 27.2、中文界面、Catppuccin Latte / Frappé；本地分支 `refactor/typescript-migration`。
+
+**本轮逐项确认（用户真机操作）**
+
+| 项 | 结果 |
+| --- | --- |
+| 标题滚动显示 | 通过。长标题悬停时滚到末端并停住，离开立刻回位，静止态省略号正常，短标题不动 |
+| 窗口焦点门禁 | 通过。切到别的应用后指针扫过左缘不唤出；已展开的轨失焦即收起；回到 DSH 后唤出恢复 |
+| 键盘路径 | 通过。`Tab` 到轨仍能唤出（不受焦点与坐标门禁影响） |
+| 轨与浮层一起收起 | 通过。`Tab` 到头像展开浮层、再 `Tab` 到页面其他位置时，轨与浮层一起收起 |
+| 多屏右缘误唤出 | 通过。DSH 右边框贴屏幕边缘、指针移到另一块屏时不再唤出 |
+| 空会话 / 分页 / 时钟 / 标题层级 | 通过（第 24 轮已验，本轮回归无变化） |
+
+**本轮修的三个缺陷**（均由本轮的复验发现并修复）
+
+- 标题既不滚动也没有省略号：`.dsr-row-title` 缺 `min-width: 0`，作为 column flex 的
+  flex item 会撑到内容宽度，`clientWidth === scrollWidth`。修复后 `scrollLeft` 实测到达
+  197px，两个 `data-` 标记与渐隐遮罩生效。
+- 多屏下右缘鼠标把左侧轨拉出：`pointerenter` 由冒泡的 `pointerover` 合成，
+  跨屏移出窗口时它带一个**被钳进视口**的 `clientX`，连坐标门禁都拦不住。改为只由
+  `pointermove` 连续判定驱动唤出。
+- 真实使用者无法安装：`peerDependencies` 的 cordis 范围停在 `~4.0.4 || ~4.0.5-alpha.1`，
+  而目标宿主 0.2.2-rc.1 的 SDK 一律要求 `~4.1.0`，导致 `npm install` 报 ERESOLVE。
+  改为 `~4.1.0` 并删除 `.npmrc` 的 `legacy-peer-deps` workaround。
+
+**发版前检查（本机实测）**
+
+- `npm run check` 退出码 0：7 条源码规则、96 单测（95 通过 + 1 个 K2 todo）、
+  5 条产物规则、3 项产物测试。
+- 移除 `.npmrc` 后 `npm ci` 成功（不再需要 `legacy-peer-deps`）。
+- 独立目录安装 `npm pack` 产物：不带任何 npmrc 时 `added 10 packages`，
+  ERESOLVE 消失；安装后 `lib/client.js` 在 vm 中能被 `__ModuleLoader__` 注册
+  （id `@skylerfee/dsh-sidebar-rail`，factory 为函数），`lib/index.js` 是空 `apply()`。
+- 打包清单 28 个文件：预构建 `lib/`、双语 README、18 张脱敏图、locale、
+  `cordis.patch.yml`；无源码、`tmp/` 或测试。
+- 文档：9 份文档无坏链，18 张图全部被引用、无孤儿。
+
+**仍未验证**
+
+- Windows / Linux Desktop（不渲染图标轨，未验证支持）。
+- 真实 Web 客户端。
+- 真实慢网络 / 远程故障下的失败态展示（仅离线替身覆盖）。
+- 未登录账号与有余额账号的全部分支。
+- 真实归档与空白会话的逐 ID 对账。
+
+**已知缺陷（不修，已记录）**
+
+- 「添加项目」的系统对话框标题为英文：宿主把 `NSOpenPanel.message` 硬编码成
+  `Select Workspace Directory`，AppKit 不本地化该字段；纯 Client 插件无 Node 权限
+  自行调起选择器。见 README 与 GLOSSARY。
+- 默认收起的分区需要点两次才展开（K2）：按产品要求保持现状、不再作为待修问题跟踪。
+
 ## 最新源码验收与文档整理（2026-11-11，第 24 轮）
 
 **尚未通过完整功能验收，文档与截图已完成**。环境、操作与可核对结果见[本轮报告](desktop-audit-2026-11-11.md)：本地 `de05173`，Desktop `0.2.2-rc.1`，macOS 27.2，中文、Catppuccin Latte / Frappé。`npm run check` 退出码 0，85 单测通过、1 个既有 K2 todo、3 产物测试通过。
@@ -602,43 +656,3 @@ completionUnread                                      → done
 ### 3 账号头像与浮层位置
 
 | 项 | 改前 | 改后 | 复验 |
-| --- | --- | --- | --- |
-| 头像 | 硬编码 `'AI'` 两字母 | 先 `remote.account.getState()` 判登录态，登录后再 `getProfile` 取 `avatarUrl`；未登录用**原生同款省略号**，登录无图用原生人形图标 | ✅ 底部显示人形图标，与宿主原生账号行一致（见下方说明） |
-| 账号浮层位置 | 一律 top 对齐 + `clamp(innerHeight-200)`，头像在底部导致浮层飞到上方很远 | 账号浮层改为**底对齐**头像底边，水平间距仍 8px | ✅ 浮层紧贴头像上方展开 |
-
-**实现依据宿主源码，三处按宿主原样对齐**：
-
-1. **登录态判据**：只有 `view.status === 'credential-stored'` 算登录（`ui-settings-account/AccountMenu.tsx:37`）。
-2. **未登录形态**：宿主该状态下**不渲染头像槽**，而是省略号图标 + 「更多」文案（`AccountMenu.tsx:67-72`）。插件窄态无文案，故只渲染省略号。原实现用 `'AI'` 字母，与原生不符。
-3. **`version` 来源**：`AccountClientMetadata.version` 必填且 Host 用 strict schema 校验。手写静态模块**没有 `process`**（渲染进程 `contextIsolation`、无 node 集成，`process.env.X` 的内联只作用于宿主自己的构建产物），所以改从页面全局 `window.__DSH_BOOT__.release.version` 取（`client-modules/manifest.ts:86-98`，页面注入处 `index.ts:673`），`process.env` 仅作兜底。上一版实现用 `process.env` → 恒为 `undefined` → `metadata === null` → 头像永远取不到。
-
-**本轮无法从界面区分的一点**：该账号本身没有头像 URL，宿主原生账号行显示的也是人形图标，所以「`version` 已能取到」与「`version` 仍取不到」在界面上表现相同。已用单测固定 `clientBuildVersion` 的取值顺序（`__DSH_BOOT__` 优先、无 release 时返回 undefined 不抛错）；真实头像渲染需在有头像的账号上验证。
-
-
-
-| 项 | 改前 | 改后 | 复验 |
-| --- | --- | --- | --- |
-| 头像 | 硬编码 `'AI'` 两字母 | `remote.account.getProfile` 取 `avatarUrl`；无图/失败用宿主同款人形占位 | ✅ 底部显示原生人形占位（当前未登录） |
-| 账号浮层位置 | 一律 top 对齐 + `clamp(innerHeight-200)`，头像在底部导致浮层飞到上方很远 | 账号浮层改为**底对齐**头像底边，水平间距仍 8px | ✅ 浮层紧贴头像上方展开 |
-
-账号调用按宿主 `accountClientMetadata` 同形构造 `{ version, locale, timezoneOffsetSeconds }`（`getTimezoneOffset` 符号翻转），缺 `DSH_CLIENT_VERSION` 时不发请求、直接降级占位。
-
-### 本轮验证方法
-
-`screencapture` + 像素定位图标坐标 + CGEvent 合成 `⌘B`/悬停/点击/`⌘R`；每次改动后 `npm run check`（19 项测试 + 4 条仓库规则）。
-
-## 首发发布（2026-11-04，0.1.0）
-
-发布链路见 [ADR-0003](adr/0003-release-pipeline.md)。结论：`@skylerfee/dsh-sidebar-rail@0.1.0` 已上线为 `latest`，内容与仓库一致，tag 已推送。
-
-| 步骤 | 结果 |
-| --- | --- |
-| 本会话 `npm publish` | ❌ `EOTP`：账号开启 2FA，非交互执行无法完成浏览器授权 |
-| 维护者以 staged publishing 提交 | ✅ registry 先出现占位版 `0.0.0-stage`（"Temporary package placeholder for staged publishing"） |
-| 网页端批准 | ✅ `0.1.0` 上线，`dist-tags = {"latest":"0.1.0"}` |
-| 发布内容一致性 | ✅ `dist.shasum 35db0dc6…` 与本地构建一致；解包 10 个文件与仓库源码逐字节相同（LICENSE、两份 README、client.js、cordis.patch.yml、icon.svg、index.js、两份 locale、package.json） |
-| 包元数据 | ✅ `license: MIT`、`peerDependencies` 6 项、`dependencies` 0 项、`fileCount: 10`、`unpackedSize: 65964` |
-| tag | ✅ `v0.1.0` 附注 tag 已推送；未建 GitHub Release（避免 CI 重复发布） |
-| 敏感信息 | ✅ 打包内容扫描无 token/手机号/本机绝对路径 |
-
-### 发布链路验证（Trusted Publisher）
