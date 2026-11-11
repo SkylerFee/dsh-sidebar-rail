@@ -2,7 +2,7 @@
 
 - 状态：已采纳（2026-11-10）
 - 取代：[ADR-0004](0004-sectioned-flyout.md) 的「分区独立滚动 + 每区 1/3 限高 + 标题固定」三件事。ADR-0004 的另一半——「浮层占满可用高度、高度不随内容与条数变化」——在本 ADR 里被标注为继续有效，但该条**实际从未落地**（TS 迁移漏传 `topFlush`）；其现状与取舍由 [ADR-0008](0008-flyout-height-follows-current-build.md) 修正。
-- 相关：`.dsr-sections` / `.dsr-section` / `.dsr-section-body` 系列样式、`src/client/model/geometry.ts` 的 `sectionMaxHeight` / `sectionBudgetFor` / `SECTION_HEIGHT_RATIO`、[spec-0.4.0](../spec-0.4.0-native-parity.md)
+- 相关：`.dsr-sections` / `.dsr-section` / `.dsr-section-body` 系列样式、`src/client/model/geometry.ts` 的 `sectionMaxHeight` / `sectionBudgetFor` / `SECTION_HEIGHT_RATIO`、[浮层原生对齐规格](../spec-native-parity.md)
 
 ## 背景
 
@@ -36,6 +36,6 @@
 ## 不要做什么
 
 - 不要改回分区独立滚动，也不要给分区重新加限高。碎片化滚动是被实测否决的，不是被忘记的。
-- 不要为了找回「标题常驻」而引入 sticky header。已在 [spec-0.4.0](../spec-0.4.0-native-parity.md) 的决策记录里明确否决：多段标题叠粘与宿主观感不同，实现复杂度也不成比例。
+- 不要为了找回「标题常驻」而引入 sticky header。已在 [浮层原生对齐规格](../spec-native-parity.md) 的决策记录里明确否决：多段标题叠粘与宿主观感不同，实现复杂度也不成比例。
 - 不要因为「整页滚动」就去掉固定底栏。底栏是标题滚走之后仍能找到条数设置的前提。
 - 不要删除 ADR-0004 的历史理由。它记录的是「两 pane → 三分区」那一步的正确取舍，本 ADR 只说明其中三条在 0.4.0 不再成立。

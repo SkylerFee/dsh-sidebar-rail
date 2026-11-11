@@ -1,8 +1,8 @@
-# 0.4.0 需求：会话列表的分页、空会话规则与定时任务标记
+# 需求：会话列表的分页、空会话规则与定时任务标记
 
 > 状态：**已实现并通过真机验收**——#16 空会话可见性、#17 分页并移除 recentCount、#18 定时任务时钟标记三项均已合并；验收结果见 [verify.md](verify.md) 的第 24–25 轮。本文件描述实现约定与预期行为，实际结果以 verify.md 为准。
 > 来源：2026-11-10 真机核验后提出的三项优化
-> 前置：[spec-0.4.0 native parity](spec-0.4.0-native-parity.md)、[ADR-0007](adr/0007-single-scroll-flyout.md)
+> 前置：[浮层原生对齐规格](spec-native-parity.md)、[ADR-0007](adr/0007-single-scroll-flyout.md)
 
 ## 1. 背景
 

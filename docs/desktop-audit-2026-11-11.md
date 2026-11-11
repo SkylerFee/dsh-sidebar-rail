@@ -85,7 +85,7 @@ Escape 先 `retract()`，再 `trigger.focus()`；按钮 `onFocus` 又安排打�
 
 ### F5：任务时钟在行尾，未达到行首规格（P3，本次新增能力的规格落差）
 
-位置：`src/client/components/primitives.tsx` 的 `Row()`。标题容器先于 `SessionMarkCell`，样式未调整两者顺序；真实最近列表截图中，时钟在最后一行的右端。与 `spec-0.4.0-session-list.md` 要求的行首 16px 格不一致。使用说明已按当前事实写成行尾，规格差异保留在此。
+位置：`src/client/components/primitives.tsx` 的 `Row()`。标题容器先于 `SessionMarkCell`，样式未调整两者顺序；真实最近列表截图中，时钟在最后一行的右端。与 `spec-session-list.md` 要求的行首 16px 格不一致。使用说明已按当前事实写成行尾，规格差异保留在此。
 
 时钟在真实数据下可见，但所有运行/未读/待操作状态与时钟互斥的瞬时表现、点击时钟不导航，本轮只有源码和单测依据，没有逐项真机操作证据。
 
