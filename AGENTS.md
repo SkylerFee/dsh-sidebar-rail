@@ -27,7 +27,7 @@ DeepSeek Harness 的 **macOS Desktop 折叠态增量图标轨**。开工前读 [
 脚本以 [package.json](package.json) 的 `scripts` 为唯一事实来源；当前入口：
 
 ```sh
-npm ci                 # 安装开发依赖（package-lock.json 锁定；.npmrc 用 legacy-peer-deps 解析）
+npm ci                 # 安装开发依赖（package-lock.json 锁定）
 npm run typecheck      # tsc --noEmit -p tsconfig.json，严格类型检查
 npm run build          # node scripts/build.mjs，生成 lib/index.js 与 lib/client.js
 npm run dev            # 同一构建脚本的 --watch 模式，改 src/ 自动重建
