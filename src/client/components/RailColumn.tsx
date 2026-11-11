@@ -25,11 +25,12 @@ import {
 } from './flyouts.tsx'
 import { RailSurface } from './RailSurface.tsx'
 import {
+  RAIL_HOTZONE_WIDTH,
   RAIL_REVEAL_WIDTH,
   REMOTE_TIMEOUT_MS,
   RETRACT_DELAY_MS,
 } from '../model/constants.ts'
-import { keepsRailRevealed } from '../model/geometry.ts'
+import { keepsRailRevealed, pointerInHotzone } from '../model/geometry.ts'
 import {
   groupPluginsByState,
   groupTasksByStatus,
@@ -213,11 +214,21 @@ export function RailColumn(props: RailColumnProps): ReactNode {
   /**
    * 唤出图标轨。
    *
-   * 唯一入口：热区、轨自身的 pointerenter、以及键盘焦点捕获都走这里，
-   * 因此「窗口是否聚焦」的门禁只需要在这一处判一次。
+   * 唯一入口：热区、轨自身的 pointerenter、以及键盘焦点捕获都走这里，因此
+   * 「窗口是否聚焦」与「指针是否真在左缘」两道门禁都只需在这一处判一次。
+   *
+   * 坐标门禁不是多余的：React 的 onPointerEnter 由**冒泡的 pointerover** 合成，
+   * 而 `relatedTarget` 为 null 的 pointerover 会被当成「进入」。多屏环绕布局下，
+   * 指针停在窗口**右缘的 resize 区**（已在窗口外、右侧还有另一块屏）时
+   * Chromium 仍会上报 pointer 事件，于是热区收到一次合成的 enter，右侧动鼠标
+   * 却把左侧的轨拉了出来。键盘路径不带坐标，因此显式放行。
+   * @param event - 触发事件；键盘焦点路径没有指针事件。
    */
-  const revealRail = useCallback(() => {
+  const revealRail = useCallback((event?: { clientX?: number }) => {
     if (!windowFocused) return
+    const x = event?.clientX
+    // 有 pointer 事件就必须落在左缘热区内；键盘路径（无坐标）直接放行。
+    if (typeof x === 'number' && !pointerInHotzone(x, RAIL_HOTZONE_WIDTH)) return
     setRevealed(true)
   }, [windowFocused])
 

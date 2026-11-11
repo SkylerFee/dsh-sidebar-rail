@@ -60,7 +60,13 @@ export interface RailSurfaceProps {
   /** 把焦点移进浮层。 */
   readonly onFocusFlyout: () => void
   /** 唤出条进入：展开图标轨。 */
-  readonly onReveal: () => void
+  /**
+   * 唤出图标轨。
+   *
+   * 带可选事件：指针路径把 clientX 交给它做「是否真在左缘」的判定；键盘焦点
+   * 路径没有指针事件，于是不带坐标、直接放行。
+   */
+  readonly onReveal: (event?: { clientX?: number }) => void
   /** 取消待收起。 */
   readonly onCancelRetract: () => void
   /** 安排收起。 */
@@ -177,16 +183,20 @@ export function RailSurface(props: RailSurfaceProps): ReactNode {
     // 收起改由指针位置决定（RailColumn 的 effect）。
     h('div', {
       className: 'dsr-rail-hotzone',
-      onPointerEnter: props.onReveal,
+      // 透传事件：坐标门禁要靠 clientX 区分「真的进入左缘」与「多屏右缘
+      // resize 区合成的 enter」。
+      onPointerEnter: (event: { clientX: number }) => {
+        props.onReveal(event)
+      },
     }),
     h('div', {
       // 轨根元素：与浮层 portal 并列，焦点跨两者时需要它来反查。
       ref: props.railRootRef,
       className: 'dsr-rail-float',
       'data-dsr-revealed': props.revealed === true ? 'true' : undefined,
-      onPointerEnter: () => {
+      onPointerEnter: (event: { clientX: number }) => {
         props.onCancelRetract()
-        props.onReveal()
+        props.onReveal(event)
       },
       // 离开图标轨会收起它，但延迟一小段时间，这样只是掠过边缘的指针
       // 不会让它闪烁。唤出条没有自己的离开处理，这正是两个状态不会互相追逐的原因。
@@ -194,7 +204,10 @@ export function RailSurface(props: RailSurfaceProps): ReactNode {
         if (open === null) props.onScheduleRetract()
       },
       onPointerMove: props.onCancelRetract,
-      onFocusCapture: props.onReveal,
+      // 键盘路径：不带坐标，revealRail 因此不做热区判定、直接放行。
+      onFocusCapture: () => {
+        props.onReveal()
+      },
       // 焦点真的离开了「轨 + 浮层」才收起。不能用 contains(relatedTarget)：
       // 浮层是另一个 portal，焦点从轨走进浮层时 relatedTarget 在浮层里、
       // 不在 currentTarget 子树内，会被误判成「离开」；而一旦放行，焦点

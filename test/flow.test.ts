@@ -21,8 +21,14 @@ import {
   writeExpandedProjectIds,
   writeStore,
 } from '../src/client/preferences.ts'
-import { RAIL_REVEAL_WIDTH, STORE_KEY, TITLE_MARQUEE_PX_PER_MS } from '../src/client/model/constants.ts'
-import { DEFAULT_FLYOUT_ANCHOR, flyoutAnchorFrom, sectionIsOpen } from '../src/client/model/geometry.ts'
+import {
+  POINTER_HOTZONE_SLACK,
+  RAIL_HOTZONE_WIDTH,
+  RAIL_REVEAL_WIDTH,
+  STORE_KEY,
+  TITLE_MARQUEE_PX_PER_MS,
+} from '../src/client/model/constants.ts'
+import { DEFAULT_FLYOUT_ANCHOR, flyoutAnchorFrom, pointerInHotzone, sectionIsOpen } from '../src/client/model/geometry.ts'
 import { normalizeTasks, pickedDirectory, remoteOutcome, sessionHasActiveTask } from '../src/client/model/remote.ts'
 import { shouldMarqueeTitle, titleMarqueeFrame, titleScrollRange } from '../src/client/model/formatting.ts'
 
@@ -420,4 +426,33 @@ test('titleMarqueeFrame: crawling reaches the far edge monotonically', () => {
     assert.ok(seen[i]! >= seen[i - 1]!, 'the marquee never travels backwards')
   }
   assert.equal(seen[seen.length - 1], range, 'it settles exactly at the far edge')
+})
+// ------------------------------------------------- 唤出的坐标门禁 --
+
+test('pointerInHotzone: only the left edge reveals', () => {
+  const W = RAIL_HOTZONE_WIDTH   // 12
+  assert.equal(pointerInHotzone(0, W), true, 'the very edge counts')
+  assert.equal(pointerInHotzone(6, W), true, 'mid strip counts')
+  assert.equal(pointerInHotzone(W, W), true, 'the strip boundary counts')
+  // 容差：落点精度与最后一条 pointerover 可能略过边界。
+  assert.equal(pointerInHotzone(W + POINTER_HOTZONE_SLACK, W), true, 'slack is included')
+  assert.equal(pointerInHotzone(W + POINTER_HOTZONE_SLACK + 1, W), false, 'past the slack does not')
+  assert.equal(pointerInHotzone(-1, W), false, 'negative x is outside the viewport')
+})
+
+test('pointerInHotzone: the right edge never reveals', () => {
+  // 真实的误报场景：多屏下指针停在右缘 resize 区，Chromium 仍上报 pointer 事件。
+  const W = RAIL_HOTZONE_WIDTH
+  for (const x of [400, 800, 1200, 1512, 2560, 3840]) {
+    assert.equal(pointerInHotzone(x, W), false, `x=${x} must not reveal`)
+  }
+})
+
+test('pointerInHotzone: junk input never reveals', () => {
+  const W = RAIL_HOTZONE_WIDTH
+  assert.equal(pointerInHotzone(Number.NaN, W), false)
+  assert.equal(pointerInHotzone(Number.POSITIVE_INFINITY, W), false)
+  assert.equal(pointerInHotzone(5, Number.NaN), false)
+  assert.equal(pointerInHotzone(5, 0), false, 'a zero-width hotzone cannot be entered')
+  assert.equal(pointerInHotzone(5, -1), false)
 })

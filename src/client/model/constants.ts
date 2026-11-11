@@ -98,3 +98,11 @@ export const MIN_TITLE_REVEAL_PX = 8
  * 慢到能边移边读。照抄宿主 `TITLE_MARQUEE_PX_PER_MS`。
  */
 export const TITLE_MARQUEE_PX_PER_MS = 0.03
+/**
+ * 热区坐标判定的容差（CSS 像素）。
+ *
+ * 指针移向热区时，最后一条 `pointerover` 的 x 可能已经略过 12px 边界，而
+ * 手指/触控板的落点精度也在几像素量级；留一点余量，避免「明明到了左缘却不
+ * 唤出」。取值远小于右缘到左缘的距离，因此不会把右侧的误报重新放进来。
+ */
+export const POINTER_HOTZONE_SLACK = 4
