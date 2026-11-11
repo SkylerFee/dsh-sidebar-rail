@@ -41,8 +41,6 @@ export interface FlyoutShellOptions {
   readonly onPointerEnter: () => void
   /** 指针离开面板。 */
   readonly onPointerLeave: () => void
-  /** Escape 处理：收起并回焦触发按钮。 */
-  readonly onEscape: () => void
   /**
    * 面板根元素的 ref。
    *
@@ -117,13 +115,10 @@ export function makeFlyoutShell(options: FlyoutShellOptions): FlyoutShell {
           options.onFocusLost()
         }, 0)
       },
-      onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
-        // Escape 把焦点交回触发按钮，于是下一次 Tab 从图标轨继续，
-        // 而不是跳到页面顶部。
-        if (event.key !== 'Escape') return
-        event.stopPropagation()
-        options.onEscape()
-      },
+      // Escape 刻意不绑定开关：浮层由指针与焦点驱动，键盘用户改用
+      // Tab 离开（见 RailColumn 的 focusInsideRailOrFlyout）。绑定 Escape
+      // 会与「收起源按钮」的回焦路径打架——回焦会再次触发按钮的 onFocus，
+      // 120ms 后把浮层重新打开。
     },
     h('div', { className: 'dsr-flyout-head' }, title),
     sections === true

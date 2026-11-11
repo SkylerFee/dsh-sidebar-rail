@@ -109,11 +109,17 @@ export function useFlyoutList<Row>(options: FlyoutListOptions<Row>): ListState<R
       .finally(() => {
         window.clearTimeout(timer)
       })
-    // 清理在浮层切走时运行。`live` 挡住旧答案落地，`started` 也必须随
-    // `open` 变化复位，否则切回来会提前返回、列表永远停在「加载中」。
+    // 清理在浮层切走时运行。`live` 挡住旧答案落地；`started` 必须在这里
+    // 一起复位——它是「本轮已经发过请求」的标记，而这一轮的请求已经作废。
+    //
+    // 不复位的后果是一个永久加载态：列表同时挂在两个浮层上（任务的
+    // `when: ['tasks', 'workspace']`）时，在取数完成前从工作区切到任务，
+    // 清理会置 live=false 并清掉超时，而新 effect 因 `active && started` 提前
+    // 返回——旧答案落不了地、新请求不发起、连 5 秒超时也消失了。
     return () => {
       live = false
       window.clearTimeout(timer)
+      started.current = false
     }
   }, [open, active, whenKey, label])
 

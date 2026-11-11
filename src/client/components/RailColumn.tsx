@@ -280,30 +280,6 @@ export function RailColumn(props: RailColumnProps): ReactNode {
     }
   }, [revealed, open, panelRef])
 
-  /**
-   * 关闭浮层，但把图标轨留在原处。
-   *
-   * 悬停在图标之间会触发这里：指针跨过每个图标的边界，把那只当「交互结束」
-   * 去收轨会让轨从边缘条重新展开——恰好在图标列这个边界最密的地方，
-   * 是很容易触发的振荡。
-   */
-  const dismissFlyout = useCallback(() => {
-    dismiss()
-  }, [dismiss])
-
-  // Escape 关闭浮层。收起走 retract（见下），因此这里只处理关上。
-  useEffect(() => {
-    if (open === null) return undefined
-    /** 键盘上的 Escape。 */
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') dismissFlyout()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [open, dismissFlyout])
-
   // 账号座位每个挂载只读一次。按 PRD 的非目标，它不订阅 account/watch，
   // 因此插件挂载期间登录或退出都会让座位保持原样；宿主自己的账号页是权威视图。
   // 跳过订阅也让插件少一个必须拆除的长生命周期监听器。
@@ -477,7 +453,7 @@ export function RailColumn(props: RailColumnProps): ReactNode {
     }
   }, [openSession, retract])
 
-  /** 浮层外壳：定位、固定高度、指针与 Escape 行为。 */
+  /** 浮层外壳：定位与固定高度。Escape 刻意不绑定开关（见 flyout-shell 的注释）。 */
   const shell = makeFlyoutShell({
     title: '',
     body: null,
@@ -486,12 +462,6 @@ export function RailColumn(props: RailColumnProps): ReactNode {
     topClearance: readFrameTopClearance(),
     onPointerEnter: cancelClose,
     onPointerLeave: scheduleClose,
-    onEscape: () => {
-      // Escape 把焦点交回触发按钮，于是下一次 Tab 从图标轨继续而不是跳到页面顶部。
-      retract()
-      const trigger = triggerRef.current
-      if (trigger !== null) trigger.focus()
-    },
     panelRef,
     onFocusLeave: focusInsideRailOrFlyout,
     onFocusLost: () => {
