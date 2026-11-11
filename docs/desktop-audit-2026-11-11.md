@@ -6,7 +6,7 @@
 
 - 日期：2026-11-11，Asia/Shanghai。
 - 分支：`refactor/typescript-migration`，提交 `de05173b16a87567d7cd2b425a650ea2a925fdf1`。审查 `fd670d7` 之后的改动，并复核影响使用说明的既有问题；开始时工作树干净。
-- 包：`@skylerfee/dsh-sidebar-rail@0.4.0`。源码已包含 0.5.0 / 0.5.1 功能轮次，不能据此宣称对应 npm 版本已经发布。
+- 包：`@skylerfee/dsh-sidebar-rail@0.4.0`。源码包含 0.4.0 的全部改动；0.4.0 尚未发布到 npm（registry 上最新为 0.3.3）。
 - 本机：macOS 27.2（26B123）、Node.js 26.0.0、npm 11.12.1。CI 声明 Node.js 22，本轮未切换到 Node.js 22 复跑。
 - 宿主：`/Applications/DeepSeek Harness.app`，`__DSH_BOOT__.release.version` 实读为 `0.2.2-rc.1`，中文。Desktop profile 的原有依赖与软链均指向当前 checkout，没有重新安装或修改 profile 配置。
 - 主题：Catppuccin **Frappé 深色 / Latte 浅色**，沿用现有玻璃质感兼容模式；只切换配色，未改变玻璃参数、代码高亮或其他插件启停。
@@ -85,7 +85,7 @@ Escape 先 `retract()`，再 `trigger.focus()`；按钮 `onFocus` 又安排打�
 
 ### F5：任务时钟在行尾，未达到行首规格（P3，本次新增能力的规格落差）
 
-位置：`src/client/components/primitives.tsx` 的 `Row()`。标题容器先于 `SessionMarkCell`，样式未调整两者顺序；真实最近列表截图中，时钟在最后一行的右端。与 `spec-0.5.1-session-list.md` 要求的行首 16px 格不一致。使用说明已按当前事实写成行尾，规格差异保留在此。
+位置：`src/client/components/primitives.tsx` 的 `Row()`。标题容器先于 `SessionMarkCell`，样式未调整两者顺序；真实最近列表截图中，时钟在最后一行的右端。与 `spec-0.4.0-session-list.md` 要求的行首 16px 格不一致。使用说明已按当前事实写成行尾，规格差异保留在此。
 
 时钟在真实数据下可见，但所有运行/未读/待操作状态与时钟互斥的瞬时表现、点击时钟不导航，本轮只有源码和单测依据，没有逐项真机操作证据。
 

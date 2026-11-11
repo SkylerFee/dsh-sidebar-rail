@@ -1,7 +1,9 @@
 # 0.4.0 规格：浮层分区化
 
 > 状态：设计已确认（grill 完成），待拆票实现
-> 决策记录：[GLOSSARY.md](../../GLOSSARY.md)、[ADR-0004](../adr/0004-sectioned-flyout.md)、[ADR-0005](../adr/0005-host-public-api-boundary.md)
+> 决策记录：[GLOSSARY.md](../GLOSSARY.md)、[ADR-0004](adr/0004-sectioned-flyout.md)、[ADR-0005](adr/0005-host-public-api-boundary.md)
+>
+> 历史状态：0.4.0 的规格快照。当时的分区滚动与 1/3 限高已被 [ADR-0007](adr/0007-single-scroll-flyout.md) 撤销，浮层高度约定被 [ADR-0008](adr/0008-flyout-height-follows-current-build.md) 修正。保留仅供追溯。
 
 ## 1. 目标
 

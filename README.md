@@ -36,7 +36,7 @@ Captured on macOS Desktop `0.2.2-rc.1` on 2026-11-11, using Catppuccin Latte (li
 | Web, any platform | No rail; the host keeps its existing collapsed rail |
 | Windows / Linux Desktop | No rail; support is untested |
 
-Recorded Desktop checks used macOS Desktop `0.2.2-rc.1`. See `peerDependencies` in [package.json](package.json) for other compatible host versions. Current source includes the 0.5.0 / 0.5.1 feature rounds while the package version remains `0.4.0`; the published package does not imply these changes are included. See the [current acceptance report](docs/desktop-audit-2026-11-11.md) for results and limitations. The published package ships prebuilt `lib/` entries, so installing it needs no compiler. Source development and checks require Node.js ≥ 22.19.0 plus `npm ci` and a build step (see [Development](#development)).
+Recorded Desktop checks used macOS Desktop `0.2.2-rc.1`. See `peerDependencies` in [package.json](package.json) for other compatible host versions. Version 0.4.0 is a full rewrite that ships the TypeScript source, the host-native flyout model, paged session lists and the scheduled-task mark together; it has not been published to npm yet (the registry still shows 0.3.3). See the [current acceptance report](docs/desktop-audit-2026-11-11.md) for results and limitations. The published package ships prebuilt `lib/` entries, so installing it needs no compiler. Source development and checks require Node.js ≥ 22.19.0 plus `npm ci` and a build step (see [Development](#development)).
 
 <a id="install"></a>
 ## Install and manage
@@ -172,7 +172,6 @@ Follow [ADR-0003](docs/adr/0003-release-pipeline.md) to release: update and push
 | [Product requirements](docs/PRD.md) | Use cases, interactions and acceptance criteria |
 | [Design](docs/design.md) | Additive registration, layout, data sources, cleanup and local storage |
 | [Verification log](docs/verify.md) | Recorded results, historical defects and unverified paths |
-| [0.2.0 audit report](docs/desktop-audit-0.2.0-2026-11-04.md) | Findings and reproduction evidence from that version; later verification entries track fixes |
 | [Glossary](GLOSSARY.md) | Shared terms for the rail, sidebar, flyout and current session |
 | [TypeScript migration](docs/typescript-migration.md) | Module layout, build protocol, test migration and staged plan |
 | [Architecture decisions](docs/adr/) | Narrow-window eligibility, TypeScript source plus build toolchain ([ADR-0006](docs/adr/0006-typescript-source-and-build.md)) and release workflow |

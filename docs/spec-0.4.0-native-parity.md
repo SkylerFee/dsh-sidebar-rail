@@ -1,8 +1,8 @@
-# 0.5.0 需求：贴近宿主原生的浮层与交互修正
+# 0.4.0 需求：贴近宿主原生的浮层与交互修正
 
 > 状态：**已实现**——#9 ADR-0007、#10 三个缺陷、#11 整体滚动、#12 项目行、#13 间距与视觉，五张票全部合并（HEAD 见 git log）。**真机验收见 [verify.md](verify.md)**；本文件描述的是实现约定与预期行为，实际结果以 verify.md 为准。
 > 来源：2026-11-10 通过 CUA 实测 Codex（ChatGPT.app 的 Codex 模式）侧边栏，与本插件逐项对比后提出的 6 组调整
-> 相关：[GLOSSARY.md](../GLOSSARY.md)、[ADR-0001](adr/0001-narrow-viewport-predicate.md)、[ADR-0004](adr/0004-sectioned-flyout.md)、[ADR-0005](adr/0005-host-public-api-boundary.md)、[spec-0.4.0](spec-0.4.0-sectioned-flyout.md)
+> 相关：[GLOSSARY.md](../GLOSSARY.md)、[ADR-0001](adr/0001-narrow-viewport-predicate.md)、[ADR-0004](adr/0004-sectioned-flyout.md)、[ADR-0005](adr/0005-host-public-api-boundary.md)、[历史 0.4.0 规格](spec-historical-0.4.0-sectioned-flyout.md)
 
 ## 1. 背景
 

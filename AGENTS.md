@@ -13,7 +13,7 @@ DeepSeek Harness 的 **macOS Desktop 折叠态增量图标轨**。开工前读 [
 ## 硬约束（违反即否决）
 
 1. **不得重新引入替换 `sidebar` 单槽的实现**。单槽替换会让 `sidebar.settings` 一起消失，宿主 `SettingsRoot` 不再挂载，设置（账号、主题、插件管理）整体不可达；搜索、视图选项、添加工作区、账号菜单也会丢。这是硬性否决理由，不是风格取舍。
-2. **图标轨只通过 `shell.overlay` 增量注册**（`id: 'dsh-sidebar-rail.rail'`），不声明 `children`。不注册 `plugins.bundle.config`——插件已无自己的设置项（可调的 `recentCount` 在 0.5.1 被分页取代，设置块与其注册一并删除）。
+2. **图标轨只通过 `shell.overlay` 增量注册**（`id: 'dsh-sidebar-rail.rail'`），不声明 `children`。不注册 `plugins.bundle.config`——插件已无自己的设置项（可调的 `recentCount` 在 0.4.0 被分页取代，设置块与其注册一并删除）。
 3. **不得改宿主栅格列宽，不得用 `!important` 覆盖宿主样式**；浮轨只能 `createPortal(document.body)` + `position: fixed`。
 4. **轨默认隐藏（`translateX(-100%)`），由 12px 左边条热区或键盘焦点唤出，不得改回常驻显示**。宿主折叠时主区占满窗口，而标签行没有左侧避让（只有标题行应用了 `--dsh-frame-leading-clearance`），常驻会把会话页首个「对话」标签连同点击区域一起盖住。
 5. **窄窗判定不得改回 CSS 媒体查询**。阈值与推导见 [ADR-0001](docs/adr/0001-narrow-viewport-predicate.md)；判定必须是可单测的纯函数。

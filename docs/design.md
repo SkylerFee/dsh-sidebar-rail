@@ -25,7 +25,7 @@
 | Web 展开态 | 完整原生侧栏 | 不渲染 |
 | Windows / Linux | 未验证 | 不渲染 |
 
-判据是 `document.documentElement.dataset.platform === 'darwin'`、宿主 frame 带 `data-sidebar-collapsed` 且视口宽度 ≥ 768px，任一不成立就 `return null`。插件**没有设置块**：唯一的设置项（可调最近会话条数）在 0.5.1 被分页取代，`plugins.bundle.config` 的注册与 `RailSettings` 组件一并删除。
+判据是 `document.documentElement.dataset.platform === 'darwin'`、宿主 frame 带 `data-sidebar-collapsed` 且视口宽度 ≥ 768px，任一不成立就 `return null`。插件**没有设置块**：唯一的设置项（可调最近会话条数）在 0.4.0 被分页取代，`plugins.bundle.config` 的注册与 `RailSettings` 组件一并删除。
 
 ## 2. 挂载点：`shell.overlay` list 槽
 
@@ -195,7 +195,7 @@ transform: translateX(-100%);
 | 项目 | 其余工作区 | 宿主返回顺序 |
 | 最近会话 | 未归档、非子代理的会话；空白会话只保留当前那一个 | `updatedAt` 倒序，分页显示：默认 10 条，注意力行自动突破水位，点「显示更多」再 +10 |
 
-- 置顶持久化：`localStorage['dsh.sidebar-rail.v1'] = { pinnedWorkspaceIds: string[] }`，行内图钉按钮切换，写入用合并语义（`{ ...readStore(), ...patch }`）。展开的项目存在同一键的 `expandedProjectIds`（0.5.0 起），写入同样走合并语义，两个字段互不覆盖。
+- 置顶持久化：`localStorage['dsh.sidebar-rail.v1'] = { pinnedWorkspaceIds: string[] }`，行内图钉按钮切换，写入用合并语义（`{ ...readStore(), ...patch }`）。展开的项目存在同一键的 `expandedProjectIds`（0.4.0 起），写入同样走合并语义，两个字段互不覆盖。
 - 列表分页是组件内状态，不落盘：基础 `PAGE_SIZE = 10`，自动提升上限 `PAGE_SIZE_AUTO_MAX = 50`，只升不降，浮层 `dismiss` / `retract` 时复位。实现见 `hooks/use-flyout.ts`（水位控制器）与 `model/workspaces.ts`（`watermarkSlice` / `requiredWatermark`），照抄宿主 `WorkspaceBrowser` 的同名机制。
 - 折叠状态**不再**由插件持久化：宿主自己持有并持久化，插件只读 `data-sidebar-collapsed`。
 
@@ -208,7 +208,7 @@ transform: translateX(-100%);
 | 插件自己的折叠状态持久化（store 里的 `collapsed`、挂载时 `toggleSidebar()` 校正） | 删除。折叠状态归宿主 |
 | `openSettings` 命令探测 | 删除。账号 / 更多浮层只给「展开侧栏」，把设置入口交回宿主 |
 | `workspaceSessions` 辅助函数 | 删除。会话归属改用 `WorkspaceView.sessionIds` 反查 |
-| 可调的最近会话条数（`recentCount`）、浮层底部步进器、插件详情页设置块 | 删除（0.5.1）。改为分页：`PAGE_SIZE = 10` + 「显示更多」，注意力行自动突破水位；`RailSettings` 组件与 `plugins.bundle.config` 注册一并移除 |
+| 可调的最近会话条数（`recentCount`）、浮层底部步进器、插件详情页设置块 | 删除（0.4.0）。改为分页：`PAGE_SIZE = 10` + 「显示更多」，注意力行自动突破水位；`RailSettings` 组件与 `plugins.bundle.config` 注册一并移除 |
 
 ## 13. 容错
 

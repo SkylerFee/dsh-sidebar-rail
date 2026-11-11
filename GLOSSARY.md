@@ -49,7 +49,7 @@ enabled === true && official !== true && installed !== false && availability !==
 
 浮层内部的一级分组，由一个标题行加一组条目组成；可展开/收起，收起时内容卸载。0.4.0 起每个浮层都按分区组织。
 
-关键含义（0.5.0 起）：分区**只是分组，不是滚动单元**。整个浮层共用一个滚动容器，分区标题随内容一起滚动（[ADR-0007](docs/adr/0007-single-scroll-flyout.md)）。这与 0.4.0 的「固定标题 + 独立滚动」相反——那次结构已被实测否决。
+关键含义（0.4.0 起）：分区**只是分组，不是滚动单元**。整个浮层共用一个滚动容器，分区标题随内容一起滚动（[ADR-0007](docs/adr/0007-single-scroll-flyout.md)）。这与更早的「固定标题 + 独立滚动」相反——那次结构已被实测否决。
 
 分区收起/展开不影响浮层总高度：浮层高度由「chrome 带之下到底边」钉死，只随窗口变化。
 
@@ -87,7 +87,7 @@ enabled === true && official !== true && installed !== false && availability !==
 - 作用范围：最近会话区，以及每个项目各自的展开列表；每个列表独立计数（最近会话固定键 `recent`，项目用 `project:<workspaceId>`）。
 - 机制照抄宿主 `WorkspaceBrowser` 的 `watermarkRows` / `requiredWatermark`。与宿主的一处有意差异：自动提升不考虑 `runningSubagentCount`（需要子代理投影，按 PRD 属于非目标）。
 
-**不要**把分页说成「最近会话条数设置」——那个可调的 `recentCount` 偏好已在 0.5.1 整项移除，也没有对应的设置块或步进器。
+**不要**把分页说成「最近会话条数设置」——那个可调的 `recentCount` 偏好已在 0.4.0 整项移除，也没有对应的设置块或步进器。
 
 ## 新建会话按钮 new-session action
 

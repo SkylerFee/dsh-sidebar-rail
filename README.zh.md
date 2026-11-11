@@ -36,7 +36,7 @@
 | Web（任意平台） | 不渲染图标轨，保留宿主已有的折叠轨 |
 | Windows / Linux Desktop | 不渲染图标轨，未验证支持 |
 
-已记录的真机环境为 macOS Desktop `0.2.2-rc.1`；其他宿主版本的兼容范围见 [package.json](package.json) 的 `peerDependencies`。当前源码包含 0.5.0 / 0.5.1 功能轮次，包版本仍为 `0.4.0`；已发布包不代表包含这些改动。实际结果与限制见[本轮验收报告](docs/desktop-audit-2026-11-11.md)。发布包内是已构建的 `lib/` 入口，安装时不需要编译器；源码开发与检查需要 Node.js ≥ 22.19.0，并要先 `npm ci`、再构建（见[开发与贡献](#development)）。
+已记录的真机环境为 macOS Desktop `0.2.2-rc.1`；其他宿主版本的兼容范围见 [package.json](package.json) 的 `peerDependencies`。0.4.0 是一次完整重写：TypeScript 源码、贴近宿主的浮层结构、分页会话列表与定时任务标记都在这个版本里；它尚未发布到 npm（registry 上仍是 0.3.3）。实际结果与限制见[本轮验收报告](docs/desktop-audit-2026-11-11.md)。发布包内是已构建的 `lib/` 入口，安装时不需要编译器；源码开发与检查需要 Node.js ≥ 22.19.0，并要先 `npm ci`、再构建（见[开发与贡献](#development)）。
 
 <a id="install"></a>
 ## 安装与启停
@@ -172,7 +172,6 @@ PR 标题遵循 Conventional Commits，摘要、说明与验证结果使用简�
 | [产品需求](docs/PRD.md) | 使用场景、交互规格与验收清单 |
 | [设计说明](docs/design.md) | 增量挂载、布局、数据来源、清理与本地存储 |
 | [验证记录](docs/verify.md) | 各轮真实结果、历史缺陷与未验证项 |
-| [0.2.0 审查报告](docs/desktop-audit-0.2.0-2026-11-04.md) | 当时发现的问题与复现证据，修复进展见后续验证记录 |
 | [术语表](GLOSSARY.md) | 轨、侧栏、浮层、当前会话等统一用词 |
 | [TypeScript 迁移指南](docs/typescript-migration.md) | 模块划分、构建协议、测试迁移与分阶段计划 |
 | [架构决策](docs/adr/) | 窄窗判定、TypeScript 源码与构建工具链（[ADR-0006](docs/adr/0006-typescript-source-and-build.md)）、发布流程 |

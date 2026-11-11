@@ -15,7 +15,7 @@
 - [项目规则](../AGENTS.md)、[中文说明](../README.zh.md)、[编码规范](../CODING_STANDARDS.md)、[术语表](../GLOSSARY.md)。
 - [ADR-0002：零依赖、无构建](adr/0002-zero-dependency-no-build.md)。
 - [ADR-0004：分区浮层](adr/0004-sectioned-flyout.md)、[ADR-0005：宿主公开 API](adr/0005-host-public-api-boundary.md)。
-- [0.4.0 分区规格](spec-0.4.0-sectioned-flyout.md)、[最新验证记录](verify.md)、[2026-11-10 Desktop 审计](desktop-audit-0.4.0-2026-11-10.md)。
+- [历史 0.4.0 分区规格](spec-historical-0.4.0-sectioned-flyout.md)、[最新验证记录](verify.md)。
 - [现有设计说明](design.md)：其中仍有旧布局描述，应结合上述规格、ADR 和当前源码核对，不能按旧文档把布局改回 70% 高度或两区等分。
 
 ### 1.2 范围内
@@ -56,7 +56,7 @@ P0 就要只读核查目标 profile 是否 link 本 checkout，以及插件是�
 
 ```text
  M docs/verify.md
-?? docs/desktop-audit-0.4.0-2026-11-10.md
+?? docs/desktop-audit-0.4.0-2026-11-10.md   # 该文件已随历史文档清理移除
 ```
 
 本指南也是当前新增文档。不要使用 `git reset --hard`、`git clean` 或全仓库 `git restore` 来准备工作区；如需隔离，使用单独分支或 worktree，并显式携带阅读所需的未提交报告。
