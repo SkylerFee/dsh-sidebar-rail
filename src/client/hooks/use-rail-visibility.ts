@@ -79,3 +79,39 @@ export function readFrameTopClearance(): number {
   }
   return FRAME_TOP_CLEARANCE_FALLBACK
 }
+/**
+ * 读「本窗口是否处于聚焦状态」。
+ *
+ * 图标轨的唤出条贴在窗口左缘，而 macOS 上指针移进一个**未聚焦**的窗口时，
+ * 浏览器依旧会派发 `pointerenter`——于是切到别的应用后，只要指针扫过那条
+ * 12px 热区，本插件的轨就会滑出来，而人根本没打算用它。
+ *
+ * `document.hasFocus()` 正是「这个文档是否拥有键盘焦点」的权威答案：窗口
+ * 失去焦点时它变 false。除了 focus / blur，还要听 `visibilitychange`——
+ * 切到别的 Space 或最小化时 focus 事件不保证到达。
+ * @returns 文档当前持有焦点时为 true。
+ */
+export function useWindowFocused(): boolean {
+  /** 读一次权威答案；没有 document 时按「未聚焦」处理，宁可不唤出。 */
+  const read = (): boolean => {
+    if (typeof document === 'undefined') return false
+    return document.hasFocus()
+  }
+  const [focused, setFocused] = useState(read)
+  useEffect(() => {
+    /** 把焦点状态同步进 React。 */
+    const update = (): void => {
+      setFocused(read())
+    }
+    update()
+    window.addEventListener('focus', update)
+    window.addEventListener('blur', update)
+    document.addEventListener('visibilitychange', update)
+    return () => {
+      window.removeEventListener('focus', update)
+      window.removeEventListener('blur', update)
+      document.removeEventListener('visibilitychange', update)
+    }
+  }, [])
+  return focused
+}

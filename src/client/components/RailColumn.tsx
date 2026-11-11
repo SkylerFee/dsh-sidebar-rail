@@ -13,7 +13,7 @@ import { h } from '../jsx.ts'
 import type { RailColumnProps } from '../contracts.ts'
 import { useFlyout } from '../hooks/use-flyout.ts'
 import type { FlyoutKind } from '../hooks/use-flyout.ts'
-import { readFrameTopClearance } from '../hooks/use-rail-visibility.ts'
+import { readFrameTopClearance, useWindowFocused } from '../hooks/use-rail-visibility.ts'
 import { useFlyoutList } from '../hooks/use-remote-list.ts'
 import { makeFlyoutShell } from './flyout-shell.tsx'
 import {
@@ -172,6 +172,13 @@ export function RailColumn(props: RailColumnProps): ReactNode {
 
   // 图标轨保持滑出，直到指针到达左缘、或有人用键盘聚焦它。
   const [revealed, setRevealed] = useState(false)
+  /**
+   * 本窗口是否持有焦点。
+   *
+   * macOS 上指针滑进**未聚焦**的窗口也会派发 pointerenter，因此只看指针
+   * 位置会让轨在别的应用里被扫出来。唤出与保持都需要这一条为前提。
+   */
+  const windowFocused = useWindowFocused()
   const retractTimer = useRef<number | undefined>(undefined)
 
   /**
@@ -195,6 +202,24 @@ export function RailColumn(props: RailColumnProps): ReactNode {
   }, [cancelRetract])
 
   useEffect(() => cancelRetract, [cancelRetract])
+
+  /**
+   * 唤出图标轨。
+   *
+   * 唯一入口：热区、轨自身的 pointerenter、以及键盘焦点捕获都走这里，
+   * 因此「窗口是否聚焦」的门禁只需要在这一处判一次。
+   */
+  const revealRail = useCallback(() => {
+    if (!windowFocused) return
+    setRevealed(true)
+  }, [windowFocused])
+
+  // 窗口失去焦点时立刻收起：留在屏幕上的轨属于「我刚才在用」，不是现在。
+  // 指针可能仍停在轨上，但那时人已经切到别的应用了。
+  useEffect(() => {
+    if (windowFocused) return
+    setRevealed(false)
+  }, [windowFocused])
 
   /**
    * 让图标轨可见性与指针位置保持同步。
@@ -578,9 +603,7 @@ export function RailColumn(props: RailColumnProps): ReactNode {
       triggerRef.current = node
     },
     onFocusFlyout: focusFlyout,
-    onReveal: () => {
-      setRevealed(true)
-    },
+    onReveal: revealRail,
     onCancelRetract: cancelRetract,
     onScheduleRetract: scheduleRetract,
     onBlurCollapse: () => {

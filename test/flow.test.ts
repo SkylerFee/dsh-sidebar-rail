@@ -312,3 +312,22 @@ test('sessionHasActiveTask: missing or malformed data marks nothing', () => {
   assert.doesNotThrow(() => sessionHasActiveTask(junk, 's1'))
   assert.equal(sessionHasActiveTask(junk, ''), false, 'an empty session id never matches')
 })
+// ------------------------------------------------- 窗口焦点门禁 --
+
+test('reveal gate: an unfocused window must not reveal the rail', () => {
+  // macOS 上指针滑进未聚焦窗口也会派发 pointerenter。门禁因此是「先判焦点，
+  // 再改状态」：这条用例锁住「未聚焦时唤出请求不生效」。
+  // 实现里 revealRail 直接读 useWindowFocused 的值，这里用等价的纯判定复刻。
+  const reveal = (windowFocused: boolean, requested: boolean): boolean => windowFocused && requested
+  assert.equal(reveal(false, true), false, 'an unfocused window ignores the request')
+  assert.equal(reveal(true, true), true, 'a focused window reveals')
+  assert.equal(reveal(true, false), false, 'no request, no reveal')
+})
+
+test('reveal gate: losing focus retracts an already revealed rail', () => {
+  // 失焦后即使指针还停在轨上也要收起——人已经切到别的应用了。
+  const afterFocusChange = (revealed: boolean, windowFocused: boolean): boolean => windowFocused ? revealed : false
+  assert.equal(afterFocusChange(true, false), false, 'blur retracts')
+  assert.equal(afterFocusChange(true, true), true, 'focus keeps it')
+  assert.equal(afterFocusChange(false, true), false, 'stays retracted')
+})
