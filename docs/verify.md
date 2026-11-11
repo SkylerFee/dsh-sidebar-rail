@@ -1,5 +1,334 @@
 # 验证记录
 
+## Windows Desktop 首轮验证（2026-11-11，第 26 轮）
+
+> 状态：**通过**。这是本插件第一次在 Windows 上运行。
+
+**环境**
+
+| 项 | 值 |
+| --- | --- |
+| 平台 | Windows 11 Desktop |
+| 宿主 | DSH `0.2.2-rc.1` |
+| 插件 | `@skylerfee/dsh-sidebar-rail@0.4.0`（HEAD `b40da10` 之后的打包产物） |
+| 安装方式 | 手工传入 `npm pack` 产物（`skylerfee-dsh-sidebar-rail-0.4.0.tgz`） |
+
+**本轮为 Windows 做的改动**（提交 `b40da10`）
+
+- 平台判定先由写死 `darwin` 改为白名单。**随后**（同一轮内）又改为按宿主折叠列的**实际宽度**判断（`hostCollapsedColumnIsEmpty`）：读 frame 的 `grid-template-columns` 第一列，归零才接管。理由是宿主对 Linux Desktop 与 Web 保留 56px 折叠轨，按平台名会叠成双轨；按宽度判断在任何平台都对，宿主调整也不用改插件。
+  依据是宿主 `AppFrame` 的实际行为——两个 Desktop 平台都把折叠列压到零宽
+  （`collapsedWidth = drawer || darwin || windowsTitlebar ? 0 : 56`），折叠后没有
+  任何轨可点；Web 自带 56px 折叠轨，因此必须排除。
+- 复核了三处 macOS 专有点，确认无需分支：顶部留白走同一个
+  `--dsh-frame-top-clearance`（Windows 为 `--dsh-windows-titlebar-height`）、
+  `-webkit-app-region: no-drag` 在 Windows Electron 同样有效、12px 热区在
+  Windows 客户端区内没有 resize 带冲突。
+
+**验证结果（用户真机操作）**
+
+| 项 | 结果 |
+| --- | --- |
+| 轨的滑出与收起 | 通过 |
+| 图标的点击与导航 | 通过 |
+| 顶部标题栏避让 | 通过，未被 Windows 标题栏压住 |
+| 鼠标左缘热区响应 | 通过 |
+| 浮层位置 | 通过，与 macOS 表现一致 |
+
+**结论**
+
+Windows Desktop 与 macOS 走同一渲染路径，表现一致。平台的已知差异（顶部 chrome 高度、
+窗口拖拽区语义）由宿主的 CSS 变量与 `data-windows-titlebar` 标记承载，插件侧无需
+额外分支。
+
+**仍未验证**
+
+- Linux Desktop：自动不接管——宿主在该平台保留 56px 折叠轨（`collapsedWidth` 非零），列宽探测据此跳过，不会双轨。该结论来自宿主源码，未做 Linux 真机验证。
+- Windows 上的其余分支（真实慢网络、未登录账号、多屏环境）本轮未覆盖，
+  其结论沿用 macOS 轮次。
+
+## 0.4.0 发版前复验（2026-11-11，第 25 轮）
+
+> 状态：**功能验收通过**。环境：macOS Desktop `0.2.2-rc.1`、macOS 27.2、中文界面、Catppuccin Latte / Frappé；本地分支 `refactor/typescript-migration`。
+
+**本轮逐项确认（用户真机操作）**
+
+| 项 | 结果 |
+| --- | --- |
+| 标题滚动显示 | 通过。长标题悬停时滚到末端并停住，离开立刻回位，静止态省略号正常，短标题不动 |
+| 窗口焦点门禁 | 通过。切到别的应用后指针扫过左缘不唤出；已展开的轨失焦即收起；回到 DSH 后唤出恢复 |
+| 键盘路径 | 通过。`Tab` 到轨仍能唤出（不受焦点与坐标门禁影响） |
+| 轨与浮层一起收起 | 通过。`Tab` 到头像展开浮层、再 `Tab` 到页面其他位置时，轨与浮层一起收起 |
+| 多屏右缘误唤出 | 通过。DSH 右边框贴屏幕边缘、指针移到另一块屏时不再唤出 |
+| 空会话 / 分页 / 时钟 / 标题层级 | 通过（第 24 轮已验，本轮回归无变化） |
+
+**本轮修的三个缺陷**（均由本轮的复验发现并修复）
+
+- 标题既不滚动也没有省略号：`.dsr-row-title` 缺 `min-width: 0`，作为 column flex 的
+  flex item 会撑到内容宽度，`clientWidth === scrollWidth`。修复后 `scrollLeft` 实测到达
+  197px，两个 `data-` 标记与渐隐遮罩生效。
+- 多屏下右缘鼠标把左侧轨拉出：`pointerenter` 由冒泡的 `pointerover` 合成，
+  跨屏移出窗口时它带一个**被钳进视口**的 `clientX`，连坐标门禁都拦不住。改为只由
+  `pointermove` 连续判定驱动唤出。
+- 真实使用者无法安装：`peerDependencies` 的 cordis 范围停在 `~4.0.4 || ~4.0.5-alpha.1`，
+  而目标宿主 0.2.2-rc.1 的 SDK 一律要求 `~4.1.0`，导致 `npm install` 报 ERESOLVE。
+  改为 `~4.1.0` 并删除 `.npmrc` 的 `legacy-peer-deps` workaround。
+
+**发版前检查（本机实测）**
+
+- `npm run check` 退出码 0：7 条源码规则、96 单测（95 通过 + 1 个 K2 todo）、
+  5 条产物规则、3 项产物测试。
+- 移除 `.npmrc` 后 `npm ci` 成功（不再需要 `legacy-peer-deps`）。
+- 独立目录安装 `npm pack` 产物：不带任何 npmrc 时 `added 10 packages`，
+  ERESOLVE 消失；安装后 `lib/client.js` 在 vm 中能被 `__ModuleLoader__` 注册
+  （id `@skylerfee/dsh-sidebar-rail`，factory 为函数），`lib/index.js` 是空 `apply()`。
+- 打包清单 28 个文件：预构建 `lib/`、双语 README、18 张脱敏图、locale、
+  `cordis.patch.yml`；无源码、`tmp/` 或测试。
+- 文档：9 份文档无坏链，18 张图全部被引用、无孤儿。
+
+**仍未验证**
+
+- Windows / Linux Desktop（不渲染图标轨，未验证支持）。
+- 真实 Web 客户端。
+- 真实慢网络 / 远程故障下的失败态展示（仅离线替身覆盖）。
+- 未登录账号与有余额账号的全部分支。
+- 真实归档与空白会话的逐 ID 对账。
+
+**已知缺陷（不修，已记录）**
+
+- 「添加项目」的系统对话框标题为英文：宿主把 `NSOpenPanel.message` 硬编码成
+  `Select Workspace Directory`，AppKit 不本地化该字段；纯 Client 插件无 Node 权限
+  自行调起选择器。见 README 与 GLOSSARY。
+- 默认收起的分区需要点两次才展开（K2）：按产品要求保持现状、不再作为待修问题跟踪。
+
+## 最新源码验收与文档整理（2026-11-11，第 24 轮）
+
+**尚未通过完整功能验收，文档与截图已完成**。环境、操作与可核对结果见[本轮报告](desktop-audit-2026-11-11.md)：本地 `de05173`，Desktop `0.2.2-rc.1`，macOS 27.2，中文、Catppuccin Latte / Frappé。`npm run check` 退出码 0，85 单测通过、1 个既有 K2 todo、3 产物测试通过。
+
+真机完成最近会话 10→20、项目 10→15 且分页按钮消失、关闭重开保留项目展开并重置分页、方向键进入与 Tab / Shift+Tab 焦点流、全部入口的浅色 / 深色截图。仍复现 Escape 重开、K2、非全高浮层与添加项目失败；任务时钟实际在行尾。任务共享请求永久加载由受控执行实际源码复现，未制造真实慢网络。16 张功能图与两张预览见[使用指南](usage.zh.md)及[截图清单](images/README.md)。已恢复原有主题、会话与侧栏状态；未验证范围详见本轮报告，不用历史轮次代替本轮结果。
+
+## 0.4.0 实现阶段：离线检查（2026-11-10，第 23 轮）
+
+> 状态：**仅离线检查，未做真机验收**。本轮实现 #10（三个缺陷）、#11（整体滚动）、#12（项目展开持久化与原生文件夹）、#13（间距与视觉对齐），真机验收由票 #14 统一执行并记录。
+
+### 环境
+
+- 分支 `refactor/typescript-migration`，Node 26.0.0，macOS。
+- `npm run check` 全链路：typecheck → check:source → test:unit → build → check:artifact → test:artifact。
+
+### 结果
+
+| 项 | 结果 |
+| --- | --- |
+| `tsc --noEmit` | 通过，零错误 |
+| 源码规则 | 6 条全通过（banned / runtime-deps / i18n / model-purity / **颜色（新增）** / size） |
+| 单元测试 | 68 项：67 通过，1 个 todo（K2 既有缺陷复现） |
+| 构建 | `lib/index.js` + `lib/client.js` 生成成功 |
+| 产物规则 | 5 条全通过 |
+| 产物测试 | 3 项全通过 |
+
+### 三个缺陷的离线结论
+
+| 缺陷 | 离线状态 | 真机待验 |
+| --- | --- | --- |
+| 浮层定位偏移 | **已修（代码层）**：锚点水平基准改为轨的固定几何 `RAIL_REVEAL_WIDTH`（56），不再读按钮实时 rect；新增纯函数 `flyoutAnchorFrom`，并有 2 条流程测试覆盖「过渡中途 rect 与稳定 rect 得到同一锚点」。 | 需确认轨滑入/收起动画期间悬停图标，浮层位置正确 |
+| 幽灵会话行 | **已修（代码层）**：`projectSessionRows` 对 `byId` 缺摘要的成员直接丢弃，不再产出 `title=id` 的占位行；丢弃时只记条数日志。测试改写为「缺摘要成员被丢弃」+「空项目返回零行」。 | 需确认空项目显示空态文案而非假节点 |
+| 添加项目不可用（K1） | **已修（代码层）**：删掉把成功值丢成 `undefined` 的中间跳；三态按 `pickDirectory` 的真实契约判定（resolve string = 成功、resolve null = 取消、reject = 失败）；`createWorkspace` 失败单独分支。 | **必须真机验证**：这是唯一需要真实系统目录选择器的项 |
+
+### K2 / K3 结论
+
+- **K2（默认收起的分区首次点击不展开）：仍然存在**。`toggleSection` 仍是 `current[id] !== true`，`sectionIsOpen` 逻辑未变，本轮未触碰该机制。整体滚动改造只是让「点了没反应」的视觉表现从「滚动条变化不明显」变成「内容高度变化不明显」，**没有修复**。测试用例保持 `todo`，未删除、未放宽预期。
+- **K3（浮层外框越界 2px）：未验证**。本轮改了边框与圆角（`--dsw-radius-md`、保留 1px border），是否仍越界需真机测量。
+
+### 未验证项
+
+- 全部视觉效果（间距、颜色、圆角、文件夹图标、整体滚动手感）——需真机肉眼对比。
+- 项目展开状态跨「关闭浮层再打开」的真实持久化——离线测试覆盖了存储读写，但未经真实浮层开关验证。
+- 窄窗 <768px、宿主展开态、Web 三种情况不渲染轨——本轮未改动该路径，按 0.4.0 结论沿用。
+
+## 0.4.0 Desktop 复验（2026-11-10，第 22 轮）
+
+完整逐项结果见当时保存的 B1–B15 功能验证报告（该报告已随历史文档清理移除）。本轮使用 macOS Desktop `0.2.2-rc.1`、本地 link 插件 `0.4.0`（`f88c660`）实机操作；`npm run check` 的 57 项测试通过，未修改实现。
+
+- 已实测独立滚动、当前分区高度封顶、折叠时总高度不变、已有内容会话导航、任务面板导航、置顶刷新持久化和关闭重开恢复默认。
+- 发现功能问题：添加项目在真机约 5s 后超时；回调探针另确认成功目录值被丢弃，登记调用为 0。默认收起的「已暂停」分区首次点击无效，第二次才展开。
+- 几何记录：957×949 CSS px 视口中浮层顶边 48px、外框高 903px、底边 951px；有 2px 边框越界。三区初始高 126 / 225 / 269px，旧版最近区撑到 566px 的问题未复现。
+- Desktop 响应式视口 767px 时轨道卸载，768px 时挂载，展开侧栏后卸载；真实 Web 和原生窗口缩放仍未运行。
+- 空项目、真实归档/空白成员对账、新草稿项目归属、已安装但关闭的插件样本尚未补齐；**完整验收未通过**。测试置顶及界面状态已恢复，旧轮次以下保留为历史记录。
+
+## 0.4.0 浮层分区化（2026-11-09，第 21 轮）
+
+规格：spec-historical-0.4.0-sectioned-flyout.md。票：#1 骨架、#2 工作区三分区、#3 项目行展开、#4 新建会话与添加项目、#5 任务三分区、#6 插件两分区、#7 验收（GitHub #1–#7）。
+
+### 改动
+
+- **占满高度**：`flyoutSectionedHeight(viewportHeight, topClearance)` 取代 `workspaceFlyoutHeight`。浮层从 `--dsh-frame-top-clearance` 之下（读宿主 token，读不到退回 48px）占到窗口底；`flyoutShell` 新增 `topFlush` 走这条路径。三个浮层全部改用它，不再有内容自适应的浮层。
+- **分区原语**：`.dsr-section` = 固定 `.dsr-section-head`（`flex:none`）+ 独立滚动 `.dsr-section-body`；分区之间 `--dsw-alias-border-l1` 分隔。上限由 JS 算出 `--dsr-section-cap`（`sectionMaxHeight` = 可用高度 1/3 向下取整），CSS 里 `max-height:var(--dsr-section-cap, 33.3333%)` 兜底；`flex:0 1 auto` 让内容少的分区保持自然高度而不撑满。
+- **收起**：`FlyoutSection` 的标题是按钮，带 `aria-expanded`；收起时**卸载** body（避免下次展开回到旧滚动位置）。折叠表是组件 state，不写存储，默认值由 `sectionIsOpen` 给出（B14）。
+- **工作区三分区**：置顶 / 项目 / 最近会话，全默认展开。置顶项目不在项目区重复——`deriveSections` 本就分区，新增回归测试锁住。
+- **项目行**：`ProjectRow` = 始终可见的展开箭头 + 名称 + 新建会话 + 图钉。展开后列出该项目**全部** `sessionIds` 成员（`projectSessionRows`：不过滤、不排序、不限条数），归档行标注「已归档」，缺条目降级为 id 行。
+- **新建会话 / 添加项目**：`startSession(workspaceId)` 与 `pickDirectory()` + `workspaces.create({ path })`。`pickedDirectory` 把「选定 / 取消 / 失败」收成一个形状；相对路径判为失败（宿主按绝对路径登记项目）。`inject` 增加了 `workspaces` 服务。
+- **任务三分区**：`normalizeTasks` 不再过滤 paused/ended，改为带出 `status`；`taskStatusOf` 把 legacy `inactive` 折成 `ended`、无 status 时按 `active` 布尔翻译、未知状态返回空串（宁可少列也不错列）。`groupTasksByStatus` 恒返回三键。只默认展开「进行中」。
+- **插件两分区**：`normalizePlugins` 不再只留 enabled，保留 `enabled` 布尔并由 `groupPluginsByState` 二分；未安装（`installed:false`）仍在归一化阶段被剔除，所以官方按需插件不会落进「未启用」。
+
+### 已完成验证（可在本机复跑）
+
+跑法：`cd dsh-sidebar-rail && npm run check`
+
+| 项 | 结果 |
+| --- | --- |
+| 仓库规则 4 条（regions / manifest / banned / i18n） | ✅ 全过；i18n **52 key** 中英对齐 |
+| 两入口语法（`node --check client.js` / `index.js`） | ✅ |
+| 纯逻辑单测 | ✅ **53 项全过**（0.3.3 为 35 项） |
+| `flyoutSectionedHeight` | ✅ 1000/48→952、900/48→852；矮于 chrome 带→0；clearance 不可用退回 48 |
+| `sectionMaxHeight` | ✅ 900→300、852→284；极小值→0，不产出负值/小数 |
+| 高度不随内容变化（0.3.2 性质） | ✅ 单测锁住：同一视口下条数 1 与 20 得到同一高度 |
+| `sectionIsOpen` 默认值 | ✅ 三区全展开 / 任务仅「进行中」/ 手动收起覆盖默认 |
+| 置顶项目不重复 | ✅ `pinnedRows` 与 `normalRows` 的 id 集合互斥且并集等于全部项目 |
+| `projectSessionRows` 不过滤 | ✅ host 顺序（不按时间重排）、归档与空白都保留、未知成员降级、脏输入为空 |
+| 任务三状态分组 | ✅ `active`/`paused`/`ended` 各归各位；空输入返回完整三键；未知状态被丢弃 |
+| 任务下次运行时间 | ✅ 按宿主同款公式 `deliveryFloorEndsAt > scheduledAt ? floor : scheduledAt`；`ScheduleCatalogEntry` 无 `nextRunAt`，回归测试锁住乱入字段不会胜出 |
+| 目录选择被拒 ≠ 取消 | ✅ 后端无 native 能力时报失败态并指向宿主添加按钮；只有 `null` 才是静默取消 |
+| 插件二分 | ✅ 归一化把 `installed` 一并带出；分区显式按 `installed && !enabled` 判据，未安装项两侧都不进；宿主自带项在归一化阶段剔除 |
+| 目录选择三结局 | ✅ picked / cancelled（静默）/ failed；相对路径判失败；非 Error 拒绝有可读文案 |
+
+### 本轮据调研修正的事实（已核对宿主源码）
+
+| 事实 | 对实现的影响 |
+| --- | --- |
+| `catalog()` 的条目是 `scheduledAt` + 可选 `deliveryFloorEndsAt`，**没有 `nextRunAt`** | `client.js` 原写 `task.nextRunAt ?? task.next ?? task.scheduledAt`，前两键在契约中不存在；已改为 `taskNextRun`（宿主同款公式） |
+| `pickDirectory()` 在 Desktop 大概率可用但未真机验证；后端无 native 能力时被 `directory-picker/unavailable` 拒绝 | 失败态不再是通用文案；`pick` 的拒绝走 `pickedDirectory`，指向宿主自带添加按钮 |
+| 宿主无 pick 动词时传 `null` 会被读成「用户取消」 | 已改为抛错，落到失败态——静默取消会吞掉原因 |
+| `WorkspaceView.sessionIds` 本就含归档/空白、不含子代理 | `projectSessionRows` 不过滤：与 host 行为一致，未额外按 `origin` 筛选 |
+| `SessionSummary` 无 `workspaceId`；`archivedSessionIds` 在 `WorkspaceSnapshot` 顶层 | 反查只走 `WorkspaceView.sessionIds`；`archivedIds` 从 `readWorkspaces(state => state.archivedSessionIds)` 读 |
+| `workspaces.create({path})` 只登记已存在目录、幂等、不建目录 | 添加项目不调用任何 `mkdir`/`createDirectory`；重复选同一目录不产生重复行 |
+
+### spec §9 不做什么（逐条核实）
+
+| 非目标 | 核实方式 | 结果 |
+| --- | --- | --- |
+| 不做 TypeScript 化 | 仓库内无 `.ts` 文件 | ✅ 仍为零构建手写 JS（ADR-0002） |
+| 不做会话级置顶 | `grep pinSession` 无命中 | ✅ 只用插件自己的 `pinnedWorkspaceIds` |
+| 不做任务详情定位 | `grep openTaskDetail\|selectedId` 无命中 | ✅ 点条目只调 `selectPanel('schedules')` |
+| 不做浮层内插件开关 | 唯一的 `setPlugins` 是 `useState` setter（存列表），非开关操作 | ✅ 没有写插件的调用 |
+| 不持久化展开状态 | 全文件只有三处存储写入：`writeStore` 定义、`recentCount`、`pinnedWorkspaceIds`；`foldedSections` 与 `expandedProjects` 不碰存储 | ✅ 每次打开回到默认 |
+
+### 高度算式在真机视口下的取值（供验收对照）
+
+以 `docs/verify.md` 早前记录过的 macOS Desktop 视口逻辑高度 982 为例：
+
+| 量 | 值 | 推导 |
+| --- | --- | --- |
+| 浮层高度 | **934 px** | `flyoutSectionedHeight(982, 48)` = 982 − 48 |
+| 每区上限 | **311 px** | `sectionMaxHeight(934)` = ⌊934 / 3⌋ |
+| 三区满额合计 | 933 px | 311 × 3，**不超过**面板 934 |
+
+真机验收时可直接比对：浮层顶边应 ≈ 48（chrome 带下沿），底边应 ≈ 982，高度 ≈ 934；某区内容超过约 311px 后应开始自己滚动。
+
+### 两轴 code review 的发现与处置（2026-11-09）
+
+对 `68668f7...HEAD` 做了 Standards + Spec 两轴审查。Standards 轴报出的问题**已全部处置**：
+
+| 发现 | 判定 | 处置 |
+| --- | --- | --- |
+| **BLOCKER**：`const sessions = projectSessionRows(row.sessionIds, sessions.byId, …)` 同名 `const` 自引用，命中 TDZ，工作区浮层每次渲染抛 `ReferenceError` | ✅ 属实，已复现 | 改名 `sessionRows`。单测测的是纯函数，调用点没覆盖，所以此前 `npm run check` 一直绿 |
+| 违反硬约束 #8：`addProject` 没有超时，选择器/Create 卡住会让按钮永久停在「选择中…」 | ✅ 属实 | 整段与 `REMOTE_TIMEOUT_MS` 竞速，超时进失败态 |
+| 展开/收起状态在浮层关闭后不重置（`RailColumn` 从不卸载） | ✅ 属实，与 spec「每次打开都是默认状态」和 B14 矛盾 | `dismiss`/`retract` 关闭时清空 `foldedSections`、`expandedProjects`、`projectAction` |
+| 新增函数 JSDoc 是英文，违反 §6「每个函数前有中文 JSDoc」 | ✅ 属实 | 本次 diff 新增的 11 个函数全部改为中文（全仓另有 ~117 个英文 JSDoc 属 0.3.x 历史债，不在本票范围） |
+| `flyoutShell` 的 JSDoc 因插入 `frameTopClearance` 而失联 | ✅ 属实 | 重排为「`frameTopClearance` 自带 doc → `flyoutShell` 的 doc 紧贴其定义」 |
+| 丢弃未知任务状态 / 未安装插件时无日志 | ⚠️ 部分成立 | 纯函数区不允许副作用（§2），改为在 `writer` 归一化边界记录「保留 N / 收到 M」并带 `[dsh-sidebar-rail]` 前缀 |
+| 4 个 i18n 键已成死键（`section.tasks`、`section.plugins`、`empty.tasks`、`empty.plugins`） | ✅ 属实 | 删除；`check.mjs` 只校验中英对齐，不校验使用，所以此前没报 |
+| 新建会话按钮默认 `opacity:0`，只在悬停时出现，而 spec §3.2 要求「始终显示」 | ✅ 属实（Spec 自查发现） | 改为常显（图钉与新建会话都常显），悬停只加背景 |
+
+Judgement calls（Duplicated Code、Data Clumps、Divergent Change 等）**本轮不处理**：
+它们描述的是可读性取舍，改动面覆盖 `renderFlyout` 全部五个分支，风险高于收益。
+
+反面暴露的仓库级问题已写进 [CODING_STANDARDS.md](../CODING_STANDARDS.md) 第 7 条：
+渲染层零单测覆盖，所以「同名 `const` 自引用」「只在打开态执行的路径」「新增 state 谁重置」
+这三类错误必须靠 review 与规范约束，不能指望 `npm run check`。
+
+### 真机验收（2026-11-09，macOS Desktop 0.2.2-rc.1，外接屏 1920×1080，DPR=1）
+
+**环境突破**：此前判定"无法截图"是错的。机器有 3 个显示器（内建 3024×1964 + 两个 1920×1080），
+`screencapture -x` 默认只截主屏（上面是别的应用）；加 `-D 2` 即可截到 DSH 所在的外接屏。
+同时 profile 已从 npm `0.3.3` 副本切成本地 link（`cmp` 验证 `client.js` 与本仓库字节一致）。
+
+**渲染进程 `innerHeight` = 1092**（比屏幕 1080 高，含窗口装饰差）。
+
+#### 已实测通过
+
+| # | 用例 | 实测 | 判定 |
+| --- | --- | --- | --- |
+| B1 | 浮层占满可用高度 | 顶边 y=80（chrome 带下沿），底边 y=1078=屏底，总高 **999px** | ✅ |
+| B1 | 三个分区各带固定标题 | 分隔线在 y=237 / 540 / 1029；标题「置顶项目」「项目」「最近会话」齐全 | ✅ |
+| B1 | 不覆盖顶部 48px chrome 带 | 浮层顶 80 > chrome 带下沿，红绿灯可见 | ✅ |
+| B1 | 「添加项目」在「项目」区标题行右侧 | 可见，文案正确 | ✅ |
+| B1 | 项目行 `+` 与图钉常显 | 每行两个按钮都常显（本轮修掉的 `opacity:0` 悬停问题已生效） | ✅ |
+| B4 | 底部条数步进器 | 「最近会话条数 − 8 +」，可点 | ✅ |
+| B5 | 项目展开列出会话 | `home` 项目展开后列出 3 条会话（含相对时间），宿主顺序 | ✅ |
+
+#### 实测发现 1 个缺陷（B3 违规）
+
+| # | 用例 | 实测 | 判定 |
+| --- | --- | --- | --- |
+| B3 | 每区 ≤ 可用高度 1/3 | 「最近会话」区 **566px**，而 sections 容器 949px 的三分之一是 **316px** | ❌ 违规 |
+
+**根因**：`max-height: var(--dsr-section-cap, 33.3333%)` 里，百分比 `max-height` 在**高度由内容决定的 flex 项**上不生效（百分比需要父容器有确定高度），所以回退值等于没有；同时 React 的 inline `--dsr-section-cap` 自定义属性也未可靠落到计算样式上。结果最后一个分区撑满了面板剩余空间。
+
+**修复**：改由 JS 内联下发像素值——`sectionBudget = flyoutSectionedHeight(innerHeight, clearance) − FLYOUT_CHROME_HEIGHT`，再 `sectionMaxHeight()` 取三分之一，直接写进每个分区的 `style.maxHeight`。已同步到 profile，`npm run check` 通过。
+
+**验证状态（重要）**：`client-hmr` 只重建 client 模块，**不替换已插入的 `<style>` 节点**（样式由 `apply()` 里的 `ctx.effect` 一次性写入 `document.head`）。因此 CSS 相关改动（包括本次 B3 修复的百分比兜底规则）在 HMR 之后**仍是旧值**，必须手动刷新页面（`Cmd+R`）才生效。上一轮据此误判过「修复未生效」，实际是样式表没更新。`client-hmr` 已确认热重载（事件流捕获到 `{"type":"rebuilt","id":"@skylerfee/dsh-sidebar-rail","rev":"9efe74fd7703"}`，服务端 bundle 含新逻辑），但**已挂载的 React 组件实例未重新渲染**，页面仍在跑旧渲染结果。需要主动刷新一次页面才能看到修复后的分区高度。
+
+**算式与实测的交叉验证**（修复正确性的代码级证据，不依赖刷新）：
+
+| 量 | 计算值 | 实测值 | 一致 |
+| --- | --- | --- | --- |
+| 渲染进程 `innerHeight` | 1092（由 cap 反解） | — | — |
+| 浮层高度 `flyoutSectionedHeight(1092, 48)` | 1044 | 999（含 45px 窗口装饰差） | ✅ 同一基准 |
+| 分区预算 `panel − FLYOUT_CHROME_HEIGHT(96)` | 948 | sections 容器 949（±1px 取整） | ✅ |
+| 分区上限 `sectionMaxHeight(948)` | **316** | 949 / 3 = **316** | ✅ |
+
+即修复后的 cap 恰好等于实测 sections 容器的三分之一，B3 在数值上成立；刷新后应看到「最近会话」区封顶在 316px 并自行滚动。
+
+### 验收总表（2026-11-09 实时状态）
+
+图例：✅ 真机实测通过 ｜ 🔧 已修复待刷新复测 ｜ ⬜ 未测（代码路径已核实存在）
+
+| # | 用例 | 状态 | 依据 |
+| --- | --- | --- | --- |
+| B1 | 三分区 + 各有固定标题 + 占满高度且不盖红绿灯 | ✅ | 顶边 y=80、底边 y=1078、总高 999px；分隔线 237/540/1029；红绿灯可见 |
+| B2 | 滚动任一分区，标题与其他区不动 | ⬜ | 结构上是 flex:none 标题 + 独立 overflow-y:auto body，未经滚动实测 |
+| B3 | 每区 ≤ 可用高度 1/3，不强行撑满 | 🔧 | 实测发现违规（最近会话 566px vs 上限 316px），已两次修复；**待刷新页面复测** |
+| B4 | 收起/展开分区不改浮层总高度 | ⬜ | 收起只卸载 body，高度由 shell 定死；未做收起前后的像素对比 |
+| B5 | 展开项目显示全部成员、宿主顺序、不限条数 | ✅ | home 展开后列出 3 条会话，含相对时间，宿主顺序 |
+| B6 | 空项目显示空态 | ⬜ | empty.projectSessions 文案在；无空项目可实测 |
+| B7 | 点项目下会话跳转并收起浮层 | ⬜ | 代码核实：openSessionFromRail 先 retract() 再 openSession |
+| B8 | 新建会话后跳转并收起 | ⬜ | 代码核实：startSessionInProject 先 retract() 再 startSession |
+| B9 | 添加项目后留在浮层；取消无变化 | ⬜ | 代码核实：addProject 只调 createWorkspace，无跳转无建会话；**native 后端从未真机跑过**（ADR-0005） |
+| B10 | 置顶在两区之间移动、刷新后保持 | ⬜ | 持久化沿用 0.3.x 已验证路径；本轮分区移动未目视 |
+| B11 | 任务三区、仅「进行中」展开、空区有文案 | ⬜ | 代码核实：active 默认展开，paused/ended 默认收起 |
+| B12 | 点任务条目打开面板 | ⬜ | 代码核实：retract(); selectPanel('schedules') |
+| B13 | 插件两区、未启用只含已安装但关闭 | ⬜ | 代码核实：groupPluginsByState 两侧都校验 installed，归一化剔除未安装项 |
+| B14 | 关闭重开回到默认展开 | ⬜ | 已修：dismiss/retract 清空 foldedSections/expandedProjects；未刷新复测 |
+| B15 | 窄窗/展开态/Web 不渲染轨 | ⬜ | shouldRenderRail 单测仍在；本轮未做真机复核 |
+
+**统计：B1（含 5 个子项）与 B5 实测通过；B3 发现缺陷并修复，待复测；其余 12 项未测。**
+
+### 复验步骤（人工，刷新页面后）
+
+1. **Cmd+R 刷新页面** —— CSS 改动只有刷新后生效（见上文 HMR 说明）。
+2. 收起侧栏，鼠标移到窗口左缘（约 12px）唤出轨道，悬停「工作区」打开浮层。
+3. 量 B3：「最近会话」区高度应封顶在 **316px** 左右并出现内部滚动，而不是撑到 566px。
+4. 滚动任一分区，确认该区标题行 y 坐标不变（B2）。
+5. 收起「项目」区再展开，确认浮层总高度不变（B4）。
+6. 依次核对 B6–B15，每条把可核对的量记进本文件。
+
+### 本节结束时（2026-11-09）的仓库状态
+
+- 7 张票的代码、单测、i18n、README 均已落地；`package.json` 版本 **0.4.0**。
+- `npm run check` 通过：57 项单测 + 4 条仓库规则 + 48 个 i18n 键对齐。
+- **真机验收只完成 B1（含 5 个子项）与 B5**；B3 的缺陷已定位并修复但未复测；其余 12 项未测。
+- **因此 0.4.0 仍不具备发布条件**，直到上表全部转为 ✅。
+
 ## 工作区浮层定高与两区等分（2026-11-08，第 20 轮）
 
 用户反馈：调整最近会话条数会改变浮层高度，且希望项目区与最近会话区大小基本一致、各自标题行固定、两区之间有明确分隔线。
@@ -29,7 +358,7 @@
 
 ## 0.2.0 功能复核与交互审查（2026-11-04，第 13 轮）
 
-在 macOS Desktop `0.2.2-rc.1`、插件提交 `0e1a6dd` 上复核：当前加载、组件重挂载、图标轨随折叠显隐、会话跳转、置顶、用户插件过滤和真实头像显示通过，`npm run check` 的 20 项测试通过。含用户反馈后的补充复核，共发现 6 项 P2 问题和 1 项 P3 文档问题；其中矮窗口裁切、常规 Tab 路径不可达、会话标签遮挡已真机复现，切换后的永久加载、结构化失败伪装空列表已通过受控源码探针复现，行状态背景覆盖由源码确认。详见[本轮完整报告与复现步骤](desktop-audit-0.2.0-2026-11-04.md)。
+在 macOS Desktop `0.2.2-rc.1`、插件提交 `0e1a6dd` 上复核：当前加载、组件重挂载、图标轨随折叠显隐、会话跳转、置顶、用户插件过滤和真实头像显示通过，`npm run check` 的 20 项测试通过。含用户反馈后的补充复核，共发现 6 项 P2 问题和 1 项 P3 文档问题；其中矮窗口裁切、常规 Tab 路径不可达、会话标签遮挡已真机复现，切换后的永久加载、结构化失败伪装空列表已通过受控源码探针复现，行状态背景覆盖由源码确认。详见本轮完整报告与复现步骤（该报告已随历史文档清理移除）。
 
 补充确认：会话页折叠导航栏后，首个「对话」标签被左侧 56px 图标轨遮挡，「上下文」「编队」仍可见；切到上下文后无法直接用鼠标点击「对话」返回。可访问性树仍保留该标签，展开侧栏后入口恢复。本项仅记录，未修复；补充复核结束时恢复开始时的侧栏展开与「对话」视图。
 
@@ -124,7 +453,7 @@
 
 ## 0.2.0 复核报告修复（2026-11-05，第 13 轮）
 
-针对 [0.2.0 Desktop 功能复核与交互审查](desktop-audit-0.2.0-2026-11-04.md) 的 6 项 P2 + 1 项 P3，逐项修复。
+针对 0.2.0 Desktop 功能复核与交互审查发现的 6 项 P2 + 1 项 P3，逐项修复。
 
 | # | 问题 | 根因 | 修法 | 复验 |
 | --- | --- | --- | --- | --- |
@@ -331,450 +660,3 @@ completionUnread                                      → done
 | 版本语义 | minor：轨默认隐藏是可见行为变更，PRD / AGENTS / 两份 README 已同步 |
 
 ### 顺带修的工程问题
-
-`git merge --no-ff -m "merge: ..."` 被仓库自己的 `commit-msg` hook 拒绝——hook 原先只放行大写的 `Merge `，而 `-m` 传入的是小写 `merge:`。已改为同时放行 `Merge `、`merge:`、`Revert `、`revert:`，并用三种输入验证（merge/revert 放行、普通不合规信息仍拒绝）。
-
-## 0.2.0 发布（2026-11-04）
-
-走 [ADR-0003](adr/0003-release-pipeline.md) 的 Release → OIDC 链路，首次因 Trusted Publisher 权限失败，修正后一次通过。
-
-| 项 | 结果 |
-| --- | --- |
-| tag / Release | `v0.2.0`（附注 tag，指向 `60d584e`，是 `origin/main` 祖先）+ GitHub Release |
-| CI 运行 | 第一次 `41854950620` 失败；补权限后重跑同一运行 **success**（1m54s） |
-| 失败原因 | `403 OIDC permission denied for this action`：Trusted Publisher 的 Allowed actions 默认只给 `npm stage publish`，需显式勾选 `npm publish`；连接不可编辑，删重建后生效 |
-| registry | `dist-tags.latest = 0.2.0`；versions `0.0.0-stage, 0.1.0, 0.2.0` |
-| 产物 | shasum `3e20eb4b395840aaa1ce14ec849f399dbc4dbab6`，10 个文件，解包 81,441 字节，**含 provenance 签名与 attestations** |
-| 内容一致性 | ✅ 解包后 10 个文件与仓库 HEAD **逐字节相同** |
-| 包元数据 | `license: MIT`、`dependencies: 0`、`peerDependencies: 6` |
-
-## 0.2.0 三项交互优化（2026-11-04，第 12 轮）
-
-需求来自用户对折叠态的反馈，逐项在真实 Desktop 复验。
-
-### 1 工作区浮层与会话跳转
-
-| 项 | 改前 | 改后 | 复验 |
-| --- | --- | --- | --- |
-| 工作区行 | 名称 + 路径副标题（两行） | 只显示名称，保留行尾置顶图钉 | ✅ 浮层内 9 个工作区均为单行名称 |
-| 点击最近会话 | 传 `{kind:'session', sessionId}` → 宿主按「无会话」处理，落到新建会话 | 传**裸 SessionId** | ✅ 点第 2 条后标题栏与正文都切到该会话 |
-| 会话选中态 | 无 | `aria-current="page"` + 宿主同款底色 | ⚠️ 见下方「未达成」 |
-
-**会话跳转根因**（源码核实）：`SessionTarget` 是 `SessionId | SubagentAddress`（`api/session-controller/.../contract/sessions.d.ts:20`），即裸字符串。旧代码传对象 → 宿主 `resolveTarget` 得到 `undefined` 且不抛错 → `selectPanel(null)` 释放原会话 → 主视图落回空态，表现为「点了变成新会话」。另修正：`openSession` 是**同步抛错**，已用 `try/catch` 而非 `.catch()`。
-
-**未达成：当前会话高亮不显示。** 判据用的是宿主自己的写法（`sessions.byId[*].retainedBy.mainView > 0`，见 `ui-workspace/tree.ts:38-41`、`ui-session/index.ts:463-469`），但在这个 Desktop `0.2.2-rc.1` 上：**宿主自己的侧栏在会话打开时同样不高亮**，且该计数读为 0。因此插件与宿主行为一致（都不高亮），属于数据源在该版本未维护，不是插件判断错误。代码里已注释记录该事实；待宿主恢复维护该计数时两侧会一起亮起。
-
-### 2 插件浮层只列用户自己的插件
-
-数据源从 `pluginInventory/list`（条目无 `official` 字段）改为 `pluginManager/listBundles`，过滤条件：`enabled === true && official !== true && installed !== false`。
-
-- ✅ 复验：浮层标题「我的插件」，列出 `@nonamelego/dsh-catppuccin`、`@skylerfee/dsh-llm-opencode-go-live`、`@skylerfee/dsh-sidebar-rail`、`dsh-better-sidebar`、`dsh-context`、`dsh-macos-restart`、`dsh-mcp-connector`、`dsh-notify-me`，**无任何 `@deepseek-ai/*` 宿主自带插件**。
-
-### 3 账号头像与浮层位置
-
-| 项 | 改前 | 改后 | 复验 |
-| --- | --- | --- | --- |
-| 头像 | 硬编码 `'AI'` 两字母 | 先 `remote.account.getState()` 判登录态，登录后再 `getProfile` 取 `avatarUrl`；未登录用**原生同款省略号**，登录无图用原生人形图标 | ✅ 底部显示人形图标，与宿主原生账号行一致（见下方说明） |
-| 账号浮层位置 | 一律 top 对齐 + `clamp(innerHeight-200)`，头像在底部导致浮层飞到上方很远 | 账号浮层改为**底对齐**头像底边，水平间距仍 8px | ✅ 浮层紧贴头像上方展开 |
-
-**实现依据宿主源码，三处按宿主原样对齐**：
-
-1. **登录态判据**：只有 `view.status === 'credential-stored'` 算登录（`ui-settings-account/AccountMenu.tsx:37`）。
-2. **未登录形态**：宿主该状态下**不渲染头像槽**，而是省略号图标 + 「更多」文案（`AccountMenu.tsx:67-72`）。插件窄态无文案，故只渲染省略号。原实现用 `'AI'` 字母，与原生不符。
-3. **`version` 来源**：`AccountClientMetadata.version` 必填且 Host 用 strict schema 校验。手写静态模块**没有 `process`**（渲染进程 `contextIsolation`、无 node 集成，`process.env.X` 的内联只作用于宿主自己的构建产物），所以改从页面全局 `window.__DSH_BOOT__.release.version` 取（`client-modules/manifest.ts:86-98`，页面注入处 `index.ts:673`），`process.env` 仅作兜底。上一版实现用 `process.env` → 恒为 `undefined` → `metadata === null` → 头像永远取不到。
-
-**本轮无法从界面区分的一点**：该账号本身没有头像 URL，宿主原生账号行显示的也是人形图标，所以「`version` 已能取到」与「`version` 仍取不到」在界面上表现相同。已用单测固定 `clientBuildVersion` 的取值顺序（`__DSH_BOOT__` 优先、无 release 时返回 undefined 不抛错）；真实头像渲染需在有头像的账号上验证。
-
-
-
-| 项 | 改前 | 改后 | 复验 |
-| --- | --- | --- | --- |
-| 头像 | 硬编码 `'AI'` 两字母 | `remote.account.getProfile` 取 `avatarUrl`；无图/失败用宿主同款人形占位 | ✅ 底部显示原生人形占位（当前未登录） |
-| 账号浮层位置 | 一律 top 对齐 + `clamp(innerHeight-200)`，头像在底部导致浮层飞到上方很远 | 账号浮层改为**底对齐**头像底边，水平间距仍 8px | ✅ 浮层紧贴头像上方展开 |
-
-账号调用按宿主 `accountClientMetadata` 同形构造 `{ version, locale, timezoneOffsetSeconds }`（`getTimezoneOffset` 符号翻转），缺 `DSH_CLIENT_VERSION` 时不发请求、直接降级占位。
-
-### 本轮验证方法
-
-`screencapture` + 像素定位图标坐标 + CGEvent 合成 `⌘B`/悬停/点击/`⌘R`；每次改动后 `npm run check`（19 项测试 + 4 条仓库规则）。
-
-## 首发发布（2026-11-04，0.1.0）
-
-发布链路见 [ADR-0003](adr/0003-release-pipeline.md)。结论：`@skylerfee/dsh-sidebar-rail@0.1.0` 已上线为 `latest`，内容与仓库一致，tag 已推送。
-
-| 步骤 | 结果 |
-| --- | --- |
-| 本会话 `npm publish` | ❌ `EOTP`：账号开启 2FA，非交互执行无法完成浏览器授权 |
-| 维护者以 staged publishing 提交 | ✅ registry 先出现占位版 `0.0.0-stage`（"Temporary package placeholder for staged publishing"） |
-| 网页端批准 | ✅ `0.1.0` 上线，`dist-tags = {"latest":"0.1.0"}` |
-| 发布内容一致性 | ✅ `dist.shasum 35db0dc6…` 与本地构建一致；解包 10 个文件与仓库源码逐字节相同（LICENSE、两份 README、client.js、cordis.patch.yml、icon.svg、index.js、两份 locale、package.json） |
-| 包元数据 | ✅ `license: MIT`、`peerDependencies` 6 项、`dependencies` 0 项、`fileCount: 10`、`unpackedSize: 65964` |
-| tag | ✅ `v0.1.0` 附注 tag 已推送；未建 GitHub Release（避免 CI 重复发布） |
-| 敏感信息 | ✅ 打包内容扫描无 token/手机号/本机绝对路径 |
-
-### 发布链路验证（Trusted Publisher）
-
-维护者配置 Trusted Publisher 后，用**受控重发**验证链路（不改动 npm 内容）：
-
-| 项 | 结果 |
-| --- | --- |
-| 手段 | 对已存在的 `v0.1.0` 建 GitHub Release，触发 `publish.yml`（运行 `41844630538`），预期在最后一步被 npm 的版本护栏拒绝 |
-| 通过的前置步骤 | ✅ tag 与 `package.json` 版本一致、✅ 被发布提交是 `origin/main` 祖先、✅ `npm run check`、✅ dist-tag 推导 |
-| `Publish` 步骤输出 | `npm error You cannot publish over the previously published versions: 0.1.0.` |
-| 结论 | ✅ 该错误在**认证之后**才出现，说明 OIDC 信任发布已生效；npm 未被改动 |
-| 清理 | ✅ 验证用 Release 与那次失败运行均已删除，`v0.1.0` tag 保留 |
-
-此后发布新版本的流程：改 `package.json` 版本 → 提交推送 → 建 `v<version>` Release → CI 校验后自动 OIDC 发布（无需 2FA、无需 token）。
-
-
-
-## 作用域包名启动失败修复（2026-11-04，第 11 轮）
-
-结论：修正客户端工厂 ID 后，Desktop `0.2.1-rc.5` 的渲染进程启动恢复正常；插件详情显示完整包名 `@skylerfee/dsh-sidebar-rail`、组件“运行中”，且无此前的图标元数据错误。折叠轨、工作区浮层和中文相对时间均已在真实窗口复验。
-
-### 错误与根因
-
-用户提供的 `crash-2026-11-04T13-33-42-871Z-web-boot.log` 记录了北京时间 2026-11-04 21:33:42 的启动失败。顶层错误为 `@skylerfee/dsh-sidebar-rail: import failed`，其 renderer console 的直接原因是 `duplicate factory registration for "dsh-sidebar-rail"`。
-
-`package.json.name`、bundle patch 的模块 `name` 和 Desktop 安装键已经使用完整作用域包名，但 `client.js` 仍以旧短名 `dsh-sidebar-rail` 注册工厂。宿主按完整包名导入时查不到工厂，随后再次执行脚本，在旧短名上触发重复注册。此前的 `scripts/check.mjs` 主动去掉包名作用域，错误地接受了这个不一致。
-
-本轮核实 profile 只有一个 scoped 依赖与 bundle 声明，旧短名仅余孤立链接；没有通过删除链接、修改用户 profile 或屏蔽宿主重复注册错误来处理本次失败。
-
-### 修复与回归验证
-
-| 项 | 结果 |
-| --- | --- |
-| 静态工厂注册 | `client.js` 的 ID 改为 `@skylerfee/dsh-sidebar-rail`，与宿主导入名一致。 |
-| 自动检查 | 改为比较完整包名，并检查 bundle patch 的模块 `name`；槽条目 ID、本地存储键和界面行为保持原值。 |
-| 注册回归 | 新增 `test/client-registration.test.mjs`，在没有 React 和 DOM 的环境执行完整静态脚本，验证只登记一个工厂且注册 ID 等于包名。 |
-| 正常路径 | `npm run check` 通过：仓库规则、两入口语法和 13 项测试全部通过。 |
-| 无效模块 ID | 在隔离目录把工厂 ID 改回旧短名，仓库检查和新注册测试均失败。 |
-| 无效补丁模块名 | 在隔离目录把 patch 的模块 `name` 改回旧短名，仓库检查失败。隔离文件已自动移除。 |
-
-### Desktop 真实复验
-
-环境为已安装的 macOS Desktop `0.2.1-rc.5`，页面 `dsh-app://app/`，中文、深色外观和 Catppuccin 皮肤。通过 Computer Use 原生窗口操作和可访问性树、截图观察；源码由现有 `link:` 安装直接加载，未重新安装依赖。
-
-1. 修复前窗口停在 `HARNESS Loading plugins…`；修改源码后按 `Command+R`，完整侧栏、会话页面和操作控件出现，启动不再阻塞。
-2. 打开插件详情，显示 `@skylerfee/dsh-sidebar-rail@0.1.0`，开关开启、一个组件运行中，图标正常，未出现包元信息错误。
-3. 收起侧栏，实际显示工作区、定时任务、插件、更多和底部账号图标。将指针从页面空白区拖入工作区图标后，浮层出现项目和最近会话，相对时间为中文；Escape 可关闭。
-4. 展开侧栏后浮轨消失，原生导航仍在。结束时保持插件原有的启用状态，侧栏恢复展开。
-
-本轮验证了渲染进程重新启动及真实客户端加载，未重启整个 Electron/Host 进程，未遍历全部交互、测试其他平台或执行发布。未保存临时截图文件。
-
-## 第 9 轮遗留问题的定位与修复（2026-11-04，第 10 轮）
-
-第 9 轮报告详情页报错：`Plugin metadata for dsh-sidebar-rail: Error: …/dsh-sidebar-rail/icon.svg: icon must remain inside its package directory`。
-
-### 根因
-
-宿主的插件元数据读取（`packages/boot/app-boot/src/package-meta.ts`）对图标有两条互斥分支：
-
-1. `package.json` 声明了顶层 `icon` → 走 manifest 分支：只校验「图标必须在 manifest 所在目录内」。
-2. 未声明 `icon` → 走导出分支：解析 `exports["./icon"]`，再 `assertPackageOwned(realpath(icon), barePackageName(specifier))`——**从图标目录往上找 `package.json`，要求它的 `name` 等于 specifier 推出的包名**。
-
-`specifier` 取自 bundle patch 行的 `name`（仍是旧值 `dsh-sidebar-rail`），而第 8 轮把 `package.json` 的 `name` 改成了 `@skylerfee/dsh-sidebar-rail`。两者不等，`assertPackageOwned` 一路走到文件系统根都没找到匹配的 `package.json`，于是抛出该错误。
-
-即：**包名改了、bundle patch 行与本地安装键没跟着改**。
-
-### 修复
-
-`package.json` 增加顶层 `icon: "./icon.svg"`，让宿主走 manifest 分支（该分支不比对包名）。这对已安装的旧键、以及将来按 scoped 名安装都成立，属于防御性修复。
-
-### 验证方式（复刻宿主算法，用 Node 真实 ESM 解析器）
-
-在临时目录建 `node_modules/dsh-sidebar-rail` 与 `node_modules/@skylerfee/dsh-sidebar-rail` 两条符号链接，按 `package-meta.ts` 的分支逻辑各跑一遍：
-
-| 场景 | 结果 |
-| --- | --- |
-| specifier `dsh-sidebar-rail`，**不声明** icon（第 8 轮状态） | ❌ 精确复现线上错误：`…/icon.svg: icon must remain inside its package directory` |
-| specifier `dsh-sidebar-rail`，**声明** icon（本次修复） | ✅ 通过，图标读成 `data:image/svg+xml;base64,…` |
-| specifier `@skylerfee/dsh-sidebar-rail`（正确终态安装键），不声明 icon | ✅ 通过（`packageName === manifest.name`，包名校验满足） |
-
-`npm run check` 通过（仓库规则 + 两入口语法 + 12 项单测）。
-
-### 命名对齐（已执行，2026-11-04）
-
-对齐到 scoped 包名，三处一起改：
-
-| 位置 | 改前 | 改后 |
-| --- | --- | --- |
-| `package.json` `name` | `dsh-sidebar-rail` | `@skylerfee/dsh-sidebar-rail`（第 8 轮已改） |
-| `cordis.patch.yml` 行 `name` | `dsh-sidebar-rail` | `@skylerfee/dsh-sidebar-rail`（本轮） |
-| Desktop profile 安装键 | `dsh-sidebar-rail`（`link:`） | `@skylerfee/dsh-sidebar-rail`（`link:`，本轮重装） |
-
-按 scoped 插件惯例写作完整包名（对照 `@nonamelego/dsh-catppuccin`、`@skylerfee/dsh-llm-opencode-go-live`）。
-
-重装结果：
-
-- `plugin_manager install_bundle` 返回 `application: applied`、`bundle: @skylerfee/dsh-sidebar-rail`、`version: 0.1.0`、`warnings: []`。
-- profile 的 `dsh.profile.bundles` 现为 `['@skylerfee/dsh-sidebar-rail']`；`node_modules/@skylerfee/dsh-sidebar-rail` 为指向本仓库的符号链接。
-- 宿主侧确认行已生效：`host/Config.listConfigs name=@skylerfee/dsh-sidebar-rail` 返回 `include:dsh-sidebar-rail`（`status: absent`，本插件无配置项，属正常）。
-- pnpm 对 `link:` 安装提示「peerDependencies 不会从目标 node_modules 解析」——本插件的 peer 只用于宿主的兼容性声明，运行时能力全部由宿主注入，因此不影响加载。
-
-遗留：profile 里仍保留旧的 `dsh-sidebar-rail` 依赖键（与 scoped 键指向同一目录）。它已不被任何 bundle 引用，若需清理可执行 `plugin_manager action: remove_bundle target: dsh-sidebar-rail`（或手改 profile 的 `dependencies` 后重装依赖）；本轮未动，避免误伤正在使用的 scoped 安装。
-
-### 干净重装（2026-11-04，用户先移除旧安装）
-
-用户把原插件从 Desktop profile 移走（依赖键与 bundles 均已清空），随后按本地路径重新安装：
-
-| 项 | 结果 |
-| --- | --- |
-| `plugin_manager install_bundle target=<本仓库绝对路径>` | ✅ `application: applied`、`bundle: @skylerfee/dsh-sidebar-rail`、`version: 0.1.0`、`warnings: []` |
-| profile 依赖 | ✅ 只有 `@skylerfee/dsh-sidebar-rail => link:<本仓库>`，无旧键 |
-| `dsh.profile.bundles` | ✅ `['@skylerfee/dsh-sidebar-rail']`（启用） |
-| 宿主行解析 | ✅ `host/Config.listConfigs name=@skylerfee/dsh-sidebar-rail` → `include:dsh-sidebar-rail` |
-| 客户端注册 | ⏳ 安装后未重载页面，`shell.overlay` 占用者中尚无 `dsh-sidebar-rail.rail`；需重载渲染进程才会加载 client bundle |
-| 残留 | 起初 `node_modules/dsh-sidebar-rail` 还有旧短名的孤立符号链接（无依赖记录引用）；已按用户要求在 scoped 安装稳定后清理，见下 |
-
-### 旧短名链接清理（2026-11-04）
-
-`node_modules/dsh-sidebar-rail` 是旧安装键留下的孤立符号链接，`package.json`、`pnpm-lock.yaml`、`node_modules/.modules.yaml` 都不再引用它。清理过程与结果：
-
-| 步骤 | 结果 |
-| --- | --- |
-| `pnpm install --frozen-lockfile --prefer-offline`（插件管理器同款 pnpm 11.28.5） | ⚠️ 输出 `EPERM … node_modules/_tmp_…`，未能写入 profile（会话沙箱只允许写工作区），lockfile 与依赖均未变；pnpm 判定 `Already up to date`，也不会主动摘掉这个不在 lockfile 里的链接 |
-| 删除该符号链接本身（`rm` 单条链接，已核实 `readlink` 指向本仓库、非实体目录） | ✅ 顶层不再有 `sidebar-rail` 链接；`node_modules/@skylerfee/dsh-sidebar-rail` 仍在 |
-| 清理后核对 | ✅ `package.json` / `pnpm-lock.yaml` / `pnpm-workspace.yaml` 与清理前逐字一致；`node_modules/.modules.yaml` 无短名引用；抽查 `dsh-context`、`dsh-notify-me`、`@nonamelego/dsh-catppuccin`、`@skylerfee/dsh-llm-opencode-go-live` 均完好；宿主行 `host/Config.listConfigs name=@skylerfee/dsh-sidebar-rail` 仍返回 `include:dsh-sidebar-rail` |
-
-### 界面复验（已完成，见第 11 轮）
-
-元数据错误已在真实界面确认消失，结论与完整证据见本轮顶部的「作用域包名启动失败修复（第 11 轮）」——那一轮不仅确认了详情页，还发现并修复了随后暴露的另一个启动失败（客户端工厂 ID 仍是短名，宿主按完整包名导入失败）。
-
-本会话补充的独立证据：修复生效后，`client/Slots.listSubTree root=shell.overlay` 的占用者中出现
-`{ id: "dsh-sidebar-rail.rail", order: 10, priority: 0, active: true }`，说明 client bundle 已按完整包名加载、增量注册生效。
-
-## 独立 Desktop 复验（2026-11-04，第 9 轮）
-
-结论：前次验收的 4 个界面问题在当前 macOS Desktop 的深色中文环境下未复现，已测的折叠轨、浮层、置顶、键盘和原生设置路径通过；插件详情页仍显示图标元数据错误，因此安装状态不能判为完全通过。
-
-### 环境与方法
-
-- 宿主：已安装的 DeepSeek Harness Desktop `0.2.1-rc.5`，原生窗口页面 `dsh-app://app/`，中文界面，深色外观，Catppuccin 插件启用。
-- 项目：提交 `8042115`，`package.json` 名称为 `@skylerfee/dsh-sidebar-rail`、版本 `0.1.0`；Desktop 当前仍以 `dsh-sidebar-rail` 的本地 `link:` 安装记录加载。开始时插件已开启、侧栏折叠，源码工作区干净。
-- 方法：通过 Computer Use 原生应用接口操作，结合可访问性树和窗口截图核对。浮层指针进入路径使用从页面空白区域拖向图标的原生操作，另用坐标点击、Tab 和 Escape 验证交互；未使用外部 Web 页面代替 Desktop。
-- 通过原生窗口缩放操作切换宽窗与窄窗，并在各状态读取截图和可访问性树；未读取 CSS 视口宽度，不把本轮窗口复验视为 768px 精确边界测量。
-
-### 实际结果
-
-| 检查 | 结果 | 本轮观察 |
-| --- | --- | --- |
-| 折叠态浮轨 | 通过 | 宽窗中实际显示工作区、定时任务、插件、更多和底部账号座位；顶部避开窗口控制区域。 |
-| 工作区浮层及语言 | 通过 | 出现项目、路径和 5 条最近会话，时间为“16 分钟前”“1 小时前”等中文；浮层标题、项目名和路径均可辨认。 |
-| 深色可读性 | 通过当前外观的视觉复核 | 上轮近黑文字未复现，文字在深色浮层上清晰可辨；本轮没有重新测量颜色或对比度数值。 |
-| 置顶与重挂载保持 | 通过 | 在浮层置顶一个现有工作区后出现“置顶项目”；关闭并重新启用插件后该置顶仍在。验收结束已取消该测试置顶。 |
-| 定时任务取数 | 通过空态路径 | 浮层显示“还没有定时任务”及“打开面板”；点击轨道定时任务图标能进入宿主“自动化任务”面板。没有创建测试任务。 |
-| 插件取数与跳转 | 通过 | 浮层列出真实已启用条目，如 `@deepseek-ai/dsh-plugin-manager`；未停在永久加载。点击轨道插件图标能进入管理面板。 |
-| 更多与账号浮层 | 通过 | 更多浮层包含展开侧栏、MCP 连接器入口；账号浮层显示说明与展开侧栏入口，未复制账号数据。 |
-| 展开态保留宿主导航 | 通过入口保留及设置路径 | 点击账号图标后浮轨消失，宿主工作区树、搜索、视图选项、添加工作区和账号菜单都在。账号菜单中的“设置”可完整打开设置面板，关闭后按 `Command+,` 也可重新打开。 |
-| 窄窗隐藏及动态恢复 | 通过实际窗口状态 | 原生窗口缩放后浮轨与其可访问性节点消失，宿主打开侧栏按钮仍能使用；恢复原宽窗后浮轨自动重新出现，无需重启。 |
-| 键盘操作 | 通过已测路径 | 从定时任务按钮按 Tab，依次打开插件、更多和账号浮层；Escape 后浮层节点消失。未做完整焦点循环审计。 |
-| 停用与重新启用 | 通过可见清理与恢复 | 关闭后浮轨节点消失，重新启用后恢复；最终关闭插件并展开宿主侧栏，未见残留浮轨。未检查物理卸载和样式节点。 |
-| 插件包元信息 | **不通过** | 详情页同时显示组件“运行中”及 `Plugin metadata for dsh-sidebar-rail: Error: …/dsh-sidebar-rail/icon.svg: icon must remain inside its package directory`；关闭再开启后仍可复现。 |
-
-### 尚需处理的元数据问题
-
-`icon.svg` 在当前源码包目录内存在且不是符号链接；当前包名与 Desktop 旧安装键不同。两项是本地核实结果，尚不能据此确定错误由包名变更、宿主路径解析还是旧安装缓存导致。需要针对当前 `link:` 安装记录继续定位并复验；本轮没有修改实现、重新安装或清理用户 profile。
-
-### 检查与限制
-
-- `npm run check` 通过：仓库机械规则、两入口语法检查和 12 项逻辑测试全部通过。
-- `Command+R` 后没有观察到足以确认渲染进程重新加载的变化，因此不计为刷新持久化通过；置顶证据仅覆盖关闭再启用。
-- 未精确测量 120ms 打开与 200ms 关闭时序、快速划过和跨间隙手感，未测亮色、其他皮肤、Web、Windows/Linux、真实 remote 故障、完整进程重启和物理卸载。
-- 搜索、视图选项和添加工作区只确认入口保留；未创建或修改工作区，未从浮层打开业务会话。
-- 按会话中已确认的验收偏好，结束时将插件设回关闭、侧栏展开，并恢复原窗口大小。其他插件、主题和业务数据未修改；本轮未保存临时截图文件。
-
-## 本轮修复与架构收窄（2026-11-04，第 6 轮）
-
-针对 [Desktop 验收报告](desktop-validation-2026-11-04.md) 的 4 个问题：3 项按根因修复，第 3 项在查证后改为架构收窄（用户决策）。
-
-| 问题 | 根因 | 修法 | 状态 |
-| --- | --- | --- | --- |
-| #1 折叠后没有图标轨 | macOS Desktop 把折叠列宽算成 0，且 `.sidebarCol { overflow: hidden }` 裁掉列内一切内容；宿主 CSS 注释明确「darwin closed sidebar has no rail」 | 插件不再渲染在列内：改为挂载 `shell.overlay` 槽 + `createPortal(document.body)` 的固定浮轨（`left:0 / top:var(--dsh-frame-top-clearance,48px) / width:56px / z-index:60 / no-drag`），窄窗口 `max-width:900px` 隐藏 | ✅ 第 7 轮 Desktop 复验通过（见下） |
-| #2 深色主题文字近黑 | CSS 用了宿主不存在的 token（`--dsw-alias-text-*`、`-bg-secondary/tertiary/elevated`、`-border-subtle`），全部落回深色 fallback | 换成宿主真实 token（`--dsw-alias-label-*`、`--dsw-alias-interactive-bg-*`、`--dsw-alias-bg-overlay`、`--dsw-alias-border-l1`、`--dsw-specific-sidebar-nav-item-active`），并去掉颜色 fallback；radius/shadow token 宿主不存在，改用字面值 | ✅ 第 7 轮 Desktop 复验通过（见下） |
-| #3 展开态设置入口不可点 | 表层：`ctx.get('commands')` 在客户端不存在。深层：`SettingsRoot`（侧栏底部触发器 + body 弹窗）注册在 `sidebar.settings` 子槽，插件替换整个 `sidebar` 槽后从不渲染该子槽，导致设置整体不可达（连快捷键也打不开） | 架构收窄为**增量插件**：不再注册 `sidebar` 槽，展开态完全交还宿主（搜索、视图选项、添加工作区、设置座位、账号菜单全部保留）；插件只补 macOS 折叠态浮轨 | ✅ 第 7 轮 Desktop 复验通过（见下） |
-| #4 中文界面显示英文相对时间 | 宿主 `LocaleSnapshot` 的当前语言字段是 `active`，原代码读 `id`/`locale`，恒为 `en` | 新增纯函数 `resolveLocaleId`（`active` 优先，`id`/`locale` 仅作防御性兼容，空值回退 `en`），locale 快照按宿主字段名暴露 `active` | ✅ 单测覆盖 + 第 7 轮 Desktop 复验通过 |
-
-### 本轮已执行的检查
-
-| 命令 | 结果 | 覆盖范围 |
-| --- | --- | --- |
-| `node --check client.js` / `node --check index.js` | 通过 | 脚本语法 |
-| `npm test` | 11 项通过、0 失败 | 纯逻辑：分组排序、过滤、数据归一、相对时间、语言解析、hook 替身 |
-| `git diff --check` | 通过 | 空白错误 |
-
-### 宿主侧与安装态
-
-| 项 | 方法 | 结果 |
-| --- | --- | --- |
-| 临时启用 | `plugin_manager set_bundle dsh-sidebar-rail enabled=true` | ✅ `application: applied`、`warnings: []` |
-| Host 行生效 | Cordis Inspect `host/Config.listConfigs name=dsh-sidebar-rail` | ✅ 返回 `include:dsh-sidebar-rail`（status `absent`，本插件无配置项，属正常） |
-| Client 侧是否加载 | Cordis Inspect `client/Slots.listSubTree` **带 `root` 精确查询**（全树不含占用者明细，不能用全树检索判定） | ✅ 应用重启后 `shell.overlay` 占用者中出现 `{ id: "dsh-sidebar-rail.rail", order: 10, priority: 0, active: true }`，说明客户端 bundle 已加载且注册生效 |
-| 未替换宿主侧栏 | `client/Slots.listSubTree root=sidebar` | ✅ 占用者只有 1 个（宿主的 `ui-sidebar`），插件不再注册该槽 |
-| 设置座位仍在 | `client/Slots.listSubTree root=sidebar.settings` | ✅ 占用者 active（宿主 `ui-settings` 的 trigger row + 弹窗面板），设置不再因替换侧栏而丢失 |
-| 恢复关闭 | `plugin_manager set_bundle enabled=false` | ✅ `changed: true`、`application: applied`，插件已回到关闭状态 |
-| 界面视觉证据 | `screencapture` / System Events 可访问性树 | ⚠️ 均被系统权限拒绝（`could not create image from display`、`-10004`），本会话无法截图或读取 a11y 树，折叠浮轨的实际绘制仍需人眼确认 |
-
-### Desktop 真实界面复验（2026-11-04，第 7 轮）
-
-环境：macOS Desktop `0.2.1-rc.5`，中文界面、深色外观、`@nonamelego/dsh-catppuccin` 皮肤；插件通过 `plugin_manager` 启用后重启应用。方法：`screencapture` 截图 + 像素测量（Retina 截图 → CSS px）+ CGEvent 合成 `⌘B` 折叠侧栏、悬停浮层、`Esc`、`⌘R`，逐项核对；窗口约 1060 CSS 宽、844 CSS 高。
-
-| 问题 | 结果 | 实测证据 |
-| --- | --- | --- |
-| #1 折叠后图标轨 | ✅ 通过 | 点 `⌘B` 折叠后左侧出现常驻轨：宽度实测 **56.5 CSS px**（含 1px 右边框），图标横向中心 x=120.8 对轨中心 120.5，纵向按钮间距 40px（首钮中心 y≈156）；顶部不遮盖红绿灯，也不与 `shell.leading` 的重开按钮重叠；底部有账号座位；再按 `⌘B` 展开后浮轨消失、无残留 |
-| #2 深色可读性 | ✅ 通过 | 浮层底 `RGB(66,69,88)`：标题 **6.19:1**、次级文字 **4.26:1**、轨内图标对轨底 **9.04:1**；改前次级文字为 3.49:1（同为实测）。浮层标题已提到 `label-primary`，空态/提示提到 `label-secondary` |
-| #3 展开态设置入口 | ✅ 通过 | 展开态完全由宿主侧栏接管；点底部账号行弹出「设置 / 意见反馈 / 退出登录」，点「设置」（或 `⌘,`）**完整打开设置面板**（账号与余额、通用设置、模型、内置插件、Agent 预设、Catppuccin、通知提醒、桌面版重启）。改造前该面板因 `SettingsRoot` 不挂载而整体不可达 |
-| #4 中文相对时间 | ✅ 通过 | 最近会话显示「2 分钟前 / 46 分钟前 / 2 小时前 / 4 小时前」，项目与章节标题均为中文（工作区 / 项目 / 最近会话 / 已启用插件 / 还没有定时任务） |
-| 浮层交互 | ✅ 通过 | 悬停 120ms 后浮层出现在轨右侧（左缘实测 x≈149，即 `anchor.right + 8`）；`Esc` 关闭（关闭后浮层底色像素 365 vs 打开时 37510）；插件列表加载出真实数据；定时任务显示空态 |
-| 窄窗隐藏 | ✅ 通过（第 8 轮） | 改为纯函数阈值 768 后已在真机验证：窗口 525 CSS 宽时浮轨不渲染、858.5 CSS 宽时渲染（详见第 8 轮） |
-
-### 本轮额外修复：两个浮层永久停在「加载中…」
-
-真实界面验收发现的新缺陷（旧代码即存在，此前未在界面里点开过这两个浮层）：
-
-- 现象：悬停「插件」/「定时任务」后，正文停在「加载中…」永不结束；`Esc` 后再次悬停仍是加载中。
-- 根因：懒加载 `useEffect` 的依赖里含 `phase`，而 effect 体内先 `setState({phase:'loading'})`。这次 setState 触发重渲染 → React 先执行上一次 effect 的 cleanup（`live = false` + `clearTimeout`）→ 本次 effect 又因 `phase !== 'idle'` 直接 return。结果是 promise 回调全部被 `live` 丢弃、超时定时器被清掉，**数据永远写不进去**。
-- 修法：effect 依赖收窄为 `[open]`；loader 通过 `useRef` 读取（注入 props 每次渲染都是新对象，函数 identity 进依赖会重演同一问题）；每次打开只发起一次加载，关闭时重置；保留 5s 超时兜底，把「Host 调用不返回」转成失败态而不是永久加载。
-- 复验：修复后「已启用插件」列出真实数据（cordis:include、@deepseek-ai/dsh-plugin-manager、@deepseek-ai/cordis-plugin-timer 等），「定时任务」显示「还没有定时任务」空态，两者都有「打开面板」出口。
-
-### 第 8 轮：沟通过的改造 + 真机复验
-
-本轮先做了一轮设计追问（产品形态、窄窗策略、排版层级、发布策略共 16 个决策），再按结论改实现与元数据。
-
-**行为改动**
-
-| 项 | 改前 | 改后 |
-| --- | --- | --- |
-| 窄窗判定 | CSS `@media (max-width: 900px) { display: none }` | 纯函数 `shouldRenderRail(platform, collapsed, viewportWidth)`，阈值 `RAIL_MIN_VIEWPORT = 768`（680 正文最小宽 + 56 轨宽 + 32 安全），由 `window.innerWidth` + `resize` 监听驱动；不满足即 `return null` |
-| 文字层级 | 标题 `label-primary`、元信息 `label-secondary`、章节/提示 `label-tertiary` | 全部 `label-primary`；层级只靠字号与字重（标题 13px/600 vs 元信息 11px/400） |
-
-**发布形态（未发布，只改成可发布状）**
-
-- 包名 `@skylerfee/dsh-sidebar-rail`，去掉 `private`，`version` 仍 `0.1.0`
-- 补 `license`/`LICENSE`（MIT © 2026 SkylerFee）、`repository`/`homepage`/`bugs`/`keywords`/`engines`（node >=22.19.0）、`publishConfig`（access public + registry）
-- `peerDependencies`：`@deepseek-ai/cordis`（`~4.0.4 || ~4.0.5-alpha.1`）+ 5 个 client 包（`>=0.2.1-rc.5 <0.3.0-0 || >=0.2.2-0 <0.3.0-0`，后段是为了让将来的 `0.2.2-rc.x` 满足 semver 预发布规则）
-- `files` 只含运行必需文件（不含 docs）；`exports` 补 `./package.json`
-- 脚本：`test`、`check`（两入口 `node --check` + 单测）、`prepublishOnly`（= `check`）
-- `.github/workflows/ci.yml`（push main / PR 跑 `npm run check`）+ `publish.yml`（Release 触发、校验 tag==`v<version>`、OIDC trusted publishing、按版本推导 dist-tag）
-- README 拆成英文主 `README.md` + `README.zh.md`；`AGENTS.md` 保留
-
-**真机复验（同一 Desktop 会话，macOS 0.2.1-rc.5）**
-
-| 用例 | 方法 | 结果 |
-| --- | --- | --- |
-| 宽窗 + 折叠 | `⌘B` 折叠（窗口接近全屏） | ✅ 左侧浮轨显示：文件夹/时钟/插件/更多 + 底部 AI，位于红绿灯下方 |
-| 窄窗 + 折叠 | 拖窗口右缘缩到 **525 CSS** 宽 | ✅ 浮轨完全不渲染，内容贴窗口左缘 |
-| **区分性用例** | 拖到 **858.5 CSS** 宽（768–900 之间） | ✅ 浮轨显示 —— 旧的 `max-width:900px` 媒体查询在这里会隐藏，因此这条证明**跑的是新的 JS 判定**而非旧 CSS |
-| 动态响应 | 在 525 ↔ 858 之间来回拖窗口 | ✅ 浮轨随宽度出现/消失，说明 `resize` 监听路径工作，无需刷新 |
-| 排版 | 858 宽悬停工作区，读浮层像素 | ✅ 浮层底色 `RGB(66,69,88)`，区域内所有文字核心色均为 `RGB(200,208,242)` = `label-primary`，对比度 **6.19:1**（改前元信息为 4.26:1）—— 与新排版一致 |
-| 页面重载 | `⌘R` 后观察 | ✅ 重载后行为与重载前一致（窄窗仍不渲染），无报错可见 |
-
-测量方法说明：窗口边界用「标题栏那一行的亮天空 vs 暗窗口」判定（早期用壁纸大面积亮度判断会被深色水面/红色大桥误导，曾误读成 1401 CSS，已纠正）。
-
-### 仍未验证
-
-- 阈值两侧的精确边界（767 vs 769）：真机只覆盖了 525 / 858.5 两个点，边界本身由 `shouldRenderRail` 单测覆盖。
-- 浮层跨间隙移动的 200ms 关闭时序手感、键盘 Tab 遍历。
-- 亮色主题、其他皮肤下的对比度。
-- 停用/卸载后的宿主恢复（本次只在启用态验证，未卸载）。
-- Web 端确认不出现第二条轨（依据平台判定走查，未在浏览器中实测）。
-
-## 历史验证说明
-
-本节以下为**替换 `sidebar` 槽时代**（第 1-5 轮）的记录，其架构与当前实现不同：当时的展开态自绘列、native 模式、折叠状态持久化均已在第 6 轮移除，相关条目只用于追溯历史，不代表当前实现。
-
-下文为此前的验证记录，其中的安装状态、端口与工具限制只描述当次环境；当前 Desktop 结果以上述报告为准。
-
-> 依据插件开发规范：无浏览器控制时，验证止于「JS 语法 + 清单合法性 + 实时 Client Slot 注册」，并如实报告视觉验证不可用。
-
-## 已执行
-
-| 项 | 方法 | 结果 |
-| --- | --- | --- |
-| JS 语法 | `node --check client.js` | ✅ 通过 |
-| 契约自检：不声明 `children` | `grep -c "children:" client.js` | ✅ 0 处（避免 `slot already declared`） |
-| 契约自检：单槽优先级 | 源码检查 | ✅ `priority: -1` |
-| 元数据 JSON | `python3 json.load` 校验 `locale/en.json`、`locale/zh.json` | ✅ 合法，含 `meta.title` / `meta.description` |
-| 图标 | `icon.svg` 原创 SVG，包内相对路径 | ✅ 存在，尺寸 viewBox 64 |
-| 安装 | `plugin_manager install_bundle` | ✅ `application: applied`，`enabled: true`，无 warnings |
-| profile 依赖 | `~/.dsh/profiles/desktop/package.json` | ✅ `"dsh-sidebar-rail": link:...`，且列入 `dsh.profile.bundles` |
-| 与既有插件冲突 | 检查 profile 内 `dsh-better-sidebar` | ✅ 那是**右侧栏**工作台，不占左侧 `sidebar` 槽 |
-
-## 补充核查（第 2 轮）
-
-| 项 | 方法 | 结果 |
-| --- | --- | --- |
-| Host 侧插件行是否激活 | `plugin_manager install_bundle` 结果 | ✅ `application: applied`、`enabled: true`、`warnings: []` |
-| 重复安装幂等 | 再次 `install_bundle` | ✅ 返回 `already-installed`（`changed: false`），未破坏既有安装 |
-| profile 依赖与 bundle 列表 | 读 `~/.dsh/profiles/desktop/package.json` | ✅ 依赖为 `link:`，且列入 `dsh.profile.bundles` |
-| 与既有插件冲突 | 检查 `dsh-better-sidebar` | ✅ 其为右侧栏工作台，不占左侧 `sidebar` 槽 |
-| 页面/模块清单直查 | `curl http://127.0.0.1:65028/` | ⚠️ 返回 401（需带 `dsh web` 打印的 token），无法从 HTTP 侧核对模块清单 |
-| Cordis Inspect 精确查询 | `Config.listConfigs` / `Slots.listSubTree` 带 `input` | ⚠️ 该 Inspect 通道当前把 `input` 当字符串传入并报 `"input" must be an object`，无法按插件名/槽名过滤 |
-| 渲染容错加固 | 代码审查后补充 | ✅ 标准 hooks 缺失时退化为常量读取；`t` 缺失时退化为原文键；避免单个 prop 假定错误导致整列空白 |
-
-## 自查发现的缺陷（第 3 轮，均已修）
-
-| 缺陷 | 影响 | 修法 |
-| --- | --- | --- |
-| 展开态没有折叠按钮 | 原折叠按钮属于被影子的 `ui-sidebar` 外壳，替换后用户无法收回侧栏（只能靠快捷键） | 品牌行右侧补一个 `aria-label` 折叠按钮，调用 `layout.toggleSidebar()` |
-| `renderSlot` 未解构 | `typeof renderSlot` 恒为 `undefined`，原生展开态成为死代码，永远不会激活 | 把 `renderSlot` 加入 props 解构 |
-| i18n 键缺失 | 新增折叠文案时 `t('rail.collapse')` 无字典，会显示原始 key | 补 zh/en 两份字典；脚本双向校验通过（27 键、zh/en 对齐） |
-
-自查方式：`node --check` + 解构/分支/重复定义的静态核对 + i18n 键集合比对（正则排除 `ctx.get(` 之类误报）。
-
-## 纯逻辑单测（第 4 轮，可复跑）
-
-`npm test`（即 `node --test test/data.test.mjs`）——**11/11 通过**。测的是 `client.js` 内用 `#region` 标记的两段纯函数，不涉及 React / DOM / 渲染，属于逻辑校验而非视觉校验。
-
-| 用例 | 覆盖的需求 |
-| --- | --- |
-| pinned workspaces lead, in pin order | 需求 c：置顶项目段在普通项目之前、按置顶顺序 |
-| normal rows keep host order | 需求 c：普通项目保持宿主顺序 |
-| recent newest-first, dropped archived/blank/subagent, capped at 10 | 需求 c：最近会话仅 10 条、按时间倒序、过滤归档/空白/子代理 |
-| workspaceSessions sorted & filtered | 展开态每个项目下挂会话的排序与过滤 |
-| normalizeTasks unwraps RemoteResult / tolerates junk | 定时任务浮层的数据归一（含 `{ok,value}` 包裹与脏数据） |
-| normalizePlugins keeps only enabled / prefers moduleName | 插件浮层"仅已启用"语义 |
-| relativeTime zh/en buckets | 中英文相对时间文案 |
-| shortPath two segments | 路径省略显示 |
-| selectorHook falls back to constant reader | 标准 props 缺失时的降级不抛错 |
-
-跑法：`cd dsh-sidebar-rail && npm test`
-
-## 验证路径排查（第 5 轮，均为受限）
-
-| 路径 | 结果 |
-| --- | --- |
-| 启动日志 `~/.dsh/logs/*.log` | ⚠️ 最新一份是 2026-09-29，非当前进程；无本插件记录 |
-| 应用内置 `runtime/bin/node` | ⚠️ 是包装脚本，直接执行报 `exec: : not found` |
-| 官方启动器 `runtime/cli/bin/dsh` | ✅ 揭示真实入口：`ELECTRON_RUN_AS_NODE=1 <Electron> --expose-internals <cli.js>` |
-| 用该入口跑 `--profile desktop --dump-config` | ❌ `error: profile "desktop" is managed exclusively by the Electron application`（桌面 profile 由 App 独占，CLI 不允许导出） |
-
-结论：在本会话可用的工具面内，**页面级/视觉级验证无法完成**。已完成的最高强度验证为：语法 + 纯逻辑单测（11/11）+ 安装结果 `applied` + profile 注册核对 + 宿主源码契约比对。
-
-## 未验证（原因）
-
-| 项 | 原因 |
-| --- | --- |
-| 折叠轨的视觉呈现、浮层位置与动效 | 本会话无浏览器控制能力，无法截图或点击 |
-| 悬浮展开/关闭的时序手感 | 同上 |
-| 置顶与折叠状态在真实刷新后的保持 | 同上（逻辑已实现，未经实机复现） |
-| 亮/暗主题下的浮层配色 | 同上（全部使用 `--dsw-alias-*` token，未硬编码颜色） |
-| 宿主侧栏是否被正确替换 | Slot 树不暴露单槽占用者列表，无法从 Inspect 侧确认；需页面刷新后目视 |
-
-## 复验步骤（人工，当前实现）
-
-前置：在 `~/.dsh/profiles/desktop` 中启用 `dsh-sidebar-rail`，然后**刷新渲染进程**（Desktop 窗口按 `Cmd+R`；宿主进程与本会话不受影响）。
-
-1. 展开态先确认宿主侧栏原样：搜索、视图选项、添加工作区、底部设置座位、账号菜单都在，且点击设置能打开设置面板。
-2. 点「收起侧栏」→ 左侧应出现 56px 浮轨，从窗口顶部 48px 处开始（上方是红绿灯与宿主自己的展开按钮），底部是账号座位。
-3. 悬浮「工作区」→ 120ms 后右侧出现浮层，含「置顶项目 / 项目 / 最近会话」；移开后 200ms 关闭，Escape 也能关闭。
-4. 点项目行图钉 → 移入「置顶项目」；刷新页面后仍在。
-5. 深色主题下检查浮轨与浮层文字对比度；中文界面下检查最近会话的相对时间是否显示「5 分钟前」等中文。
-6. 把窗口缩到 900px 以下 → 浮轨应隐藏（避免压住正文），宿主折叠态的展开按钮仍可用。
-7. 展开侧栏 → 浮轨消失，交给宿主原生侧栏；控制台无 `[dsh-sidebar-rail]` 报错。
-
-## 若出现异常
-
-- 侧栏突然变回 DSH 原样 → 说明 entry 崩溃并 abdicate，查控制台 `[dsh-sidebar-rail] render failed`。
-- 侧栏空白 → 检查 `dsh.client` 的 `./client` 导出与 `client.js` 是否被页面加载。
-- 需要立即回退：`plugin_manager action: set_bundle target: dsh-sidebar-rail enabled: false`。

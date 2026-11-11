@@ -1,0 +1,294 @@
+.dsr-rail { display:flex; flex-direction:column; align-items:center; height:100%; padding:10px 0 8px; gap:4px; }
+.dsr-rail-top { display:flex; flex-direction:column; align-items:center; gap:4px; }
+.dsr-rail-spacer { flex:1 1 auto; min-height:8px; }
+/* Desktop only (macOS and Windows): the host clips the collapsed column to 0
+   width, so the rail is portalled beside #root and pinned below the window-chrome
+   strip. That strip is platform-specific but reaches us through one variable:
+   --dsh-frame-top-clearance is 48px on macOS (traffic lights) and the caption
+   height on Windows ([data-windows-titlebar]) — both declared on the root
+   element so portalled overlays inherit them, with a 48px fallback. Clicking
+   must not drag the window: -webkit-app-region is opted out explicitly even
+   though body-level portals already are (a no-op off Electron-on-Windows, kept
+   for the platforms that honour it). */
+.dsr-rail-float { position:fixed; left:0; top:var(--dsh-frame-top-clearance, 48px); bottom:0; width:56px;
+  z-index:60; display:flex; flex-direction:column; align-items:center;
+  background:var(--dsw-specific-sidebar-fill);
+  border-right:.5px solid var(--dsw-alias-border-l3);
+  -webkit-app-region:no-drag; }
+.dsr-rail-float .dsr-rail { width:100%; }
+/* Default state: the rail is slid out of the window, leaving only a thin edge
+   strip. It covers the host's first conversation tab otherwise — the frame's
+   collapsed column is zero-width and the tab row carries no leading clearance
+   (ui-conversation ConversationRoot.module.css ".tabs" rule), so anything wider
+   than this strip hides the tab's text and hit area. */
+.dsr-rail-float { transform:translateX(-100%); transition:transform 160ms ease; }
+.dsr-rail-float[data-dsr-revealed="true"] { transform:translateX(0); }
+@media (prefers-reduced-motion: reduce) { .dsr-rail-float { transition:none; } }
+/* The edge strip stays clickable/hoverable while the rail is out, which is what
+   lets the pointer "find" it without a visible handle. */
+/* 12px rather than 8px: macOS keeps an invisible resize band along the window
+   edge, so a narrower strip left the pointer on the resize cursor and its events
+   never reached the page. This width stays clear of that band while still being
+   far narrower than the 56px rail it reveals. Windows draws no such band inside
+   the client area, so the same width is simply a slightly generous target there. */
+.dsr-rail-hotzone { position:fixed; left:0; top:var(--dsh-frame-top-clearance, 48px); bottom:0;
+  width:12px; z-index:59; -webkit-app-region:no-drag; }
+.dsr-rail-btn { display:flex; align-items:center; justify-content:center; width:36px; height:36px; padding:0;
+  border:none; background:transparent; border-radius:var(--dsw-radius-sm, 8px);
+  color:var(--dsw-alias-label-primary); cursor:pointer;
+  transition:background-color 120ms ease, color 120ms ease; }
+.dsr-rail-btn:hover, .dsr-rail-btn:focus-visible { background:var(--dsw-alias-interactive-bg-hover);
+  color:var(--dsw-alias-label-primary); outline:none; }
+.dsr-rail-btn[aria-current="page"], .dsr-rail-btn[data-dsr-open="true"] {
+  background:var(--dsw-specific-sidebar-nav-item-active); color:var(--dsw-alias-label-primary); }
+.dsr-avatar { display:flex; align-items:center; justify-content:center; width:26px; height:26px;
+  border-radius:50%; overflow:hidden;
+  background:var(--dsw-alias-interactive-bg-active); color:var(--dsw-alias-label-primary); }
+.dsr-avatar-img { width:100%; height:100%; object-fit:cover; display:block; }
+
+/* Spacing system of the host sidebar. These four variables are declared on the
+   host's sidebar root (ui-sidebar SidebarRoot.module.css) and inherited by its
+   occupants. The flyout is portalled to document.body and is NOT inside that
+   subtree, so it restates the same values to line its rows up with the shipped
+   sidebar. Keep them in sync with the host; they are the only place in this
+   stylesheet that hard-codes a spacing number. */
+.dsr-flyout { position:fixed; z-index:2147483000; width:288px; max-height:calc(100vh - 32px);
+  --dsh-sidebar-inline-padding:8px; --dsh-sidebar-row-padding:12px;
+  --dsh-sidebar-label-gap:6px; --dsh-sidebar-paint-inset:3px;
+  display:flex; flex-direction:column;
+  background:var(--dsw-specific-sidebar-fill); color:var(--dsw-alias-label-primary);
+  font-size:14px;
+  border:1px solid var(--dsw-alias-border-l1);
+  border-radius:var(--dsw-radius-md);
+  box-shadow:var(--dsw-shadow-lv3);
+  overflow:hidden; animation:dsr-in 120ms ease-out; }
+@keyframes dsr-in { from { opacity:0; transform:translateX(-2px); } to { opacity:1; transform:none; } }
+@media (prefers-reduced-motion: reduce) { .dsr-flyout { animation:none; } }
+/* Flyout title: the "which surface am I in" label. It leads the type scale
+   (15/700) so the section headers below it can sit at 14/700 without inverting
+   the hierarchy: 15 title > 14 section = 14 row > 12 row meta. An earlier pass
+   used 16/15; both read as oversized at a 288px flyout width. */
+.dsr-flyout-head { padding:10px var(--dsh-sidebar-row-padding) 6px; font-size:14px; font-weight:700;
+  line-height:20px; color:var(--dsw-alias-label-primary); }
+/* Single-column flyouts (more / account) keep their own scroller; sectioned
+   flyouts scroll on .dsr-sections instead (ADR-0007). */
+.dsr-flyout-body { overflow-y:auto; padding:2px var(--dsh-sidebar-inline-padding) 8px; min-height:0; }
+/* Fixed footer. It must stay put while the list scrolls, so it keeps flex:none
+   and never joins the scroll container (ADR-0007: a long recent list no longer
+   hides the recent-count stepper). */
+.dsr-flyout-foot { flex:none; border-top:1px solid var(--dsw-alias-border-l1);
+  padding:6px var(--dsh-sidebar-inline-padding); }
+/* Sections (0.5.0, ADR-0007). The flyout has ONE scroll container and every
+   section is just a group inside it: no per-section cap, no per-section
+   scroller, no separator rules between sections. Section headers therefore
+   scroll away with the content -- that is the accepted trade-off, because a
+   single continuous list is what the host sidebar and Codex do.
+   .dsr-sections is that single scroller: it is the only element in the flyout
+   allowed to own overflow-y. The scrollbar appears on its own when the content
+   is taller than the panel, so an empty slot is never reserved. */
+.dsr-sections { display:flex; flex-direction:column; flex:1 1 auto; min-height:0; overflow-y:auto; }
+.dsr-section { display:flex; flex-direction:column; flex:none; }
+/* Header geometry copied from the host's .sectionHeader (ui-workspace
+   WorkspaceBrowser.module.css): 36px tall, leading padding = row padding (12px),
+   gap 4px, tertiary label colour, and no bottom margin. The fold chevron rides in
+   a 16px leading gutter so the title starts at the same x as a row title. */
+/* Section header band. Grew from 36px to 40px when the headings went 11px -> 15px:
+   a 24px line box inside 36px left only 6px of air, which read cramped once the
+   text was real heading weight. Vertical padding is explicit rather than folded
+   into min-height so the heading keeps symmetrical breathing room. */
+.dsr-section-head { flex:none; display:flex; align-items:center; gap:4px; box-sizing:border-box;
+  min-height:36px; padding:7px var(--dsh-sidebar-inline-padding) 3px var(--dsh-sidebar-row-padding); }
+/* Section header: a real heading, not a caption. 14/700 matches the row text size
+   and separates itself by weight and colour instead — at 15px the headings read
+   heavier than a 288px flyout wants. Was 11px/600/tertiary, i.e. smaller than the
+   rows it labelled, which is the problem this fixes. */
+.dsr-section-toggle { display:flex; align-items:center; gap:var(--dsh-sidebar-label-gap); flex:1 1 auto; min-width:0;
+  padding:0; border:none; background:transparent; font:inherit; font-size:14px; font-weight:700;
+  line-height:22px; letter-spacing:0; color:var(--dsw-alias-label-primary); text-align:left; cursor:pointer; }
+/* The heading already rests at primary, so hover has no colour to rise to and
+   gets no underline either: the caret and the hover fill on the row below already
+   signal that the header is clickable. */
+.dsr-section-toggle:hover, .dsr-section-toggle:focus-visible {
+  color:var(--dsw-alias-label-primary); outline:none; }
+.dsr-section-caret { flex:none; display:flex; align-items:center; justify-content:center;
+  width:16px; height:22px; transition:transform 120ms ease; }
+.dsr-section[data-dsr-open="false"] .dsr-section-caret { transform:rotate(-90deg); }
+.dsr-section-title-text { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* Not a scroller: the section body is plain flow content inside .dsr-sections.
+   flex:0 0 auto keeps a short section at its natural height so it can neither
+   stretch nor claim a share of the panel. */
+.dsr-section-body { flex:0 0 auto; min-height:0; padding:0 var(--dsh-sidebar-inline-padding) 8px; }
+@media (prefers-reduced-motion: reduce) { .dsr-section-caret { transition:none; } }
+/* "Show more" (0.5.1): a full-width secondary action closing a paged list.
+   Geometry copies .dsr-row so its label lines up with the titles above it, and
+   the transparent inline border carries the paint inset the same way rows do:
+   the hover fill stays 3px narrower than the click area. */
+.dsr-show-more { display:flex; align-items:center; width:100%; box-sizing:border-box;
+  min-height:28px; padding:0 8px;
+  padding-inline-start:calc(var(--dsh-sidebar-row-padding) - var(--dsh-sidebar-paint-inset));
+  border:none; border-inline:var(--dsh-sidebar-paint-inset) solid transparent;
+  background:transparent; background-clip:padding-box; border-radius:var(--dsw-radius-md);
+  color:var(--dsw-alias-label-secondary); font:inherit; font-size:13px; line-height:20px;
+  text-align:left; cursor:pointer; }
+.dsr-show-more:hover, .dsr-show-more:focus-visible {
+  background:var(--dsw-alias-interactive-bg-hover); color:var(--dsw-alias-label-primary); outline:none; }
+/* Status markers: same shapes and tokens as the host's StateDot, so a session
+   reads the same in the rail and in the shipped sidebar. */
+.dsr-account-balance { display:flex; align-items:baseline; gap:8px;
+  padding:6px var(--dsh-sidebar-row-padding) 2px; }
+.dsr-account-balance-label { font-size:12px; line-height:18px; color:var(--dsw-alias-label-secondary); }
+.dsr-account-balance-value { font-size:14px; font-weight:600; font-variant-numeric:tabular-nums;
+  color:var(--dsw-alias-label-primary); }
+.dsr-account-links { display:flex; gap:10px; padding:6px var(--dsh-sidebar-row-padding) 0; }
+.dsr-account-link { font-size:13px; color:var(--dsw-alias-brand-primary); text-decoration:none; }
+.dsr-account-link:hover { text-decoration:underline; }
+/* The row's leading cell: the scheduled-task clock and the state dot share it.
+   The host gives this cell 16px and only lends it to the clock while the row's
+   own state is idle, so the two never appear together. */
+.dsr-row-mark { display:inline-flex; align-items:center; justify-content:center;
+  width:16px; height:16px; flex:none; color:var(--dsw-alias-label-tertiary); }
+/* Text for assistive technology only: the clock glyph is aria-hidden, so the
+   marker's meaning has to reach a screen reader some other way. */
+.dsr-visually-hidden { position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; }
+.dsr-dot { display:inline-flex; align-items:center; justify-content:center; width:10px; height:10px; flex:none; }
+.dsr-dot::after { content:''; width:6px; height:6px; border-radius:50%; background:currentColor; }
+.dsr-dot-done { color:var(--dsw-alias-state-success-primary); }
+.dsr-dot-warning { color:var(--dsw-alias-state-warn-primary); }
+.dsr-dot-ongoing { color:var(--dsw-alias-label-tertiary); }
+.dsr-dot-ongoing::after { content:none; }
+.dsr-ring-track, .dsr-ring-arc { fill:none; stroke:currentColor; stroke-width:2; }
+.dsr-ring-track { opacity:.25; }
+.dsr-ring-arc { stroke-linecap:round; stroke-dasharray:14 46; transform-origin:12px 12px;
+  animation:dsr-spin 1.5s linear infinite; }
+@keyframes dsr-spin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .dsr-ring-arc { animation:none; } }
+/* Kept for the non-collapsible Section primitive ("More" flyout). Same metrics as
+   the host's .sectionLabel: 12px label at the row's leading padding, no uppercase
+   (the host does not transform section labels). */
+/* Non-foldable section heading (the More flyout's "Other panels"): same tier as
+   the foldable headers so both kinds of grouping read alike. */
+.dsr-section-title { padding:0 var(--dsh-sidebar-inline-padding) 4px var(--dsh-sidebar-row-padding);
+  font-size:14px; line-height:22px; font-weight:700; letter-spacing:0;
+  color:var(--dsw-alias-label-primary); }
+/* Rows follow the host's row metrics (ui-workspace Rows.module.css
+   .projectRow/.sessionRow): 32px tall, 6px label gap, radius md, and the paint
+   inset carried by a transparent inline border so the hover fill stops 3px short
+   of the row's box without moving the content. Starting padding is
+   row-padding - paint-inset, exactly as the host computes it. */
+.dsr-row { display:flex; align-items:center; gap:var(--dsh-sidebar-label-gap); width:100%;
+  box-sizing:border-box; min-height:32px;
+  padding:0 8px; padding-inline-start:calc(var(--dsh-sidebar-row-padding) - var(--dsh-sidebar-paint-inset));
+  border:none; border-inline:var(--dsh-sidebar-paint-inset) solid transparent;
+  background:transparent; background-clip:padding-box; border-radius:var(--dsw-radius-md);
+  color:inherit; font:inherit; font-size:14px; line-height:20px; text-align:left; cursor:pointer; }
+.dsr-row:hover, .dsr-row:focus-visible { background:var(--dsw-alias-interactive-bg-hover); outline:none; }
+/* The session the main view is showing. The host paints its own selected
+   session row with --dsw-alias-interactive-bg-hover (ui-workspace
+   Rows.module.css), so matching that token keeps both surfaces consistent;
+   --dsw-specific-sidebar-nav-item-active belongs to the settings nav. */
+.dsr-row[data-dsr-current="true"] { background:var(--dsw-alias-interactive-bg-hover); }
+/* The wrapper exists only for rows with a trailing pin: the pin sits beside the
+   row button, so the hover fill must be painted by the wrapper. It carries the
+   paint inset itself, which keeps the fill 3px inside the row box exactly like a
+   plain row; the nested row then drops its own transparent border so the two
+   cannot stack into a double inset. */
+.dsr-row-wrap { display:flex; align-items:center; box-sizing:border-box;
+  border-inline:var(--dsh-sidebar-paint-inset) solid transparent;
+  background-clip:padding-box; border-radius:var(--dsw-radius-md); }
+.dsr-row-wrap:hover { background:var(--dsw-alias-interactive-bg-hover); }
+.dsr-row-wrap:hover .dsr-row { background:transparent; }
+.dsr-row-wrap .dsr-row { border-inline:0; }
+.dsr-row-main { display:flex; flex-direction:column; min-width:0; flex:1 1 auto; }
+/* The title clips its own text and is scrolled programmatically while the row is
+   hovered (hooks/use-title-marquee.ts, copied from the host's useTitleMarquee).
+   The two data hooks drive the fade masks below: data-scrolled once the title has
+   left its start, data-clipped while text still remains beyond the right edge.
+   The mask rides the title span itself so the leading mark and the trailing pin
+   keep full colour. */
+/* min-width:0 is what makes the clip happen at all. The title lives in a
+   column flex box (.dsr-row-main), so it is a flex item there: without this a
+   long title grows the item to its content width, clientWidth === scrollWidth,
+   and no ellipsis or marquee can ever appear. The host sets the same property on
+   its own .title for exactly this reason. */
+.dsr-row-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* The gradient stops use currentColor rather than the host's literal black stop:
+   a mask only reads the stop's alpha, and currentColor resolves to the row's own
+   opaque label colour, so it is exactly as opaque while staying token-driven
+   (check-source bans literal colour values, which is why this differs from the
+   host stylesheet). */
+.dsr-row-title[data-scrolled] {
+  mask-image: linear-gradient(to right, transparent, currentColor 12px);
+}
+.dsr-row-title[data-clipped] {
+  mask-image: linear-gradient(to left, transparent, currentColor 12px);
+}
+.dsr-row-title[data-scrolled][data-clipped] {
+  mask-image: linear-gradient(to right, transparent, currentColor 12px,
+    currentColor calc(100% - 12px), transparent);
+}
+/* While the marquee travels, drop the ellipsis: it would cover the characters the
+   title just scrolled into view. Guarded on hover so a touch tap that latches
+   :hover after the title already rested cannot strand the row without its
+   ellipsis — same guard as the host. */
+@media (hover: hover) {
+  .dsr-row:hover .dsr-row-title { text-overflow: clip; }
+  .dsr-row-wrap:hover .dsr-row-title { text-overflow: clip; }
+}
+.dsr-row-meta { font-size:12px; line-height:17px; font-weight:400; color:var(--dsw-alias-label-tertiary);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dsr-row-action { display:flex; align-items:center; justify-content:center; width:22px; height:22px; flex:none;
+  margin-right:4px; border:none; background:transparent; border-radius:var(--dsw-radius-sm, 8px);
+  cursor:pointer; color:var(--dsw-alias-label-primary); opacity:0; }
+.dsr-row-wrap:hover .dsr-row-action, .dsr-row-action:focus-visible { opacity:1; }
+.dsr-row-action:hover { background:var(--dsw-alias-interactive-bg-active);
+  color:var(--dsw-alias-label-primary); }
+.dsr-row-wrap[data-pinned="true"] .dsr-row-action { opacity:1; }
+/* Project rows (0.5.0, spec §4.3). Native expansion: the leading slot carries a
+   closed folder that becomes an open folder once the project is expanded, and
+   the WHOLE row toggles it -- there is no separate arrow button anymore. The
+   glyph geometry is the host's own folder-close / folder-open artwork, redrawn
+   here because this bundle may only require react/react-dom and cannot import
+   @deepseek-ai/dsh-client-ui-primitives.
+   The slot is 16px wide and 20px tall, the exact box the host reserves for its
+   folder (ui-workspace Rows.module.css .slot), so the title starts on the same x
+   as a session title in the shipped sidebar. */
+.dsr-project-row { display:flex; flex-direction:column; }
+.dsr-project-main { gap:var(--dsh-sidebar-label-gap); }
+.dsr-project-folder { flex:none; display:inline-flex; align-items:center; justify-content:center;
+  width:16px; height:20px; color:var(--dsw-alias-label-tertiary); }
+/* An expanded project is the "you are looking inside this" state; the host tints
+   its folder with the business colour in the same situation (.folderActive). */
+.dsr-project-main[aria-expanded="true"] .dsr-project-folder { color:var(--dsw-alias-state-business-primary); }
+/* Both actions stay visible, unlike a session row's pin which appears on hover:
+   the new-session button and the pin must not depend on the pointer resting on
+   the row. Both stop propagation, so they never fold the row as a side effect. */
+.dsr-project-action { display:flex; align-items:center; justify-content:center; width:22px; height:22px; flex:none;
+  border:none; background:transparent; border-radius:var(--dsw-radius-sm, 8px);
+  cursor:pointer; color:var(--dsw-alias-label-tertiary); }
+.dsr-project-action:hover, .dsr-project-action:focus-visible {
+  background:var(--dsw-alias-interactive-bg-active); color:var(--dsw-alias-label-primary); }
+/* The expanded session list is indented under its project, on the host's tree
+   step of 12px per level (ui-workspace WorkspaceBrowser.tsx sets
+   --dsh-workspace-indent to depth * 12px). The project row itself is the parent
+   level, so members sit one step in. */
+.dsr-project-sessions { display:flex; flex-direction:column; padding-left:12px; }
+/* Section-header action (the projects section's Add button). It sits beside the
+   fold button, so its click must not also fold the section it belongs to. */
+/* Same 24px icon-button box the host uses for section-header actions, widened to
+   fit a text label: radius xs, tertiary label colour, hover fill only. */
+.dsr-section-action { flex:none; max-width:96px; box-sizing:border-box; height:24px;
+  padding:0 8px; border:none; border-radius:var(--dsw-radius-xs);
+  background:transparent; color:var(--dsw-alias-label-tertiary);
+  font:inherit; font-size:12px; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dsr-section-action:hover:not(:disabled) { background:var(--dsw-alias-interactive-bg-hover); }
+.dsr-section-action:disabled { opacity:.6; cursor:default; }
+.dsr-project-error { color:var(--dsw-alias-state-warn-primary); text-align:left; }
+/* Host empty-state copy metrics (ui-workspace WorkspaceBrowser.module.css .empty):
+   13px, tertiary label, breathing room on the row padding. */
+.dsr-empty { padding:16px var(--dsh-sidebar-row-padding); font-size:13px; line-height:20px;
+  color:var(--dsw-alias-label-tertiary); text-align:center; }
+.dsr-hint { padding:4px var(--dsh-sidebar-row-padding) 8px; font-size:12px; line-height:18px;
+  color:var(--dsw-alias-label-secondary); }
+
+.dsr-fallback { padding:12px; font-size:13px; line-height:18px; color:var(--dsw-alias-label-tertiary); }

@@ -4,3 +4,9 @@ tmp/
 
 # macOS
 .DS_Store
+
+# 构建产物
+lib/
+
+# 本地代码索引（工具生成，不进仓库）
+.codegraph/

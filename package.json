@@ -1,6 +1,6 @@
 {
   "name": "@skylerfee/dsh-sidebar-rail",
-  "version": "0.3.3",
+  "version": "1.0.0",
   "description": "侧栏收起后也能快速切换项目、查看最近会话、管理定时任务和插件；鼠标靠近窗口左缘就会滑出图标轨。Keep quick access to your projects, recent sessions, scheduled tasks and plugins after the sidebar is collapsed.",
   "license": "MIT",
   "author": "SkylerFee",
@@ -31,15 +31,15 @@
   },
   "icon": "./icon.svg",
   "exports": {
-    ".": "./index.js",
-    "./client": "./client.js",
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
     "./locale/*.json": "./locale/*.json",
     "./icon": "./icon.svg",
     "./package.json": "./package.json"
   },
   "files": [
-    "index.js",
-    "client.js",
+    "lib/index.js",
+    "lib/client.js",
     "cordis.patch.yml",
     "docs/images/*.png",
     "locale/*.json",
@@ -63,7 +63,7 @@
     "manifestVersion": 1
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "~4.0.4 || ~4.0.5-alpha.1",
+    "@deepseek-ai/cordis": "~4.1.0",
     "@deepseek-ai/dsh-client-locale": ">=0.2.1-rc.5 <0.3.0-0 || >=0.2.2-0 <0.3.0-0",
     "@deepseek-ai/dsh-client-ui-layout": ">=0.2.1-rc.5 <0.3.0-0 || >=0.2.2-0 <0.3.0-0",
     "@deepseek-ai/dsh-client-ui-session": ">=0.2.1-rc.5 <0.3.0-0 || >=0.2.2-0 <0.3.0-0",
@@ -71,9 +71,27 @@
     "@deepseek-ai/dsh-client-ui-workspace": ">=0.2.1-rc.5 <0.3.0-0 || >=0.2.2-0 <0.3.0-0"
   },
   "scripts": {
-    "test": "node --test test/*.test.mjs",
-    "check": "node scripts/check.mjs && node --check client.js && node --check index.js && npm test",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs --watch",
+    "test:unit": "tsx --test test/*.test.ts",
+    "test:artifact": "node --test test/*.test.mjs",
+    "test": "npm run test:unit && npm run build && npm run test:artifact",
+    "check:source": "node scripts/check-source.mjs",
+    "check:artifact": "node scripts/check-artifact.mjs",
+    "check": "npm run typecheck && npm run check:source && npm run test:unit && npm run build && npm run check:artifact && npm run test:artifact",
+    "prepack": "npm run build",
     "prepublishOnly": "npm run check",
     "hooks:install": "git config core.hooksPath .githooks && echo 'git hooks enabled (core.hooksPath=.githooks)'"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "esbuild": "^0.28.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
   }
 }

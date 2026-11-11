@@ -44,3 +44,97 @@ enabled === true && official !== true && installed !== false && availability !==
 主视图正在显示的那个会话。宿主在 `ui-session` 与 `ui-workspace` 里都用 `retainedBy.mainView > 0` 判定，插件跟随同一判据，避免两个界面各说各话。
 
 注意：这个计数由宿主维护，插件不自己 `retain(source:'mainView')` 造选中态。Desktop `0.2.2-rc.1` 上实测该计数在读时为 0（宿主侧栏同样不高亮），此时插件也不高亮——**两边一起不亮**是正确的一致行为。
+
+## 分区 section
+
+浮层内部的一级分组，由一个标题行加一组条目组成；可展开/收起，收起时内容卸载。0.4.0 起每个浮层都按分区组织。
+
+关键含义（0.4.0 起）：分区**只是分组，不是滚动单元**。整个浮层共用一个滚动容器，分区标题随内容一起滚动（[ADR-0007](docs/adr/0007-single-scroll-flyout.md)）。这与更早的「固定标题 + 独立滚动」相反——那次结构已被实测否决。
+
+分区收起/展开不影响浮层总高度：浮层高度由「chrome 带之下到底边」钉死，只随窗口变化。
+
+## 工作区三分区 three workspace sections
+
+工作区浮层固定为三个分区，顺序不变：
+
+| 分区 | 内容 | 来源 |
+| --- | --- | --- |
+| **置顶** | 被置顶的项目 | 插件本地 `pinnedWorkspaceIds` |
+| **项目** | 其余全部项目 | 宿主工作区列表，宿主顺序 |
+| **最近会话** | 全部工作区里的最近会话（空白会话只保留当前那个） | 宿主会话列表，`updatedAt` 倒序，分页显示 |
+
+一个项目**只会出现在其中一处**：置顶了就从「项目」区移走。三个分区都可展开/收起，收起状态**不持久化**（每次打开浮层都是全展开）。
+
+> 「置顶」在本仓库特指**置顶项目**。宿主另有会话级置顶（`pinSession`，数据在 `useWorkspaces().pinnedSessionIds`），本插件**不使用**它。
+
+## 项目行展开 project row expansion
+
+项目行左侧的展开箭头，展开后显示该项目下的会话列表。
+
+- 排序用宿主顺序，但**分页显示**（见「分页」）：默认 10 条，点「显示更多」再加载 10 条；需要引起注意的行会突破水位自动显示。
+- **归档仍不过滤**：归档的会话照常列出，只是额外标注「已归档」（子代理会话本就不在 `sessionIds` 里）。**空白会话只保留当前那一个**——这是照抄宿主 `ui-workspace` 的 `tree.ts` 里 `sessionVisible` 的规则，不是我们的取舍：`blank && id !== current` 的会话不渲染，真实数据不删除。
+- 没有会话时**仍可展开**，展开后显示空态文案。
+- 展开状态**持久化**在 `localStorage['dsh.sidebar-rail.v1']` 的 `expandedProjectIds`。
+
+## 分页 paging / 水位 watermark
+
+会话列表一次不全部渲染，而是按「水位」切出一段显示。
+
+- 基础水位 **`PAGE_SIZE = 10`**：一屏默认 10 条**非空白**会话；空白会话恒显示且不占名额。
+- 自动提升上限 **`PAGE_SIZE_AUTO_MAX = 50`**：注意力行会把水位顶高，让它们不至于被挡在「显示更多」之后；上限之外只剩手动加载。**注意力行的判据按列表区分**：最近会话行看「运行中 / 有待操作 / 已完成未读 / 当前会话」，项目会话行只看「当前会话」（项目列表本来就不展示状态点，只能靠当前会话判定）。
+- **只升不降**：水位在同一份浮层打开期间不会回落；**浮层关闭时重置**，下次打开又从 10 条开始；不落盘。
+- 「显示更多」= 在当前**有效**水位上再 `+ PAGE_SIZE`；没有剩余可显示的行时按钮**不渲染**（不是禁用）。
+- 作用范围：最近会话区，以及每个项目各自的展开列表；每个列表独立计数（最近会话固定键 `recent`，项目用 `project:<workspaceId>`）。
+- 机制照抄宿主 `WorkspaceBrowser` 的 `watermarkRows` / `requiredWatermark`。与宿主的一处有意差异：自动提升不考虑 `runningSubagentCount`（需要子代理投影，按 PRD 属于非目标）。
+
+**不要**把分页说成「最近会话条数设置」——那个可调的 `recentCount` 偏好已在 0.4.0 整项移除，也没有对应的设置块或步进器。
+
+## 新建会话按钮 new-session action
+
+项目行右侧的按钮，点击后在该项目下新建一个空会话并跳过去，同时收起浮层。调用宿主公开的 `uiWorkspace.startSession(workspaceId)`。
+
+## 添加项目 add-project action
+
+「项目」分区标题行右侧的按钮。点击后调用宿主公开的 `pickDirectory()` 弹出系统目录选择器，选定后经 `workspaces.create({ path })` 登记为项目。
+
+**只登记，不跳转、不建会话**——与宿主原生添加工作区的行为对齐。
+
+**已知缺陷：选择器标题是英文。** 底层是宿主用 `osascript` 调起的 `NSOpenPanel`，标题取自宿主硬编码的字符串 `Select Workspace Directory`（`@deepseek-ai/dsh-host-directory-picker-native`）。`NSOpenPanel.message` 是自定义字段，AppKit 不做本地化，所以标题恒为英文、而面板按钮跟随系统语言。插件**无法绕过**：纯 Client 模块没有 Node 权限，不能自己 `spawn` 一个选择器。这是宿主侧的本地化缺口，不是本插件的待办。
+
+## 任务分区 task sections
+
+定时任务浮层固定为三个分区，对应宿主 `ScheduleStatus` 枚举：
+
+| 分区标题 | 宿主状态 |
+| --- | --- |
+| **进行中** | `active` |
+| **已暂停** | `paused` |
+| **已结束** | `ended` |
+
+数据源是 `remote.schedule.catalog()`——它返回**全部状态**的任务（`entries()` 不做状态过滤）。某类为空时保留标题并显示空态文案。
+
+默认只展开「进行中」。点击任务条目打开定时任务面板，**无法定位到具体那一条**：宿主把选中任务存在 `TaskManagerPage` 内部的 `useState` 里，没有公开 API 可从外部设置。
+
+## 定时任务标记 scheduled-task mark
+
+会话行行首那个时钟图标，表示「这个会话有活跃的定时任务」。照抄宿主 `ui-schedule` 的 `SessionScheduleMark`。
+
+- **位置**：行首 16px 格，与状态点**争同一格**。
+- **互斥**：仅当该行自身状态为 `idle` 时才显示时钟；运行中、有待操作（审批）、已完成未读时那一格让给状态点，时钟不挂载。
+- **「活跃」只算 `status === 'active'`**：暂停与已结束的任务不显示标记（宿主注释：只有 active 有定时器义务）。
+- **「涉及」判定**：`task.involvedSessionIds` 含该会话，或该任务的目标会话就是它（`target.kind === 'new'` 时看 `lastDelivery.targetSessionId`，否则看 `target.sessionId`）。两者都要查。
+- **点击不激活会话**：图标在行按钮内部，点击 `stopPropagation`。
+- 数据源是现有的 `remote.schedule.catalog()`，不新增远程调用；工作区浮层打开时也会取一次任务列表，失败或超时则**不显示标记**，不阻塞会话列表。
+
+## 插件分区 plugin sections
+
+插件浮层固定为两个分区：
+
+| 分区标题 | 判据 |
+| --- | --- |
+| **已启用** | `enabled === true` |
+| **未启用** | `installed === true && enabled === false` |
+
+「未启用」**只包含已安装但被关闭的包**，不列尚未安装的官方按需插件（`availability === 'missing'` 的那些）。数据源同样是 `pluginManager/listBundles`。
+
+点击条目打开插件管理面板。

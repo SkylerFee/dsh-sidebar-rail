@@ -1,7 +1,8 @@
 # 0002 零依赖、无构建：客户端是手写静态模块
 
-- 状态：已采纳（2026-11-04）
-- 相关：`client.js`、`package.json`（无 `dependencies`/`devDependencies`）、`scripts/check.mjs`
+- 状态：已被 [ADR-0006](0006-typescript-source-and-build.md) 取代（工具链维度）
+- 历史状态：已采纳（2026-11-04）
+- 相关：`client.js`、`package.json`（无 `dependencies`/`devDependencies`）、`scripts/check.mjs`（迁移后拆为 `scripts/check-source.mjs` 与 `scripts/check-artifact.mjs`，见 [ADR-0006](0006-typescript-source-and-build.md)）
 
 ## 背景
 
@@ -13,7 +14,7 @@
 
 - 运行时只 `require('react')` 与 `require('react-dom')`（平台种子模块），不引入其他运行时依赖。
 - 不引入构建步骤，`client.js` 是可直接加载的成品；`package.json` 没有 `build` 脚本。
-- 不引入 ESLint/Prettier 等 devDependency；机械规则写在 `scripts/check.mjs`（纯 Node，无依赖），由 `npm run check` 统一调用。
+- 不引入 ESLint/Prettier 等 devDependency；机械规则写在 `scripts/check.mjs`（纯 Node，无依赖），由 `npm run check` 统一调用。迁移后这一步由 `scripts/check-source.mjs`（源码约束）与 `scripts/check-artifact.mjs`（产物约束）承担。
 - 提交前检查用仓库内 `.githooks` + `git config core.hooksPath`，不用 husky。
 
 ## 后果
