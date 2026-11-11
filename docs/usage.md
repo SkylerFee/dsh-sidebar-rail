@@ -1,172 +1,174 @@
-# 使用指南
+# Usage guide
 
-本文对应 0.4.0 版本（2026-11-11 的源码提交 `de05173`）。0.4.0 尚未发布到 npm；安装其他已发布版本时，请以该版本的实际能力为准。安装与启停见 [README](../README.zh.md#install)，本轮实测结论及未验证项见[验收报告](desktop-audit-2026-11-11.md)。
+**[简体中文](usage.zh.md)** | English
 
-截图拍摄于 2026-11-11，宿主为 macOS Desktop `0.2.2-rc.1`、中文界面，浅色使用 **Catppuccin Latte**，深色使用 **Catppuccin Frappé**。下方每组保留整个图标轨和所示浮层边界；长列表分别展示顶部与滚动末尾。业务名称与金额已模糊，非插件主页面已遮蔽，控件、时间、分组、状态图标与操作入口未重绘。图片可点击查看原尺寸；[截图清单](images/README.md)记录场景和覆盖范围。
+This guide describes version 0.4.0 (source commit `de05173` on 2026-11-11). 0.4.0 has not been published to npm yet; when installing any published version, rely on what that version actually offers. See [README](../README.md#install) for installation and toggling, and the [acceptance report](desktop-audit-2026-11-11.md) for results and unverified paths from this round.
 
-## 唤出与收起
+Screenshots were captured on 2026-11-11 against macOS Desktop `0.2.2-rc.1` with a Chinese UI, using **Catppuccin Latte** (light) and **Catppuccin Frappé** (dark). Each pair below keeps the whole icon rail and the flyout bounds shown; long lists appear twice, at the top and at the scrolled end. Business names and amounts are blurred, non-plugin page content is masked, and controls, times, groupings, state icons and action entries are not redrawn. Images open at full size; the [screenshot index](images/README.md) records scenes and coverage.
 
-在 **macOS Desktop、宿主侧栏已折叠、视口宽度至少 768px** 时，图标轨默认藏在窗口左侧。先激活 DSH 窗口，再把指针移到顶部窗口控件下方的 **12px 左缘热区**，即可唤出 **56px 图标轨**。
+## Revealing and retracting
 
-从上到下依次是工作区、定时任务、插件、更多，账号与设置在底部。悬停图标约 120ms 打开对应浮层；移开约 200ms 关闭。点击会话或面板条目完成导航，并收起图标轨。点击顶部图标会直接打开宿主侧栏或对应面板，与悬停查看浮层的用途不同。
+On **macOS Desktop, with the host sidebar collapsed and a viewport at least 768px wide**, the icon rail sits hidden against the left edge of the window. Focus the DSH window first, then move the pointer into the **12px left-edge hot zone** below the window controls to reveal the **56px icon rail**.
 
-切换到其他应用后，轨应收起；回到 DSH 后需要重新移入热区或用键盘聚焦来唤出。展开宿主侧栏、缩窄到 768px 以下或使用 Web 客户端时，插件不显示轨，继续使用宿主导航。
+From top to bottom: workspaces, scheduled tasks, plugins, more, with account and settings at the bottom. Hovering an icon opens its flyout after about 120ms; moving away closes it after about 200ms. Clicking a session or panel entry navigates and retracts the rail. Clicking a top icon opens the host sidebar or panel directly, which is a different purpose from hovering to browse a flyout.
 
-截图中的图标轨处于已经唤出的状态；它默认隐藏，不是常驻侧栏。当前浮层并未达到规格要求的全高，短浮层下方的留白是真实表现，详见验收报告。
+After switching to another application the rail retracts; coming back to DSH needs the hot zone again or keyboard focus. When the host sidebar is expanded, the viewport narrows below 768px, or you use the Web client, the plugin draws no rail and you keep using host navigation.
 
-## 工作区与项目
+The rail in the screenshots is shown revealed; it is hidden by default and is not a permanent sidebar. Flyouts currently do not reach the full height described by the spec, so the blank area under a short flyout is real behaviour — see the acceptance report.
 
-工作区浮层按「置顶项目 → 项目 → 最近会话」排列。点分区标题可以折叠或展开该组。
+## Workspaces and projects
 
-| 控件 | 操作与结果 |
+The workspace flyout orders pinned projects, then projects, then recent sessions. Clicking a section title folds or unfolds that group.
+
+| Control | Action and result |
 | --- | --- |
-| 项目名称 / 文件夹 | 点击整行展开或收起项目内的会话；文件夹图标跟随展开状态变化 |
-| 项目行右侧 `+` | 在该项目下进入新会话；不会同时切换项目展开状态 |
-| 项目行右侧图钉 | 置顶或取消置顶；置顶后移到上方分区，不在普通项目区重复出现，最近置顶的排在前面 |
-| 「项目」标题右侧 `+` | 选择已有目录并登记为项目；不创建磁盘目录，也不自动跳转到该项目。取消选择不登记；失败时显示提示，可改用宿主添加入口 |
-| 项目会话 | 保留宿主成员顺序；归档成员仍可列出并标注归档；缺失摘要的成员不生成占位节点 |
+| Project name / folder | Clicking anywhere on the row expands or collapses that project's sessions; the folder icon follows the expanded state |
+| `+` on the project row | Starts a new session under that project; it does not change the expanded state at the same time |
+| Pin on the project row | Pins or unpins; pinned projects move to the upper section and do not appear twice in the normal project section, most recently pinned first |
+| `+` beside the Projects title | Picks an existing directory and registers it as a project; it creates no directory on disk and does not navigate to the project. Cancelling registers nothing; on failure a hint appears and you can use the host's own add entry |
+| Project sessions | Keep the host's member order; archived members are still listed and marked as archived; members with no summary produce no placeholder node |
 
-没有可显示会话的项目会显示空态提示。项目展开状态与置顶列表保存在当前客户端，关闭浮层或刷新后仍保留；**分区折叠状态不保存**，关闭重开回到默认。
+A project with no displayable sessions shows an empty-state hint. The expanded state and pinned list are stored in the current client and survive closing the flyout or refreshing; **section folding is not stored** and resets to the default when reopened.
 
-**工作区总览**：三分区、项目行的文件夹 / 新建 / 图钉，以及「添加项目」入口。最近会话的后半部分需向下滚动，见下一节。
+**Workspace overview**: three sections, the folder / new session / pin actions on a project row, and the Add project entry. The second half of recent sessions requires scrolling — see the next section.
 
 <table>
-  <tr><th>浅色 · Latte</th><th>深色 · Frappé</th></tr>
+  <tr><th>Light · Latte</th><th>Dark · Frappé</th></tr>
   <tr>
-    <td><a href="images/workspace-light.png"><img src="images/workspace-light.png" alt="浅色工作区总览：置顶项目、项目、最近会话分组，添加项目及行内操作" width="330"></a></td>
-    <td><a href="images/workspace-dark.png"><img src="images/workspace-dark.png" alt="深色工作区总览：三个分区及项目操作，当前会话带选中背景" width="330"></a></td>
+    <td><a href="images/workspace-light.png"><img src="images/workspace-light.png" alt="Light workspace overview: pinned projects, projects and recent sessions sections, plus Add project and row actions" width="330"></a></td>
+    <td><a href="images/workspace-dark.png"><img src="images/workspace-dark.png" alt="Dark workspace overview: three sections and project actions, with the current session highlighted" width="330"></a></td>
   </tr>
 </table>
 
-**项目展开**：文件夹变为打开态，子会话按宿主顺序列出，列表末尾有独立的「显示更多」。本轮实测关闭重开仍保留项目展开状态，分页回到初始水位；刷新持久化只由离线存储测试覆盖。
+**Expanded project**: the folder turns into its open state, child sessions are listed in host order, and the list ends with its own Show more. This round confirmed that closing and reopening keeps the project expanded while paging returns to the initial watermark; persistence across a refresh is covered only by offline storage tests.
 
 <table>
-  <tr><th>浅色 · 项目会话</th><th>深色 · 项目会话</th></tr>
+  <tr><th>Light · Project sessions</th><th>Dark · Project sessions</th></tr>
   <tr>
-    <td><a href="images/project-light.png"><img src="images/project-light.png" alt="浅色展开项目：打开的文件夹、十条子会话、显示更多以及后续项目分区" width="330"></a></td>
-    <td><a href="images/project-dark.png"><img src="images/project-dark.png" alt="深色展开项目：当前子会话高亮、相对时间、项目独立分页按钮" width="330"></a></td>
+    <td><a href="images/project-light.png"><img src="images/project-light.png" alt="Light expanded project: open folder, ten child sessions, Show more and the following project section" width="330"></a></td>
+    <td><a href="images/project-dark.png"><img src="images/project-dark.png" alt="Dark expanded project: highlighted current child session, relative times and a project-scoped Show more" width="330"></a></td>
   </tr>
 </table>
 
-## 最近会话、分页与标记
+## Recent sessions, paging and marks
 
-最近会话按更新时间倒序，显示相对时间，并突出主视图当前会话。归档和子代理会话不进入最近列表。最近列表与项目展开列表都只保留**当前正在打开的空白会话**，其他空白会话隐藏，真实数据不会删除。
+Recent sessions are ordered by update time descending, show relative times, and highlight the session the main view is displaying. Archived and subagent sessions stay out of the recent list. Both the recent list and each expanded project list keep **only the currently open blank session**; other blank sessions are hidden and no real data is deleted.
 
-列表默认显示 **10 条非空会话**，末尾的「显示更多」每次再加 10 条；全部显示后按钮消失。最近会话与每个项目各自计数。最近会话中的运行中、等待操作、完成未读、当前会话等条目可以自动提高显示水位；项目展开列表只按当前会话提高水位。自动提升上限为 50，更靠后的条目需点「显示更多」。当前空白会话始终显示且不占普通条数，因此初次打开不一定恰好只有 10 行。
+A list shows **10 non-blank sessions** by default, and Show more at the end adds another 10 each time; once everything is shown the button disappears. The recent list and each project count independently. Rows in the recent list that are running, waiting for input, completed but unread, or the current session can raise the watermark automatically; an expanded project list raises it only for the current session. The automatic ceiling is 50, so later rows need Show more. The current blank session always shows and does not consume an ordinary slot, so the first open may not be exactly 10 rows.
 
-分页状态只在浮层本次打开期间有效，关闭重开恢复默认水位。旧版的「最近会话条数」步进器和插件详情页设置块已移除。
+Paging lives only as long as one flyout opening; closing and reopening restores the default watermark. The old Recent count stepper and the plugin detail settings block have been removed.
 
-会话行的 **时钟**表示该会话涉及进行中的定时任务；当前版本实际显示在**行尾**，与规格的行首位置不一致。该行有运行、未读或等待操作等状态点时优先显示状态点。任务列表尚未加载或取数失败时不显示时钟，仍可浏览会话。点时钟本身不会打开会话；点会话标题才会导航。标记位置及互斥规则的验证边界见验收报告。
+The **clock** on a session row means the session is involved in an active scheduled task; in the current version it renders at the **row end**, which differs from the row-start position in the spec. When the row has a running, unread or waiting state dot, the dot takes precedence. The clock is absent while the task list is still loading or failed to load, and sessions stay browsable. Clicking the clock itself does not open the session; clicking the session title navigates. The verification boundary for the mark's position and the mutual exclusion rule is in the acceptance report.
 
-长列表在同一个内容区里整体滚动，分区标题随内容滚走。「显示更多」随列表滚动，不占固定底栏。浮层高度的规格与当前实测差异见[验收报告](desktop-audit-2026-11-11.md)。
+Long lists scroll as one block inside a single content area, with section titles scrolling away with the content. Show more scrolls with the list instead of sitting in a fixed footer. See the [acceptance report](desktop-audit-2026-11-11.md) for how the speced flyout height differs from the current build.
 
-**最近会话滚动末尾**：截图完整显示本页 10 条会话和「显示更多」，最后一行右侧可见时钟。本轮点击「显示更多」实测增加至 20 条；截图保留点击前的按钮与时钟，方便定位。
+**End of the recent list**: the screenshot shows all 10 sessions on this page plus Show more, with the clock visible at the right of the last row. Clicking Show more this round grew the list to 20 rows; the screenshot keeps the pre-click button and clock so the location is identifiable.
 
 <table>
-  <tr><th>浅色 · 最近会话与分页</th><th>深色 · 最近会话与分页</th></tr>
+  <tr><th>Light · Recent sessions and paging</th><th>Dark · Recent sessions and paging</th></tr>
   <tr>
-    <td><a href="images/recent-light.png"><img src="images/recent-light.png" alt="浅色滚动末尾：十条最近会话、相对时间、行尾任务时钟及显示更多" width="330"></a></td>
-    <td><a href="images/recent-dark.png"><img src="images/recent-dark.png" alt="深色滚动末尾：当前会话高亮、任务时钟及完整分页入口" width="330"></a></td>
+    <td><a href="images/recent-light.png"><img src="images/recent-light.png" alt="Light scrolled end: ten recent sessions with relative times, end-of-row task clock and Show more" width="330"></a></td>
+    <td><a href="images/recent-dark.png"><img src="images/recent-dark.png" alt="Dark scrolled end: highlighted current session, task clock and the complete paging entry" width="330"></a></td>
   </tr>
 </table>
 
-## 定时任务
+## Scheduled tasks
 
-任务浮层按「进行中 / 已暂停 / 已结束」分组，默认只展开「进行中」。条目显示任务名称与宿主提供的运行时间信息。
+The task flyout groups into running, paused and ended, with only running expanded by default. Each entry shows the task name and the timing information the host provides.
 
-点击任务条目或底部「打开面板」进入宿主任务面板，不会直接运行、暂停或删除任务，也不承诺定位某条任务的详情。编辑与管理操作在宿主面板完成。
+Clicking a task entry or Open panel at the bottom opens the host task panel; it never runs, pauses or deletes a task, and does not promise to locate one task's detail. Editing and management happen in the host panel.
 
-服务缺失、返回失败或请求超过 5 秒时应显示失败提示，成功但没有任务时显示空态。当前版本的快速切换加载问题及默认收起分区的点击限制见[验收报告](desktop-audit-2026-11-11.md)；遇到加载不结束，可先关闭浮层再重开。
+A missing service, a failed response or a request past 5 seconds should show a failure hint, while a successful but empty result shows an empty state. See the [acceptance report](desktop-audit-2026-11-11.md) for this version's fast-switching loading issue and the default-closed section click limit; if loading never ends, close the flyout and reopen it.
 
-**默认态**：仅「进行中」展开，底部保留「打开面板」。本轮两个活跃任务名称已脱敏，计划时间保留。
+**Default state**: only running is expanded, with Open panel at the bottom. The two active task names are blurred; their planned times are kept.
 
 <table>
-  <tr><th>浅色 · 默认分组</th><th>深色 · 默认分组</th></tr>
+  <tr><th>Light · Default grouping</th><th>Dark · Default grouping</th></tr>
   <tr>
-    <td><a href="images/tasks-default-light.png"><img src="images/tasks-default-light.png" alt="浅色任务默认态：进行中列表展开，已暂停和已结束收起，底部打开面板" width="330"></a></td>
-    <td><a href="images/tasks-default-dark.png"><img src="images/tasks-default-dark.png" alt="深色任务默认态：任务计划时间及三个生命周期分组" width="330"></a></td>
+    <td><a href="images/tasks-default-light.png"><img src="images/tasks-default-light.png" alt="Light default task state: running list expanded, paused and ended collapsed, Open panel at the bottom" width="330"></a></td>
+    <td><a href="images/tasks-default-dark.png"><img src="images/tasks-default-dark.png" alt="Dark default task state: planned task times and the three lifecycle groups" width="330"></a></td>
   </tr>
 </table>
 
-**展开全部分组**：展示暂停 / 结束分类的空态和底部入口。本轮这两个分类没有真实条目，不能把空态截图当作已验证暂停 / 结束任务行。默认收起的分区需要点两次才展开（已知 K2）。这是**已记录的决定**：该行为按产品要求保持现状，不再作为待修问题跟踪。
+**All groups expanded**: shows the empty states for the paused and ended groups plus the bottom entry. Those two groups had no real entries this round, so their empty-state screenshots must not be read as verified paused or ended task rows. A default-closed section needs two clicks to expand (known K2). This is a **recorded decision**: the behaviour stays as-is by product request and is no longer tracked as a defect to fix.
 
 <table>
-  <tr><th>浅色 · 全部分组内容</th><th>深色 · 全部分组内容</th></tr>
+  <tr><th>Light · All group content</th><th>Dark · All group content</th></tr>
   <tr>
-    <td><a href="images/tasks-light.png"><img src="images/tasks-light.png" alt="浅色任务全展开：进行中条目、已暂停与已结束空态、完整底部入口" width="330"></a></td>
-    <td><a href="images/tasks-dark.png"><img src="images/tasks-dark.png" alt="深色任务全展开：三个分区内容及打开面板，浮层随内容变高的当前表现" width="330"></a></td>
+    <td><a href="images/tasks-light.png"><img src="images/tasks-light.png" alt="Light fully expanded tasks: running entries, paused and ended empty states, complete bottom entry" width="330"></a></td>
+    <td><a href="images/tasks-dark.png"><img src="images/tasks-dark.png" alt="Dark fully expanded tasks: content of all three groups and Open panel, with the flyout grown to its content" width="330"></a></td>
   </tr>
 </table>
 
-## 我的插件
+## My plugins
 
-插件浮层有「已启用 / 未启用」两个分区。「未启用」指已经安装但关闭的用户插件；宿主内置包和未安装的推荐插件不列入。条目展示插件名称和可用的版本信息，空分区明确显示提示。
+The plugin flyout has an enabled and a disabled section. Disabled means an installed user plugin that is switched off; host built-ins and uninstalled recommended plugins are not listed. Entries show the plugin name and version information when available, and an empty section says so.
 
-点击条目或「打开面板」进入宿主插件管理页。浮层内没有启停开关；安装、启用、停用和卸载均在宿主页面完成。
+Clicking an entry or Open panel opens the host plugin management page. The flyout has no enable switch; installing, enabling, disabling and uninstalling all happen on the host page.
 
-本轮显示 9 个已启用用户插件，未启用分区为空；两幅截图都保留版本、空态与「打开面板」。没有为采图改变其他插件的启停状态。
+This round showed 9 enabled user plugins with the disabled section empty; both screenshots keep the versions, the empty state and Open panel. No other plugin was toggled for the captures.
 
 <table>
-  <tr><th>浅色 · 插件两分区</th><th>深色 · 插件两分区</th></tr>
+  <tr><th>Light · Two plugin sections</th><th>Dark · Two plugin sections</th></tr>
   <tr>
-    <td><a href="images/plugins-light.png"><img src="images/plugins-light.png" alt="浅色插件列表：九个已启用用户插件及版本、未启用空态和打开面板" width="330"></a></td>
-    <td><a href="images/plugins-dark.png"><img src="images/plugins-dark.png" alt="深色插件列表：启用与未启用两组完整显示，底部面板入口可见" width="330"></a></td>
+    <td><a href="images/plugins-light.png"><img src="images/plugins-light.png" alt="Light plugin list: nine enabled user plugins with versions, disabled empty state and Open panel" width="330"></a></td>
+    <td><a href="images/plugins-dark.png"><img src="images/plugins-dark.png" alt="Dark plugin list: enabled and disabled groups both shown, bottom panel entry visible" width="330"></a></td>
   </tr>
 </table>
 
-## 更多入口
+## More
 
-「更多」展示宿主提供的其他面板，例如当前 profile 注册的扩展面板；定时任务与插件已有专用入口，不重复列出。因此不同 profile 的内容可以不同。
+More lists the other panels the host provides, such as extension panels registered by the current profile; scheduled tasks and plugins already have dedicated entries and are not repeated. The content can therefore differ between profiles.
 
-「展开侧栏」恢复宿主完整侧栏，可继续使用原生搜索、工作区管理、账号菜单和设置入口。
+Expand sidebar restores the host's full sidebar, where native search, workspace management, the account menu and settings stay available.
 
 <table>
-  <tr><th>浅色 · 更多</th><th>深色 · 更多</th></tr>
+  <tr><th>Light · More</th><th>Dark · More</th></tr>
   <tr>
-    <td><a href="images/more-light.png"><img src="images/more-light.png" alt="浅色更多浮层：展开侧栏、其他面板中的 MCP 连接器及账号说明" width="330"></a></td>
-    <td><a href="images/more-dark.png"><img src="images/more-dark.png" alt="深色更多浮层：宿主扩展面板入口和完整说明" width="330"></a></td>
+    <td><a href="images/more-light.png"><img src="images/more-light.png" alt="Light More flyout: Expand sidebar, MCP connectors among other panels, and the account note" width="330"></a></td>
+    <td><a href="images/more-dark.png"><img src="images/more-dark.png" alt="Dark More flyout: host extension panel entries and the complete note" width="330"></a></td>
   </tr>
 </table>
 
-## 账号与设置
+## Account and settings
 
-底部使用宿主账号头像；头像不可用时显示占位图标。账号浮层按实际数据展示主余额、赠金及「查询用量」「充值」链接；主余额无法取得时显示「余额暂不可用」，这不表示余额为零。未登录时显示登录提示。
+The bottom of the rail uses the host account avatar, falling back to a placeholder glyph when unavailable. The account flyout shows the main balance, bonus credit and the usage and top-up links as the data allows; when the main balance cannot be read it says the balance is unavailable, which does not mean zero. Signed out shows a sign-in hint.
 
-这些数据在组件挂载时读取，不保证实时刷新。链接在新窗口打开；登录、退出、充值和完整账号信息由宿主或目标网页处理。要打开设置，点「展开侧栏」，再点宿主左下角的设置入口。
+These values are read when the component mounts and are not guaranteed to refresh live. Links open in a new window; sign-in, sign-out, payment and full account details are handled by the host or the target page. To open settings, click Expand sidebar and then the settings entry at the host sidebar's bottom left.
 
-本轮为已登录账号，截图包含余额 / 赠金标签、用量 / 充值链接及设置路径，金额已脱敏。没有打开付款流程，也未为了截图退出账号。
+This round used a signed-in account; the screenshots include the balance and bonus labels, the usage and top-up links and the settings path, with amounts blurred. No payment flow was opened and no account was signed out for the captures.
 
 <table>
-  <tr><th>浅色 · 账号与设置</th><th>深色 · 账号与设置</th></tr>
+  <tr><th>Light · Account and settings</th><th>Dark · Account and settings</th></tr>
   <tr>
-    <td><a href="images/account-light.png"><img src="images/account-light.png" alt="浅色账号浮层：已脱敏余额与赠金、用量和充值链接、设置路径及展开侧栏" width="330"></a></td>
-    <td><a href="images/account-dark.png"><img src="images/account-dark.png" alt="深色账号浮层：完整账号信息区、底部设置说明及宿主侧栏入口" width="330"></a></td>
+    <td><a href="images/account-light.png"><img src="images/account-light.png" alt="Light account flyout: blurred balance and bonus credit, usage and top-up links, settings path and Expand sidebar" width="330"></a></td>
+    <td><a href="images/account-dark.png"><img src="images/account-dark.png" alt="Dark account flyout: complete account information area, bottom settings note and host sidebar entry" width="330"></a></td>
   </tr>
 </table>
 
-## 键盘操作
+## Keyboard
 
-| 按键 | 用途 |
+| Key | Purpose |
 | --- | --- |
-| `Tab` / `Shift+Tab` | 在图标和可操作条目之间移动焦点，聚焦图标时唤出轨及对应浮层 |
-| 顶部图标上的 `↓` / `→` | 进入对应浮层的首个可聚焦控件 |
-| `Enter` / `Space` | 激活当前按钮；顶部图标激活后直接导航，项目行激活后展开或收起 |
-| 浮层内 `Escape` | 预期关闭浮层并把焦点返回触发图标；当前实测限制见[验收报告](desktop-audit-2026-11-11.md) |
+| `Tab` / `Shift+Tab` | Moves focus between icons and operable entries; focusing an icon reveals the rail and its flyout |
+| `↓` / `→` on a top icon | Enters the first focusable control of that flyout |
+| `Enter` / `Space` | Activates the focused button; on a top icon it navigates directly, on a project row it expands or collapses |
+| `Escape` inside a flyout | Closes the flyout and returns focus to the trigger icon |
 
-焦点在图标轨与浮层之间移动时应保持打开；焦点完全离开两者时应一起收起。系统设置为减少动态效果时，轨道滑动和浮层入场动画关闭。
+Focus moving between the rail and its flyout keeps both open; focus leaving both retracts them together. When the system is set to reduce motion, the rail slide and flyout entrance animation are disabled.
 
-## 本地数据与排障
+## Local data and troubleshooting
 
-偏好由当前客户端的 `localStorage['dsh.sidebar-rail.v1']` 保存，只写 `pinnedWorkspaceIds`（置顶项目）与 `expandedProjectIds`（展开项目）。宿主侧栏折叠状态由宿主保存，账号资料与余额不写入这份偏好。旧数据里的 `recentCount` 已不再读取。
+Preferences live in the current client's `localStorage['dsh.sidebar-rail.v1']` and hold only `pinnedWorkspaceIds` (pinned projects) and `expandedProjectIds` (expanded projects). The host owns the sidebar collapse state, and account profile and balance are never written to these preferences. A `recentCount` from older data is no longer read.
 
-| 现象 | 处理 |
+| Symptom | What to do |
 | --- | --- |
-| 看不到图标轨 | 激活 DSH，确认 macOS Desktop、已启用、侧栏折叠、宽度 ≥768px，再移入左缘热区 |
-| 会话没在前 10 条里 | 滚到所属列表末尾点「显示更多」；同时检查空白、归档、子代理过滤规则 |
-| 任务一直加载或时钟未出现 | 关闭浮层后重开，必要时进入宿主任务面板；当前快速切换缺陷见验收报告 |
-| 添加项目失败 | 使用提示中的宿主添加路径；不把取消选择当作成功登记 |
-| 「添加项目」弹出的对话框标题是英文 | 已知缺陷，插件层无法修复：标题由宿主硬编码（`Select Workspace Directory`），`NSOpenPanel.message` 不参与系统本地化。选定目录后仍能正常登记项目 |
-| 余额或头像缺失 | 以宿主账号页为准；不要在问题反馈里附账号凭据或余额截图 |
-| 插件影响导航 | 展开原生侧栏进入插件管理并停用，保留宿主版本、插件版本与复现步骤 |
+| No rail | Focus DSH, confirm macOS Desktop, the plugin enabled, the sidebar collapsed and width ≥ 768px, then move into the left-edge hot zone |
+| A session is not in the first 10 | Scroll to the end of its list and click Show more; also check the blank, archived and subagent filtering rules |
+| Tasks keep loading, or no clock appears | Close and reopen the flyout, and use the host task panel if needed; see the acceptance report for the current fast-switching defect |
+| Add project fails | Use the host add path from the hint; cancelling a picker never counts as a successful registration |
+| The Add project dialog is in English | Known defect outside this plugin: the host hard-codes the title (`Select Workspace Directory`) and `NSOpenPanel.message` is not localized by the system. Picking a directory still registers the project |
+| Balance or avatar missing | Rely on the host account page; never attach account credentials or balance screenshots to a report |
+| The plugin breaks navigation | Expand the native sidebar, open plugin management and disable it, keeping the host version, plugin version and reproduction steps |
 
-截图只说明所拍场景的外观和内容；真实网络故障、未登录账号、所有会话状态及其他平台的验证范围，以[验收报告](desktop-audit-2026-11-11.md)为准。
+Screenshots only describe the appearance and content of the scene they capture; real network failures, signed-out accounts, every session state and other platforms are covered by the [acceptance report](desktop-audit-2026-11-11.md).

@@ -11,7 +11,7 @@
 <a id="screenshots"></a>
 ## 界面预览
 
-2026-11-11 在 macOS Desktop `0.2.2-rc.1` 上拍摄，分别使用 Catppuccin Latte（浅色）与 Frappé（深色）。每张预览拼接工作区和插件两幅真实截图；业务名称已模糊，原会话正文已遮蔽。完整功能、分页、任务与账号等截图见[使用指南](docs/usage.md)。
+2026-11-11 在 macOS Desktop `0.2.2-rc.1` 上拍摄，分别使用 Catppuccin Latte（浅色）与 Frappé（深色）。每张预览拼接工作区和插件两幅真实截图；业务名称已模糊，原会话正文已遮蔽。完整功能、分页、任务与账号等截图见[使用指南](docs/usage.zh.md)。
 
 <table>
   <tr><th>浅色预览 · Latte</th><th>深色预览 · Frappé</th></tr>
@@ -91,7 +91,7 @@ dsh plugin --profile desktop add @skylerfee/dsh-sidebar-rail
 <a id="usage"></a>
 ## 使用方法
 
-逐项操作、状态说明与成对的浅色 / 深色功能截图见[使用指南](docs/usage.md)；实际通过项与已知问题见[验收报告](docs/desktop-audit-2026-11-11.md)。
+逐项操作、状态说明与成对的浅色 / 深色功能截图见[使用指南](docs/usage.zh.md)；实际通过项与已知问题见[验收报告](docs/desktop-audit-2026-11-11.md)。
 
 1. 用宿主按钮收起侧栏，将指针移到窗口左缘、顶部窗口控件下方，唤出图标轨。
 2. 在图标上停留约 120ms 打开浮层；移出后约 200ms 关闭浮层。在轨内切换图标只切换浮层。
@@ -167,7 +167,7 @@ PR 标题遵循 Conventional Commits，摘要、说明与验证结果使用简�
 
 | 文档 | 内容 |
 | --- | --- |
-| [使用指南](docs/usage.md) | 全部入口、分页与状态标记、键盘操作，以及成对的浅色 / 深色功能截图 |
+| [使用指南](docs/usage.zh.md)（[English](docs/usage.md)） | 全部入口、分页与状态标记、键盘操作，以及成对的浅色 / 深色功能截图 |
 | [2026-11-11 验收报告](docs/desktop-audit-2026-11-11.md) | 最新源码的检查结果、真机证据、问题与未验证范围 |
 | [产品需求](docs/PRD.md) | 使用场景、交互规格与验收清单 |
 | [设计说明](docs/design.md) | 增量挂载、布局、数据来源、清理与本地存储 |

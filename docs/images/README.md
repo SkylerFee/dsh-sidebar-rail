@@ -17,7 +17,7 @@
 | `more` | 展开侧栏、当前 profile 的 MCP 连接器、账号说明 | 其他面板随 profile 变化 |
 | `account` | 余额 / 赠金标签、查询用量 / 充值、设置路径、展开侧栏 | 金额已脱敏；没有退出账号或执行充值 |
 
-`preview-light.png` / `preview-dark.png` 为 **744×790**，各将同主题的工作区与插件图并列，供 README 大致预览。详细功能与限制见[使用指南](../usage.md)和[验收报告](../desktop-audit-2026-11-11.md)。
+`preview-light.png` / `preview-dark.png` 为 **744×790**，各将同主题的工作区与插件图并列，供 README 大致预览。详细功能与限制见[使用指南](../usage.zh.md)和[验收报告](../desktop-audit-2026-11-11.md)。
 
 ## 裁切与脱敏
 

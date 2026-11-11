@@ -11,7 +11,7 @@ The rail starts hidden. Focus the DSH window and collapse the host sidebar, then
 <a id="screenshots"></a>
 ## Screenshots
 
-Captured on macOS Desktop `0.2.2-rc.1` on 2026-11-11, using Catppuccin Latte (light) and Frappé (dark). Each preview combines real workspace and plugin captures; business names are blurred and unrelated conversation content is masked. See the [usage guide (Chinese)](docs/usage.md) for full feature screenshots, pagination, tasks and account details.
+Captured on macOS Desktop `0.2.2-rc.1` on 2026-11-11, using Catppuccin Latte (light) and Frappé (dark). Each preview combines real workspace and plugin captures; business names are blurred and unrelated conversation content is masked. See the [usage guide](docs/usage.md) for full feature screenshots, pagination, tasks and account details.
 
 <table>
   <tr><th>Light preview · Latte</th><th>Dark preview · Frappé</th></tr>
@@ -91,7 +91,7 @@ The assistant can also call `plugin_manager` with `set_bundle` (enable/disable) 
 <a id="usage"></a>
 ## Usage
 
-See the [usage guide (Chinese)](docs/usage.md) for detailed operations, state descriptions and paired light / dark feature screenshots. Actual results and known issues are in the [acceptance report](docs/desktop-audit-2026-11-11.md).
+See the [usage guide](docs/usage.md) for detailed operations, state descriptions and paired light / dark feature screenshots. Actual results and known issues are in the [acceptance report](docs/desktop-audit-2026-11-11.md).
 
 1. Collapse the sidebar with the host button. Move the pointer to the window's left edge, below the window controls, to reveal the rail.
 2. Hover an icon for about 120ms to open its flyout. Leaving closes the flyout after about 200ms. Moving between rail icons switches the flyout without retracting the rail.
@@ -167,7 +167,7 @@ Follow [ADR-0003](docs/adr/0003-release-pipeline.md) to release: update and push
 
 | Document | Content |
 | --- | --- |
-| [Usage guide (Chinese)](docs/usage.md) | All entries, pagination, state marks and keyboard operations and paired light / dark feature screenshots |
+| [Usage guide](docs/usage.md) ([中文](docs/usage.zh.md)) | All entries, pagination, state marks and keyboard operations and paired light / dark feature screenshots |
 | [2026-11-11 acceptance report](docs/desktop-audit-2026-11-11.md) | Current-source checks, Desktop evidence, findings and unverified paths |
 | [Product requirements](docs/PRD.md) | Use cases, interactions and acceptance criteria |
 | [Design](docs/design.md) | Additive registration, layout, data sources, cleanup and local storage |
