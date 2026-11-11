@@ -118,8 +118,10 @@ export function IconClock(): ReactNode {
  * 折叠过程带过渡。
  */
 export function IconChevron(): ReactNode {
+  // 12px rather than the former 10px: the section headers this caret sits in are
+  // now 15px/700, and a 10px glyph read as a speck beside them.
   return h('svg', {
-    viewBox: '0 0 24 24', width: 10, height: 10, fill: 'none', stroke: 'currentColor',
+    viewBox: '0 0 24 24', width: 12, height: 12, fill: 'none', stroke: 'currentColor',
     strokeWidth: 2.4, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true,
   }, h('path', { d: 'M5 9l7 7 7-7' }))
 }
