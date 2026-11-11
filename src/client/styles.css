@@ -202,7 +202,12 @@
    left its start, data-clipped while text still remains beyond the right edge.
    The mask rides the title span itself so the leading mark and the trailing pin
    keep full colour. */
-.dsr-row-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* min-width:0 is what makes the clip happen at all. The title lives in a
+   column flex box (.dsr-row-main), so it is a flex item there: without this a
+   long title grows the item to its content width, clientWidth === scrollWidth,
+   and no ellipsis or marquee can ever appear. The host sets the same property on
+   its own .title for exactly this reason. */
+.dsr-row-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 /* The gradient stops use currentColor rather than the host's literal black stop:
    a mask only reads the stop's alpha, and currentColor resolves to the row's own
    opaque label colour, so it is exactly as opaque while staying token-driven

@@ -189,6 +189,26 @@ const sources = new Map(tsFiles.map((path) => [path, read(path)]))
   if (!failures.some((entry) => entry.startsWith('size:'))) console.log(`ok  size: every source file stays under ${LIMIT} lines`)
 }
 
+// ------------------------------------------------- 7. 滚动标题的布局前提 --
+// 会话标题靠 overflow:hidden + 自身 scrollLeft 滚动（use-title-marquee）。这条链路
+// 只在标题被真正裁剪时成立：标题是 .dsr-row-main（column flex）的 flex item，
+// 缺 min-width:0 时它会撑到内容宽度，clientWidth === scrollWidth，于是省略号与
+// 滚动都静默失效——2026-11-11 的真机缺陷正是这样来的，而且没有任何 JS 报错。
+// 因此把「标题规则必须带 min-width:0」变成机械检查。
+{
+  const cssText = cssFiles.map((path) => read(path)).join('\n')
+  const titleRule = /\.dsr-row-title\s*\{([^}]*)\}/.exec(cssText)
+  if (titleRule === null) {
+    fail('滚动标题', 'no .dsr-row-title rule found; the marquee relies on it to clip')
+  } else if (!/min-width\s*:\s*0/.test(titleRule[1])) {
+    fail('滚动标题', '.dsr-row-title must set min-width:0 or the title never clips (no ellipsis, no marquee)')
+  } else if (!/overflow\s*:\s*hidden/.test(titleRule[1])) {
+    fail('滚动标题', '.dsr-row-title must set overflow:hidden so scrollLeft has somewhere to travel')
+  } else {
+    console.log('ok  滚动标题: the title clips itself (min-width:0 + overflow:hidden) before scrolling')
+  }
+}
+
 // --------------------------------------------------------- reporting --
 if (failures.length > 0) {
   console.error(`\n${failures.length} source check(s) failed:`)
@@ -196,3 +216,4 @@ if (failures.length > 0) {
   process.exit(1)
 }
 console.log('\nall source checks passed')
+
