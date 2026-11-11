@@ -8,7 +8,7 @@ Screenshots were captured on 2026-11-11 against macOS Desktop `0.2.2-rc.1` with 
 
 ## Revealing and retracting
 
-On **macOS Desktop, with the host sidebar collapsed and a viewport at least 768px wide**, the icon rail sits hidden against the left edge of the window. Focus the DSH window first, then move the pointer into the **12px left-edge hot zone** below the window controls to reveal the **56px icon rail**.
+On the **Desktop app (macOS or Windows), with the host sidebar collapsed and a viewport at least 768px wide**, the icon rail sits hidden against the left edge of the window. Focus the DSH window first, then move the pointer into the **12px left-edge hot zone** below the window controls to reveal the **56px icon rail**.
 
 From top to bottom: workspaces, scheduled tasks, plugins, more, with account and settings at the bottom. Hovering an icon opens its flyout after about 120ms; moving away closes it after about 200ms. Clicking a session or panel entry navigates and retracts the rail. Clicking a top icon opens the host sidebar or panel directly, which is a different purpose from hovering to browse a flyout.
 
@@ -165,7 +165,7 @@ Preferences live in the current client's `localStorage['dsh.sidebar-rail.v1']` a
 
 | Symptom | What to do |
 | --- | --- |
-| No rail | Focus DSH, confirm macOS Desktop, the plugin enabled, the sidebar collapsed and width ≥ 768px, then move into the left-edge hot zone |
+| No rail | Focus DSH, confirm the Desktop app (macOS or Windows), the plugin enabled, the sidebar collapsed and width ≥ 768px, then move into the left-edge hot zone |
 | A session is not in the first 10 | Scroll to the end of its list and click Show more; also check the blank, archived and subagent filtering rules |
 | Tasks keep loading, or no clock appears | Close and reopen the flyout, and use the host task panel if needed; see the acceptance report for the current fast-switching defect |
 | Add project fails | Use the host add path from the hint; cancelling a picker never counts as a successful registration |

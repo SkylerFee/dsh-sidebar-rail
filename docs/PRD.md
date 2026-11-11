@@ -30,7 +30,7 @@
 - 不写宿主存储、不改宿主数据模型（不改 `packages/*`，不新增 RPC）。
 - 不实现 Codex 的活动视图、自定义分区、永久删除。
 - 不动右侧栏（right sidebar）。
-- Windows Desktop 走与 macOS 相同的渲染路径（代码已就绪，真机未验证）；不承诺 Linux Desktop 支持（宿主行为未核实）。
+- Windows Desktop 走与 macOS 相同的渲染路径，已在 Windows 11 真机验证；不承诺 Linux Desktop 支持（宿主行为未核实）。
 - **不展示子代理运行状态**（`runningSubagentCount > 0` 时的 ongoing）。宿主的 `sessionStatuses` 会把运行中的子代理也算 ongoing，但那需要 `projectionsBySession.subagentCatalog`，当前行投影不携带；为了这一条去额外读取会话投影不划算。会话自身的运行/待处理/完成未读状态已覆盖主要场景。
 - **不订阅账号变化做实时刷新**。账号头像与余额在组件挂载时读取一次，挂载期间切换登录态不会自动更新；完整账号信息以宿主账号页为准。这是有意的取舍，不是待办。
 
@@ -42,7 +42,7 @@
 | macOS Desktop，视口宽度 < 768px | 不渲染图标轨，展开侧栏使用宿主控件 |
 | macOS Desktop，侧栏展开 | 插件不渲染；宿主原生侧栏行为 |
 | Web（折叠 / 展开） | 插件不渲染；宿主自带 56px 折叠轨与原生侧栏 |
-| Windows Desktop | 渲染，代码路径与 macOS 相同；真机未验证，不宣称已验证 |
+| Windows Desktop | 渲染，代码路径与 macOS 相同；已在 Windows 11 真机验证 |
 | Linux Desktop | 不渲染，不宣称支持 |
 
 ## 4. 用户故事

@@ -1,5 +1,51 @@
 # 验证记录
 
+## Windows Desktop 首轮验证（2026-11-11，第 26 轮）
+
+> 状态：**通过**。这是本插件第一次在 Windows 上运行。
+
+**环境**
+
+| 项 | 值 |
+| --- | --- |
+| 平台 | Windows 11 Desktop |
+| 宿主 | DSH `0.2.2-rc.1` |
+| 插件 | `@skylerfee/dsh-sidebar-rail@0.4.0`（HEAD `b40da10` 之后的打包产物） |
+| 安装方式 | 手工传入 `npm pack` 产物（`skylerfee-dsh-sidebar-rail-0.4.0.tgz`） |
+
+**本轮为 Windows 做的改动**（提交 `b40da10`）
+
+- 把平台判定从写死 `darwin` 改为白名单 `platformNeedsRail`：`darwin` 与 `win32`。
+  依据是宿主 `AppFrame` 的实际行为——两个 Desktop 平台都把折叠列压到零宽
+  （`collapsedWidth = drawer || darwin || windowsTitlebar ? 0 : 56`），折叠后没有
+  任何轨可点；Web 自带 56px 折叠轨，因此必须排除。
+- 复核了三处 macOS 专有点，确认无需分支：顶部留白走同一个
+  `--dsh-frame-top-clearance`（Windows 为 `--dsh-windows-titlebar-height`）、
+  `-webkit-app-region: no-drag` 在 Windows Electron 同样有效、12px 热区在
+  Windows 客户端区内没有 resize 带冲突。
+
+**验证结果（用户真机操作）**
+
+| 项 | 结果 |
+| --- | --- |
+| 轨的滑出与收起 | 通过 |
+| 图标的点击与导航 | 通过 |
+| 顶部标题栏避让 | 通过，未被 Windows 标题栏压住 |
+| 鼠标左缘热区响应 | 通过 |
+| 浮层位置 | 通过，与 macOS 表现一致 |
+
+**结论**
+
+Windows Desktop 与 macOS 走同一渲染路径，表现一致。平台的已知差异（顶部 chrome 高度、
+窗口拖拽区语义）由宿主的 CSS 变量与 `data-windows-titlebar` 标记承载，插件侧无需
+额外分支。
+
+**仍未验证**
+
+- Linux Desktop：未纳入平台白名单（宿主行为未核实）。
+- Windows 上的其余分支（真实慢网络、未登录账号、多屏环境）本轮未覆盖，
+  其结论沿用 macOS 轮次。
+
 ## 0.4.0 发版前复验（2026-11-11，第 25 轮）
 
 > 状态：**功能验收通过**。环境：macOS Desktop `0.2.2-rc.1`、macOS 27.2、中文界面、Catppuccin Latte / Frappé；本地分支 `refactor/typescript-migration`。
@@ -614,45 +660,3 @@ completionUnread                                      → done
 | 版本语义 | minor：轨默认隐藏是可见行为变更，PRD / AGENTS / 两份 README 已同步 |
 
 ### 顺带修的工程问题
-
-`git merge --no-ff -m "merge: ..."` 被仓库自己的 `commit-msg` hook 拒绝——hook 原先只放行大写的 `Merge `，而 `-m` 传入的是小写 `merge:`。已改为同时放行 `Merge `、`merge:`、`Revert `、`revert:`，并用三种输入验证（merge/revert 放行、普通不合规信息仍拒绝）。
-
-## 0.2.0 发布（2026-11-04）
-
-走 [ADR-0003](adr/0003-release-pipeline.md) 的 Release → OIDC 链路，首次因 Trusted Publisher 权限失败，修正后一次通过。
-
-| 项 | 结果 |
-| --- | --- |
-| tag / Release | `v0.2.0`（附注 tag，指向 `60d584e`，是 `origin/main` 祖先）+ GitHub Release |
-| CI 运行 | 第一次 `41854950620` 失败；补权限后重跑同一运行 **success**（1m54s） |
-| 失败原因 | `403 OIDC permission denied for this action`：Trusted Publisher 的 Allowed actions 默认只给 `npm stage publish`，需显式勾选 `npm publish`；连接不可编辑，删重建后生效 |
-| registry | `dist-tags.latest = 0.2.0`；versions `0.0.0-stage, 0.1.0, 0.2.0` |
-| 产物 | shasum `3e20eb4b395840aaa1ce14ec849f399dbc4dbab6`，10 个文件，解包 81,441 字节，**含 provenance 签名与 attestations** |
-| 内容一致性 | ✅ 解包后 10 个文件与仓库 HEAD **逐字节相同** |
-| 包元数据 | `license: MIT`、`dependencies: 0`、`peerDependencies: 6` |
-
-## 0.2.0 三项交互优化（2026-11-04，第 12 轮）
-
-需求来自用户对折叠态的反馈，逐项在真实 Desktop 复验。
-
-### 1 工作区浮层与会话跳转
-
-| 项 | 改前 | 改后 | 复验 |
-| --- | --- | --- | --- |
-| 工作区行 | 名称 + 路径副标题（两行） | 只显示名称，保留行尾置顶图钉 | ✅ 浮层内 9 个工作区均为单行名称 |
-| 点击最近会话 | 传 `{kind:'session', sessionId}` → 宿主按「无会话」处理，落到新建会话 | 传**裸 SessionId** | ✅ 点第 2 条后标题栏与正文都切到该会话 |
-| 会话选中态 | 无 | `aria-current="page"` + 宿主同款底色 | ⚠️ 见下方「未达成」 |
-
-**会话跳转根因**（源码核实）：`SessionTarget` 是 `SessionId | SubagentAddress`（`api/session-controller/.../contract/sessions.d.ts:20`），即裸字符串。旧代码传对象 → 宿主 `resolveTarget` 得到 `undefined` 且不抛错 → `selectPanel(null)` 释放原会话 → 主视图落回空态，表现为「点了变成新会话」。另修正：`openSession` 是**同步抛错**，已用 `try/catch` 而非 `.catch()`。
-
-**未达成：当前会话高亮不显示。** 判据用的是宿主自己的写法（`sessions.byId[*].retainedBy.mainView > 0`，见 `ui-workspace/tree.ts:38-41`、`ui-session/index.ts:463-469`），但在这个 Desktop `0.2.2-rc.1` 上：**宿主自己的侧栏在会话打开时同样不高亮**，且该计数读为 0。因此插件与宿主行为一致（都不高亮），属于数据源在该版本未维护，不是插件判断错误。代码里已注释记录该事实；待宿主恢复维护该计数时两侧会一起亮起。
-
-### 2 插件浮层只列用户自己的插件
-
-数据源从 `pluginInventory/list`（条目无 `official` 字段）改为 `pluginManager/listBundles`，过滤条件：`enabled === true && official !== true && installed !== false`。
-
-- ✅ 复验：浮层标题「我的插件」，列出 `@nonamelego/dsh-catppuccin`、`@skylerfee/dsh-llm-opencode-go-live`、`@skylerfee/dsh-sidebar-rail`、`dsh-better-sidebar`、`dsh-context`、`dsh-macos-restart`、`dsh-mcp-connector`、`dsh-notify-me`，**无任何 `@deepseek-ai/*` 宿主自带插件**。
-
-### 3 账号头像与浮层位置
-
-| 项 | 改前 | 改后 | 复验 |

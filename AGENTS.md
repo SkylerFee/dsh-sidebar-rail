@@ -7,7 +7,7 @@ DeepSeek Harness 的 **Desktop（macOS / Windows）折叠态增量图标轨**。
 ## 范围
 
 - 纯 Client 插件：源码在 `src/`（TypeScript / TSX，按职责分模块），由 `esbuild` 生成 `lib/client.js`（`window.__ModuleLoader__.load()` 的单份静态模块）与 `lib/index.js`（空 `apply()` 的 Host 入口）；`cordis.patch.yml` 插一行。`lib/` 是生成目录，不提交 Git，改完 `src/` 必须 `npm run build`。运行时依赖仍为零——客户端只向宿主 `require` `react` / `react-dom`；开发依赖与构建步骤按 [ADR-0006](docs/adr/0006-typescript-source-and-build.md) 允许。
-- 图标轨只在 **Desktop 应用 + 宿主侧栏折叠 + 视口 ≥ 768px** 时渲染；其他状态轨组件一律 `return null`。平台白名单是 `platformNeedsRail`：`darwin` 与 `win32`——宿主在这两个平台都把折叠列压到零宽（`AppFrame: collapsedWidth = drawer || darwin || windowsTitlebar ? 0 : 56`），折叠后没有任何轨可点。**Web 端宿主自带 56px 折叠轨，必须排除**，不得重复绘制；Linux Desktop 未纳入白名单（宿主行为未核实）。Windows 的代码路径已就绪，但**真机尚未验证**，验收前不得宣称「已验证支持」。插件没有插件详情页设置块（唯一的设置项已随分页整项移除）。
+- 图标轨只在 **Desktop 应用 + 宿主侧栏折叠 + 视口 ≥ 768px** 时渲染；其他状态轨组件一律 `return null`。平台白名单是 `platformNeedsRail`：`darwin` 与 `win32`——宿主在这两个平台都把折叠列压到零宽（`AppFrame: collapsedWidth = drawer || darwin || windowsTitlebar ? 0 : 56`），折叠后没有任何轨可点。**Web 端宿主自带 56px 折叠轨，必须排除**，不得重复绘制；Linux Desktop 未纳入白名单（宿主行为未核实）。Windows 已在 Windows 11 真机验证通过（轨的滑出与点击、顶部标题栏避让、鼠标热区、浮层位置均正常）。插件没有插件详情页设置块（唯一的设置项已随分页整项移除）。
 - 安装/启用插件、改用户 profile、发布 npm，都只在任务明确授权时执行。
 
 ## 硬约束（违反即否决）
