@@ -84,3 +84,17 @@ export const VISIBLE_PENDING_KINDS: ReadonlySet<string> = new Set([
   'plan-review',
   'question',
 ])
+/**
+ * 标题溢出多少像素以上才滚动显示。
+ *
+ * 溢出这么少时尾部没有实质内容被藏住，为几像素动起来只会像抖动，不像揭示。
+ * 照抄宿主 `MIN_TITLE_REVEAL_PX`。
+ */
+export const MIN_TITLE_REVEAL_PX = 8
+
+/**
+ * 标题滚动的速度（CSS 像素 / 毫秒）。
+ *
+ * 慢到能边移边读。照抄宿主 `TITLE_MARQUEE_PX_PER_MS`。
+ */
+export const TITLE_MARQUEE_PX_PER_MS = 0.03

@@ -4,7 +4,7 @@
  * 这些函数原先在 `client.js` 的 pure-helpers 区，迁移后仍不依赖 React 或 DOM，
  * 因此可以被单测直接 import。
  */
-import { RAIL_MIN_VIEWPORT, VISIBLE_PENDING_KINDS } from './constants.ts'
+import { MIN_TITLE_REVEAL_PX, RAIL_MIN_VIEWPORT, VISIBLE_PENDING_KINDS } from './constants.ts'
 import type { SessionMark, SessionStatusLike } from './types.ts'
 
 /**
@@ -108,4 +108,54 @@ export function sessionStatusOf(
   if (running === true) return 'ongoing'
   if (status?.completionUnread === true) return 'done'
   return 'idle'
+}
+/**
+ * 标题需要滚动的距离。
+ *
+ * `scrollWidth - clientWidth` 就是被裁掉的那一段；非正值表示没溢出。
+ * @param scrollWidth - 标题内容的完整宽度。
+ * @param clientWidth - 标题可见宽度。
+ * @returns 需要滚动的像素数；无溢出时为 0。
+ */
+export function titleScrollRange(scrollWidth: number, clientWidth: number): number {
+  if (!Number.isFinite(scrollWidth) || !Number.isFinite(clientWidth)) return 0
+  const range = scrollWidth - clientWidth
+  return range > 0 ? range : 0
+}
+
+/**
+ * 该不该为这个溢出量启动滚动。
+ *
+ * 溢出不大于 {@link MIN_TITLE_REVEAL_PX} 时保持静止：藏起来的尾部没有实质内容，
+ * 为几像素动起来读起来像抖动。阈值与判定照抄宿主 `useTitleMarquee`。
+ * @param range - {@link titleScrollRange} 的结果。
+ * @returns 值得滚动时为 true。
+ */
+export function shouldMarqueeTitle(range: number): boolean {
+  return Number.isFinite(range) && range > MIN_TITLE_REVEAL_PX
+}
+
+/**
+ * 求出某一时刻标题应处的滚动位置，以及两端渐隐是否该亮。
+ *
+ * 纯函数：把宿主 `placeTitle` 里「位置 + 两个 data 属性」的判定抽出来，
+ * 好在没有 DOM 的环境里把边界测清楚。
+ * @param offset - 期望的滚动偏移（会被夹到 [0, range]）。
+ * @param range - 最大可滚动距离。
+ * @returns 夹紧后的偏移，以及左端（已离开起点）与右端（仍有内容在外）是否该渐隐。
+ */
+export function titleMarqueeFrame(
+  offset: number,
+  range: number,
+): { readonly left: number; readonly fadeStart: boolean; readonly fadeEnd: boolean } {
+  const safeRange = Number.isFinite(range) && range > 0 ? range : 0
+  const wanted = Number.isFinite(offset) ? offset : 0
+  const left = wanted <= 0 ? 0 : wanted >= safeRange ? safeRange : wanted
+  return {
+    left,
+    // 左端渐隐：已经离开起点，起点处的字被裁掉了。
+    fadeStart: left > 0,
+    // 右端渐隐：还没到尽头，右边仍有字在外。
+    fadeEnd: left < safeRange,
+  }
 }

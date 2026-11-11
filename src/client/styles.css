@@ -196,7 +196,36 @@
 .dsr-row-wrap:hover .dsr-row { background:transparent; }
 .dsr-row-wrap .dsr-row { border-inline:0; }
 .dsr-row-main { display:flex; flex-direction:column; min-width:0; flex:1 1 auto; }
+/* The title clips its own text and is scrolled programmatically while the row is
+   hovered (hooks/use-title-marquee.ts, copied from the host's useTitleMarquee).
+   The two data hooks drive the fade masks below: data-scrolled once the title has
+   left its start, data-clipped while text still remains beyond the right edge.
+   The mask rides the title span itself so the leading mark and the trailing pin
+   keep full colour. */
 .dsr-row-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* The gradient stops use currentColor rather than the host's literal black stop:
+   a mask only reads the stop's alpha, and currentColor resolves to the row's own
+   opaque label colour, so it is exactly as opaque while staying token-driven
+   (check-source bans literal colour values, which is why this differs from the
+   host stylesheet). */
+.dsr-row-title[data-scrolled] {
+  mask-image: linear-gradient(to right, transparent, currentColor 12px);
+}
+.dsr-row-title[data-clipped] {
+  mask-image: linear-gradient(to left, transparent, currentColor 12px);
+}
+.dsr-row-title[data-scrolled][data-clipped] {
+  mask-image: linear-gradient(to right, transparent, currentColor 12px,
+    currentColor calc(100% - 12px), transparent);
+}
+/* While the marquee travels, drop the ellipsis: it would cover the characters the
+   title just scrolled into view. Guarded on hover so a touch tap that latches
+   :hover after the title already rested cannot strand the row without its
+   ellipsis — same guard as the host. */
+@media (hover: hover) {
+  .dsr-row:hover .dsr-row-title { text-overflow: clip; }
+  .dsr-row-wrap:hover .dsr-row-title { text-overflow: clip; }
+}
 .dsr-row-meta { font-size:12px; line-height:17px; font-weight:400; color:var(--dsw-alias-label-tertiary);
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dsr-row-action { display:flex; align-items:center; justify-content:center; width:22px; height:22px; flex:none;

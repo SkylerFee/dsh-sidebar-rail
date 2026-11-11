@@ -8,6 +8,7 @@
 import { Component, useState } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import { h } from '../jsx.ts'
+import { useTitleMarquee } from '../hooks/use-title-marquee.ts'
 import type { SessionMark } from '../model/types.ts'
 
 /** 图标公共入参：尺寸与子节点（`<path>`、`<circle>` 等）。 */
@@ -200,6 +201,8 @@ export interface RowProps {
  * @returns 行元素。
  */
 export function Row(props: RowProps): ReactNode {
+  // 标题超出格子时，指针停留期间以恒定速度滚到末端（照抄宿主 useTitleMarquee）。
+  const marquee = useTitleMarquee()
   const main = h('button', {
     type: 'button',
     className: 'dsr-row',
@@ -209,9 +212,15 @@ export function Row(props: RowProps): ReactNode {
     'aria-current': props.current === true ? 'page' : undefined,
     'data-dsr-current': props.current === true ? 'true' : undefined,
     onClick: props.onClick,
+    // 触屏点按不触发滚动：没有「悬停」这个持续状态，动起来反而像故障。
+    onPointerEnter: (event: { pointerType?: string }) => {
+      if (event.pointerType === 'touch') return
+      marquee.enter()
+    },
+    onPointerLeave: marquee.leave,
   },
   h('span', { className: 'dsr-row-main' },
-    h('span', { className: 'dsr-row-title' }, props.title),
+    h('span', { ref: marquee.titleRef, className: 'dsr-row-title' }, props.title),
     props.meta === undefined || props.meta === '' ? null : h('span', { className: 'dsr-row-meta' }, props.meta)),
   // 行首那一格是状态标记与定时任务时钟的共用位置，两者互斥：宿主只在行
   // 自身状态为 idle 时才把这一格让给时钟（侧栏行在审批/未读/运行中时状态点优先）。

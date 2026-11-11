@@ -21,9 +21,10 @@ import {
   writeExpandedProjectIds,
   writeStore,
 } from '../src/client/preferences.ts'
-import { RAIL_REVEAL_WIDTH, STORE_KEY } from '../src/client/model/constants.ts'
+import { RAIL_REVEAL_WIDTH, STORE_KEY, TITLE_MARQUEE_PX_PER_MS } from '../src/client/model/constants.ts'
 import { DEFAULT_FLYOUT_ANCHOR, flyoutAnchorFrom, sectionIsOpen } from '../src/client/model/geometry.ts'
 import { normalizeTasks, pickedDirectory, remoteOutcome, sessionHasActiveTask } from '../src/client/model/remote.ts'
+import { shouldMarqueeTitle, titleMarqueeFrame, titleScrollRange } from '../src/client/model/formatting.ts'
 
 /**
  * 装一个可控的 localStorage 替身。
@@ -359,4 +360,64 @@ test('focus gate: leaving only the rail while the flyout keeps focus does not di
   const shouldLeave = (focusInside: boolean): boolean => !focusInside
   assert.equal(shouldLeave(true), false, 'still inside, nothing to close')
   assert.equal(shouldLeave(false), true, 'outside both, close everything')
+})
+// ------------------------------------------------- 标题滚动显示 marquee --
+
+test('titleScrollRange: only real overflow counts', () => {
+  assert.equal(titleScrollRange(200, 120), 80)
+  assert.equal(titleScrollRange(120, 120), 0, 'exact fit has nothing to reveal')
+  assert.equal(titleScrollRange(100, 120), 0, 'a narrower title never yields a negative range')
+  // 跨边界输入不能变成 NaN 或负数漏进夹取逻辑。
+  assert.equal(titleScrollRange(Number.NaN, 120), 0)
+  assert.equal(titleScrollRange(200, Number.NaN), 0)
+  assert.equal(titleScrollRange(Number.POSITIVE_INFINITY, 120), 0)
+})
+
+test('shouldMarqueeTitle: a few clipped pixels stay put', () => {
+  // 宿主 MIN_TITLE_REVEAL_PX = 8：藏起来的尾巴没有实质内容时，动起来像抖动。
+  assert.equal(shouldMarqueeTitle(0), false)
+  assert.equal(shouldMarqueeTitle(8), false, 'exactly at the threshold still rests')
+  assert.equal(shouldMarqueeTitle(9), true)
+  assert.equal(shouldMarqueeTitle(120), true)
+  assert.equal(shouldMarqueeTitle(Number.NaN), false)
+})
+
+test('titleMarqueeFrame: the offset is clamped and both fades follow it', () => {
+  const range = 100
+  // 起点：没有左渐隐，右端仍有内容在外。
+  assert.deepEqual(titleMarqueeFrame(0, range), { left: 0, fadeStart: false, fadeEnd: true })
+  // 中途：两端都在渐隐。
+  assert.deepEqual(titleMarqueeFrame(40, range), { left: 40, fadeStart: true, fadeEnd: true })
+  // 末端：右渐隐熄灭，让最后一个字满强度显示。
+  assert.deepEqual(titleMarqueeFrame(range, range), { left: range, fadeStart: true, fadeEnd: false })
+  // 超调与负值都被夹住，逐帧累计的浮点误差不会把位置推出范围。
+  assert.deepEqual(titleMarqueeFrame(999, range), { left: range, fadeStart: true, fadeEnd: false })
+  assert.deepEqual(titleMarqueeFrame(-20, range), { left: 0, fadeStart: false, fadeEnd: true })
+  assert.equal(titleMarqueeFrame(Number.NaN, range).left, 0)
+})
+
+test('titleMarqueeFrame: a title that fits is never scrolled or faded', () => {
+  assert.deepEqual(titleMarqueeFrame(0, 0), { left: 0, fadeStart: false, fadeEnd: false })
+  assert.deepEqual(titleMarqueeFrame(50, 0), { left: 0, fadeStart: false, fadeEnd: false },
+    'zero range clamps any offset back to the start')
+})
+
+test('titleMarqueeFrame: crawling reaches the far edge monotonically', () => {
+  // 用真实速度常量模拟逐帧累计，确认夹取后仍单调递增并最终停在 range。
+  const range = titleScrollRange(360, 200)   // 160px 要滚
+  let position = 0
+  let previous: number | undefined
+  const seen: number[] = []
+  for (let now = 0; now <= 8000; now += 16) {
+    position += previous === undefined ? 0 : (now - previous) * TITLE_MARQUEE_PX_PER_MS
+    previous = now
+    const frame = titleMarqueeFrame(Math.min(position, range), range)
+    seen.push(frame.left)
+    if (frame.left === range) break
+  }
+  assert.ok(seen.length > 1, 'the title actually moved')
+  for (let i = 1; i < seen.length; i += 1) {
+    assert.ok(seen[i]! >= seen[i - 1]!, 'the marquee never travels backwards')
+  }
+  assert.equal(seen[seen.length - 1], range, 'it settles exactly at the far edge')
 })

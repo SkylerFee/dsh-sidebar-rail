@@ -60,6 +60,8 @@ Paging lives only as long as one flyout opening; closing and reopening restores 
 
 The **clock** on a session row means the session is involved in an active scheduled task; in the current version it renders at the **row end**, which differs from the row-start position in the spec. When the row has a running, unread or waiting state dot, the dot takes precedence. The clock is absent while the task list is still loading or failed to load, and sessions stay browsable. Clicking the clock itself does not open the session; clicking the session title navigates. The verification boundary for the mark's position and the mutual exclusion rule is in the acceptance report.
 
+**When a session title is too long, rest the pointer on that row**: the title crawls to its far edge and holds there, and returns to the start as soon as the pointer leaves. Overflow of 8px or less does not scroll (a few pixels of movement reads as jitter), a touch tap does not trigger it, and reduced motion jumps straight to the far edge. The 12px fade appears only at the edge that needs it, and the right fade lifts at the far edge so the last character reads at full strength.
+
 Long lists scroll as one block inside a single content area, with section titles scrolling away with the content. Show more scrolls with the list instead of sitting in a fixed footer. See the [acceptance report](desktop-audit-2026-11-11.md) for how the speced flyout height differs from the current build.
 
 **End of the recent list**: the screenshot shows all 10 sessions on this page plus Show more, with the clock visible at the right of the last row. Clicking Show more this round grew the list to 20 rows; the screenshot keeps the pre-click button and clock so the location is identifiable.
