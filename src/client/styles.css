@@ -64,8 +64,8 @@
    (15/700) so the section headers below it can sit at 14/700 without inverting
    the hierarchy: 15 title > 14 section = 14 row > 12 row meta. An earlier pass
    used 16/15; both read as oversized at a 288px flyout width. */
-.dsr-flyout-head { padding:10px var(--dsh-sidebar-row-padding) 6px; font-size:15px; font-weight:700;
-  line-height:22px; color:var(--dsw-alias-label-primary); }
+.dsr-flyout-head { padding:10px var(--dsh-sidebar-row-padding) 6px; font-size:14px; font-weight:700;
+  line-height:20px; color:var(--dsw-alias-label-primary); }
 /* Single-column flyouts (more / account) keep their own scroller; sectioned
    flyouts scroll on .dsr-sections instead (ADR-0007). */
 .dsr-flyout-body { overflow-y:auto; padding:2px var(--dsh-sidebar-inline-padding) 8px; min-height:0; }
@@ -101,12 +101,11 @@
 .dsr-section-toggle { display:flex; align-items:center; gap:var(--dsh-sidebar-label-gap); flex:1 1 auto; min-width:0;
   padding:0; border:none; background:transparent; font:inherit; font-size:14px; font-weight:700;
   line-height:22px; letter-spacing:0; color:var(--dsw-alias-label-primary); text-align:left; cursor:pointer; }
-/* Hover was "rise to primary" while the resting colour was secondary; now that the
-   heading already rests at primary, hover signals itself with the row hover fill
-   the rest of the list uses instead. */
+/* The heading already rests at primary, so hover has no colour to rise to and
+   gets no underline either: the caret and the hover fill on the row below already
+   signal that the header is clickable. */
 .dsr-section-toggle:hover, .dsr-section-toggle:focus-visible {
-  color:var(--dsw-alias-label-primary); outline:none; text-decoration:underline;
-  text-underline-offset:3px; text-decoration-thickness:1px; }
+  color:var(--dsw-alias-label-primary); outline:none; }
 .dsr-section-caret { flex:none; display:flex; align-items:center; justify-content:center;
   width:16px; height:22px; transition:transform 120ms ease; }
 .dsr-section[data-dsr-open="false"] .dsr-section-caret { transform:rotate(-90deg); }
