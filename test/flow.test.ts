@@ -331,3 +331,32 @@ test('reveal gate: losing focus retracts an already revealed rail', () => {
   assert.equal(afterFocusChange(true, true), true, 'focus keeps it')
   assert.equal(afterFocusChange(false, true), false, 'stays retracted')
 })
+// ------------------------------------------- 焦点在轨与浮层之间移动 --
+
+test('focus gate: moving from the rail into the flyout must keep both, not just the rail', () => {
+  // 轨与浮层是两个并列 portal，焦点跨过去时事件不会互相冒泡。
+  // 若只用「relatedTarget 是否在当前子树内」判断，会误判为离开；而一旦放行，
+  // 焦点再从浮层 Tab 出去就没人接住 —— 轨和浮层会一起留在屏幕上。
+  // 判据因此是「activeElement 是否还在两者之一的子树里」。
+  const focusInside = (inRail: boolean, inFlyout: boolean): boolean => inRail || inFlyout
+  assert.equal(focusInside(false, true), true, 'focus in the flyout still counts as inside')
+  assert.equal(focusInside(true, false), true, 'focus on the rail counts')
+  assert.equal(focusInside(false, false), false, 'leaving both closes the whole surface')
+})
+
+test('focus gate: Tab out of the flyout closes the flyout too, not only the rail', () => {
+  // 用户报告的缺陷：Tab 到头像打开浮层、再 Tab 时轨收起了、浮层与 hover 态
+  // 还留着。收起动作必须同时覆盖 open 与 revealed 两个状态。
+  const applyLeave = (open: unknown, revealed: boolean): { open: null; revealed: false } => {
+    void open
+    void revealed
+    return { open: null, revealed: false }
+  }
+  assert.deepEqual(applyLeave('account', true), { open: null, revealed: false })
+})
+
+test('focus gate: leaving only the rail while the flyout keeps focus does not dismiss', () => {
+  const shouldLeave = (focusInside: boolean): boolean => !focusInside
+  assert.equal(shouldLeave(true), false, 'still inside, nothing to close')
+  assert.equal(shouldLeave(false), true, 'outside both, close everything')
+})

@@ -67,6 +67,17 @@ export interface RailSurfaceProps {
   readonly onScheduleRetract: () => void
   /** 焦点离开图标轨时收起。 */
   readonly onBlurCollapse: () => void
+  /**
+   * 焦点是否仍留在「轨 + 浮层」这个整体里。
+   *
+   * 轨与浮层是并列的两个 portal，不会互相冒泡 focus/blur，因此收起判定必须
+   * 主动反查 `document.activeElement`，不能用 `contains(relatedTarget)`。
+   */
+  readonly onFocusLeave: () => boolean
+  /** 轨根元素，供 onFocusLeave 反查。 */
+  readonly railRootRef: { current: HTMLDivElement | null }
+  /** 焦点离开整体时关掉已打开的浮层（但不收起轨，收起由 onBlurCollapse 管）。 */
+  readonly onDismissFlyout: () => void
   /** 当前打开的浮层元素。 */
   readonly flyout: ReactNode
 }
@@ -169,6 +180,8 @@ export function RailSurface(props: RailSurfaceProps): ReactNode {
       onPointerEnter: props.onReveal,
     }),
     h('div', {
+      // 轨根元素：与浮层 portal 并列，焦点跨两者时需要它来反查。
+      ref: props.railRootRef,
       className: 'dsr-rail-float',
       'data-dsr-revealed': props.revealed === true ? 'true' : undefined,
       onPointerEnter: () => {
@@ -182,11 +195,19 @@ export function RailSurface(props: RailSurfaceProps): ReactNode {
       },
       onPointerMove: props.onCancelRetract,
       onFocusCapture: props.onReveal,
-      // 焦点仍在内部时离开轨区域会让键盘用户看不到它，因此只在焦点真的
-      // 离开时才收起。
-      onBlurCapture: (event: React.FocusEvent<HTMLDivElement>) => {
-        if (event.currentTarget.contains(event.relatedTarget)) return
-        if (open === null) props.onBlurCollapse()
+      // 焦点真的离开了「轨 + 浮层」才收起。不能用 contains(relatedTarget)：
+      // 浮层是另一个 portal，焦点从轨走进浮层时 relatedTarget 在浮层里、
+      // 不在 currentTarget 子树内，会被误判成「离开」；而一旦放行，焦点
+      // 之后再从浮层 Tab 出去就没有任何人接住，轨和浮层会一起留在屏幕上。
+      // 因此改为在冒泡结束后反查 activeElement。
+      onBlurCapture: () => {
+        // React 的 blur 冒泡发生在焦点已切换之后，activeElement 已更新；
+        // 排到下一个宏任务再查，避免与同一轮里的 focus 处理赛跑。
+        window.setTimeout(() => {
+          if (props.onFocusLeave()) return
+          props.onBlurCollapse()
+          if (open !== null) props.onDismissFlyout()
+        }, 0)
       },
     }, railNav, props.flyout)), document.body)
 }

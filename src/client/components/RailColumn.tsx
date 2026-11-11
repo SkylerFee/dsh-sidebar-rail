@@ -179,6 +179,13 @@ export function RailColumn(props: RailColumnProps): ReactNode {
    * 位置会让轨在别的应用里被扫出来。唤出与保持都需要这一条为前提。
    */
   const windowFocused = useWindowFocused()
+  /**
+   * 轨根元素的 ref。
+   *
+   * 与 `panelRef` 一起用来反查「焦点是否还在轨/浮层里」——两者是并列的
+   * portal，事件不会互相冒泡，只能主动查 `document.activeElement`。
+   */
+  const railRootRef = useRef<HTMLDivElement | null>(null)
   const retractTimer = useRef<number | undefined>(undefined)
 
   /**
@@ -220,6 +227,30 @@ export function RailColumn(props: RailColumnProps): ReactNode {
     if (windowFocused) return
     setRevealed(false)
   }, [windowFocused])
+
+  /**
+   * 焦点是否仍落在「轨 + 当前浮层」这个整体之内。
+   *
+   * 轨与浮层是**两个各自独立的 portal**（都挂到 document.body），所以
+   * 它们之间不会互相冒泡 focus/blur：焦点从轨走进浮层时，轨只看到自己
+   * 失去焦点，浮层也不会通知轨自己收到了焦点。只用 rail-float 的
+   * onBlurCapture 判断，会出现「焦点 Tab 进浮层后继续 Tab 走到页面别处，
+   * 轨和浮层却都还留着」——因为离开轨那一下被 `open !== null` 放行了，
+   * 之后没有任何人再接住。
+   *
+   * 因此判据改成「焦点是否还在两者之一的子树里」，用 document.activeElement
+   * 反查，不再依赖冒泡。
+   * @returns 焦点仍在轨或浮层内时为 true。
+   */
+  const focusInsideRailOrFlyout = useCallback((): boolean => {
+    if (typeof document === 'undefined') return false
+    const active = document.activeElement
+    if (active === null) return false
+    const rail = railRootRef.current
+    if (rail !== null && rail.contains(active)) return true
+    const panel = panelRef.current
+    return panel !== null && panel.contains(active)
+  }, [panelRef])
 
   /**
    * 让图标轨可见性与指针位置保持同步。
@@ -461,6 +492,13 @@ export function RailColumn(props: RailColumnProps): ReactNode {
       const trigger = triggerRef.current
       if (trigger !== null) trigger.focus()
     },
+    panelRef,
+    onFocusLeave: focusInsideRailOrFlyout,
+    onFocusLost: () => {
+      // 焦点彻底离开「轨 + 浮层」：收起轨并关掉浮层，两件事一起做。
+      setRevealed(false)
+      dismiss()
+    },
   })
 
   // 派生分区：置顶、普通、最近会话。两种列表策略不同，见 workspaces.ts。
@@ -609,6 +647,9 @@ export function RailColumn(props: RailColumnProps): ReactNode {
     onBlurCollapse: () => {
       setRevealed(false)
     },
+    onFocusLeave: focusInsideRailOrFlyout,
+    railRootRef,
+    onDismissFlyout: dismiss,
     flyout: flyoutNode,
   })
 }
