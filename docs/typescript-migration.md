@@ -256,7 +256,7 @@ K1 / K2 的期望修复用例可作为单独运行的缺陷复现，但不得在
 
 ### 5.4 调整机械规则
 
-`scripts/check.mjs` 目前依赖根目录 `client.js`、固定引号格式、字典文本位置和 region 标记，不能直接复用于打包产物。
+`scripts/check.mjs` 目前依赖根目录 `client.js`、固定引号格式、字典文本位置和 region 标记，不能直接复用于打包产物。**迁移后已按此结论拆分**：源码约束进 `scripts/check-source.mjs`，产物约束进 `scripts/check-artifact.mjs`。
 
 - 源码规则扫描 `src/` 的真实文件，继续检查 CSS 作用域、禁止接管 sidebar、禁止 `!important` 和危险 DOM 写入等约束。
 - 字典检查直接使用可导入数据或 TypeScript 类型约束；不再靠截取源码字符串定位字典。

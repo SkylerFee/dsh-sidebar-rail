@@ -110,9 +110,9 @@ transform: translateX(-100%);
 - **显式 `-webkit-app-region: no-drag`**：Electron 的 app-region 是**几何**而不是 stacking，浮轨盖住窗口拖拽带时必须自己 opt out（即便 body 级 portal 通常已继承 no-drag），否则点图标会拖窗口。
 - **窄窗口不渲染**：判定不是 CSS 媒体查询，而是纯函数 `shouldRenderRail(platform, collapsed, viewportWidth)`（阈值 `RAIL_MIN_VIEWPORT = 768`），`RailOverlay` 用 `window.innerWidth` + `resize` 监听驱动；不满足即 `return null`，组件整体卸载。768 = 680（宿主正文最小宽）+ 56（轨宽）+ 32（两侧安全）。为什么不用 CSS：阈值语义是「正文是否还放得下」，与轨自身盒模型无关；做成纯函数还能被单测覆盖边界（`src/client/model/geometry.ts`，由 `test/*.test.ts` 直接导入执行）。为什么不是 900：旧实现的 900 是拍的，与宿主 drawer 断点（768）无对应关系；按 680 正文可读宽推导更可解释。
 - **浮层位置**：`.dsr-flyout` 也是 `position: fixed`（portal 到 body），宽 288px，`left = rect.right + 8`。`flyoutPlacement` 根据触发按钮与视口计算顶部或底部距离，并以内联 `maxHeight` 限制剩余可视高度；账号浮层从头像底边向上展开。
-- **浮层定高的来历**：0.3.x 曾用「视口 70%」给工作区浮层定高（`workspaceFlyoutHeight` + `WORKSPACE_FLYOUT_VIEWPORT_RATIO`），因为该浮层内容长度差异最大（两条或二十条最近会话）。0.4.0 起改为**从 chrome 带下沿占到底边**（`flyoutSectionedHeight`），两个函数都已不在源码里。定高的目的没变——「显示更多」只让列表变长、交给整体滚动，不改变浮层高度。
+- **浮层定高的来历与现状**：0.3.x 曾用「视口 70%」给工作区浮层定高（`workspaceFlyoutHeight` + `WORKSPACE_FLYOUT_VIEWPORT_RATIO`），因为该浮层内容长度差异最大（两条或二十条最近会话）。0.4.0 计划改为**从 chrome 带下沿占到底边**（`flyoutSectionedHeight`），但这条**实际未落地**：三个分区浮层的 `shell()` 调用自 TS 迁移起漏传 `topFlush`，于是走 `flyoutPlacement` 的锚点分支——按触发图标摆放、由内容撑开、以 `maxHeight` 封顶。取舍见 [ADR-0008](adr/0008-flyout-height-follows-current-build.md)。
 - **单一滚动容器（ADR-0007 的形态；票 #11 已落地）**：浮层 body 用 `.dsr-sections` 承载所有分区，整块内容共用一个 `overflow-y:auto` 滚动区。分区（`.dsr-section`）只是「标题行 + 条目组」，**不是滚动单元**，也没有高度上限：内容多就整页一起滚，标题跟着滚走；内容少就没有滚动条。分区之间的分隔线已移除，分组靠标题字重与留白区分。
-- **浮层高度仍钉死**：`.dsr-flyout` 的 `height` 由 `flyoutSectionedHeight(innerHeight, topClearance)` 算出（chrome 带之下到底边），不随内容变化。分区收起/展开、列表分页只让滚动内容变短或变长，都不改变面板高度。
+- **浮层高度随内容（不是钉死）**：`.dsr-flyout` 不写内联 `height`；面板由内容撑开，`maxHeight` 按锚点以下的剩余空间封顶，超出即整块滚动。分区收起/展开只让内容变短，内容跨过 `maxHeight` 边界之前面板外框不动。`topFlush` 与 `flyoutSectionedHeight` 仍保留在代码里，作为「将来若要恢复全高」的唯一入口，但三个分区浮层当前不传它。见 [ADR-0008](adr/0008-flyout-height-follows-current-build.md)。
 - **为什么不再分区独立滚动**：0.4.0 的三段式（固定标题 + 独立滚动 + 1/3 限高）在真机上让列表被切碎、多个滚动条并存，与宿主侧栏「一个列表 + 分组标题」的习惯相反。见 [ADR-0007](adr/0007-single-scroll-flyout.md)。0.4.0 的旧结构（分区 `max-height`、分区 `border-top`、分区独立 `overflow`）已随票 #11 从源码移除，不再存在两套并行的滚动模型。
 
 ## 5. 为什么不改宿主列宽

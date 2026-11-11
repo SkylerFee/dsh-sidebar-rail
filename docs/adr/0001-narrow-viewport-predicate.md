@@ -22,7 +22,7 @@
 ## 后果
 
 - 阈值语义与「正文还放不放得下」直接挂钩，可按宿主的内容宽公式重新推导，而不是拍脑袋。
-- 判定可被单测覆盖边界（`test/data.test.mjs` 的 `shouldRenderRail` 用例），CSS 媒体查询无法单测。
+- 判定可被单测覆盖边界（`test/data.test.ts` 的 `shouldRenderRail` 用例），CSS 媒体查询无法单测。
 - 代价：多了一个 `resize` 监听与一次 re-render。轨在阈值以下整体卸载，没有可观察的盒模型，所以不能用 `ResizeObserver`。
 - 窄窗下宿主在 `shell.leading` 的重开控件仍在，隐藏浮轨不损失回到侧栏的路径。
 

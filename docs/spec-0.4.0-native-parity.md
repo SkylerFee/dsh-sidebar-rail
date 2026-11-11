@@ -54,7 +54,7 @@
 - 删除 .dsr-section 的 max-height: 33.3333% 与独立 overflow，改为**整块内容一个滚动容器**。
 - 删除 .dsr-section + .dsr-section { border-top: ... }。
 - **删除 sectionMaxHeight / sectionBudgetFor / SECTION_HEIGHT_RATIO**：限高取消后不再有消费者。相关单测同步删除，不保留空壳。
-- 浮层高度仍**钉死**为「chrome 带之下到底边」（ADR-0004 的这个性质保留：高度不随内容与条数变化）。
+- 浮层高度：原计划仍是「chrome 带之下到底边」（ADR-0004 的这个性质保留）。**实际未落地**——`shell()` 调用漏传 `topFlush`，浮层按锚点摆放并由内容撑开，以 `maxHeight` 封顶。取舍见 [ADR-0008](adr/0008-flyout-height-follows-current-build.md)。
 - 滚动条只在内容超出时出现（overflow-y: auto 的自然行为），不预留槽位。
 - 分区标题**仍不随内容滚动**这个旧性质**放弃**：整页滚动意味着标题会滚走。这是本次的**刻意取舍**，与 ADR-0004 的「标题固定」相反——需要新 ADR 记录这次反转。
 - **已确认**：接受标题随内容滚走，不做 sticky。理由是最贴近宿主原生（宿主侧栏就是一个整体滚动区）。

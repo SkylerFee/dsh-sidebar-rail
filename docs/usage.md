@@ -2,7 +2,7 @@
 
 **[简体中文](usage.zh.md)** | English
 
-This guide describes version 0.4.0 (source commit `de05173` on 2026-11-11). 0.4.0 has not been published to npm yet; when installing any published version, rely on what that version actually offers. See [README](../README.md#install) for installation and toggling, and the [acceptance report](desktop-audit-2026-11-11.md) for results and unverified paths from this round.
+This guide describes version 0.4.0. It has not been published to npm yet; when installing any published version, rely on what that version actually offers. See [README](../README.md#install) for installation and toggling, and the [acceptance report](desktop-audit-2026-11-11.md) for results and unverified paths from this round.
 
 Screenshots were captured on 2026-11-11 against macOS Desktop `0.2.2-rc.1` with a Chinese UI, using **Catppuccin Latte** (light) and **Catppuccin Frappé** (dark). Each pair below keeps the whole icon rail and the flyout bounds shown; long lists appear twice, at the top and at the scrolled end. Business names and amounts are blurred, non-plugin page content is masked, and controls, times, groupings, state icons and action entries are not redrawn. Images open at full size; the [screenshot index](images/README.md) records scenes and coverage.
 

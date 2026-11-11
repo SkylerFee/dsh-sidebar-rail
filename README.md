@@ -113,7 +113,7 @@ Keyboard: `Tab` to an icon reveals the rail. On a top-row function icon, press `
 
 Session lists initially show **10 non-blank sessions**; **Show more** appends 10 more each time. Recent sessions raise their watermark for running, waiting, unread-completion and current rows; project lists raise it only for the current session and count independently. Automatic growth stops at 50, so later rows still require Show more. The current blank session stays visible without consuming a regular place.
 
-Workspace, task and plugin flyouts scroll as one list: sections are groupings with a title row, so a long list scrolls as a whole and the titles scroll with it. Show more is an ordinary row at the end of the list; it does not sit in a fixed footer. Paging is not persisted: closing and reopening a flyout starts again at 10 rows. Filling the available window height is the design goal; see the [acceptance report](docs/desktop-audit-2026-11-11.md) for current positioning, height and section-folding limitations.
+Workspace, task and plugin flyouts scroll as one list: sections are groupings with a title row, so a long list scrolls as a whole and the titles scroll with it. Show more is an ordinary row at the end of the list; it does not sit in a fixed footer. Paging is not persisted: closing and reopening a flyout starts again at 10 rows. A flyout is placed beside the icon that opened it and grows with its content up to the space below that anchor, then scrolls as one list; it does not stretch to the window bottom. See the acceptance report for current positioning and section-folding limits.
 
 Preferences belong to this client and use `localStorage['dsh.sidebar-rail.v1']`:
 
