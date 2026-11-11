@@ -6,18 +6,18 @@
 
 Reach workspaces, recent sessions, scheduled tasks, plugins and your account while the DeepSeek Harness sidebar is collapsed on macOS Desktop.
 
-The rail starts hidden. Collapse the host sidebar, then move the pointer into the 12px strip along the window's left edge to reveal a 56px icon rail. Hover an icon to browse its flyout and choose an entry to navigate. Expanding the sidebar keeps the host's search, workspace tree, account menu and settings.
+The rail starts hidden. Focus the DSH window and collapse the host sidebar, then move the pointer into the 12px strip along the window's left edge to reveal a 56px icon rail. Hover an icon to browse its flyout and choose an entry to navigate. Expanding the sidebar keeps the host's search, workspace tree, account menu and settings.
 
 <a id="screenshots"></a>
 ## Screenshots
 
-These cropped screenshots show the real macOS Desktop client in Chinese, with a dark appearance and the Catppuccin skin. Workspace names and session titles are blurred. They were captured before 0.5.1, so the recent-count stepper at the foot of the workspace flyout no longer exists.
+Captured on macOS Desktop `0.2.2-rc.1` on 2026-11-11, using Catppuccin Latte (light) and Frappé (dark). Each preview combines real workspace and plugin captures; business names are blurred and unrelated conversation content is masked. See the [usage guide (Chinese)](docs/usage.md) for full feature screenshots, pagination, tasks and account details.
 
 <table>
-  <tr><th>Workspaces, pins and recent sessions</th><th>My plugins</th></tr>
+  <tr><th>Light preview · Latte</th><th>Dark preview · Frappé</th></tr>
   <tr>
-    <td valign="top"><img src="docs/images/workspace-flyout.png" alt="Collapsed rail workspace flyout with pinned projects and recent sessions; the screenshot predates 0.5.1, so the count stepper at its foot has since been removed" width="330"></td>
-    <td valign="top"><img src="docs/images/plugins-flyout.png" alt="My plugins flyout showing enabled user plugins and their versions" width="330"></td>
+    <td valign="top"><a href="docs/images/preview-light.png"><img src="docs/images/preview-light.png" alt="Light overview: complete icon rail, pinned projects, projects, recent sessions, plugin groups and Open panel" width="360"></a></td>
+    <td valign="top"><a href="docs/images/preview-dark.png"><img src="docs/images/preview-dark.png" alt="Dark overview: workspace and plugin flyouts; expanded projects, pagination and other entries are documented in the usage guide" width="360"></a></td>
   </tr>
 </table>
 
@@ -36,7 +36,7 @@ These cropped screenshots show the real macOS Desktop client in Chinese, with a 
 | Web, any platform | No rail; the host keeps its existing collapsed rail |
 | Windows / Linux Desktop | No rail; support is untested |
 
-Recorded Desktop checks used macOS Desktop `0.2.2-rc.1`. See `peerDependencies` in [package.json](package.json) for other compatible host versions. Some new settings and balance displays still have unverified paths; see the [verification log](docs/verify.md). The published package ships prebuilt `lib/` entries, so installing it needs no compiler. Source development and checks require Node.js ≥ 22.19.0 plus `npm ci` and a build step (see [Development](#development)).
+Recorded Desktop checks used macOS Desktop `0.2.2-rc.1`. See `peerDependencies` in [package.json](package.json) for other compatible host versions. Current source includes the 0.5.0 / 0.5.1 feature rounds while the package version remains `0.4.0`; the published package does not imply these changes are included. See the [current acceptance report](docs/desktop-audit-2026-11-11.md) for results and limitations. The published package ships prebuilt `lib/` entries, so installing it needs no compiler. Source development and checks require Node.js ≥ 22.19.0 plus `npm ci` and a build step (see [Development](#development)).
 
 <a id="install"></a>
 ## Install and manage
@@ -91,6 +91,8 @@ The assistant can also call `plugin_manager` with `set_bundle` (enable/disable) 
 <a id="usage"></a>
 ## Usage
 
+See the [usage guide (Chinese)](docs/usage.md) for detailed operations, state descriptions and paired light / dark feature screenshots. Actual results and known issues are in the [acceptance report](docs/desktop-audit-2026-11-11.md).
+
 1. Collapse the sidebar with the host button. Move the pointer to the window's left edge, below the window controls, to reveal the rail.
 2. Hover an icon for about 120ms to open its flyout. Leaving closes the flyout after about 200ms. Moving between rail icons switches the flyout without retracting the rail.
 3. Choose an entry to navigate and retract the rail. Expand the host sidebar for native search, settings or workspace management.
@@ -98,20 +100,20 @@ The assistant can also call `plugin_manager` with `set_bundle` (enable/disable) 
 | Entry | Available actions |
 | --- | --- |
 | Workspaces | Three sections — pinned projects, projects, recent sessions. A project row expands to its own session list (host order, paged, archived rows still listed) and can start a new session; Add project registers a directory without navigating |
-| Recent sessions | Listed at the foot of the workspace flyout, newest first, excluding archived and subagent sessions; of blank sessions only the current one is listed. Open an existing session and see its relative time and host-provided status mark. A clock glyph marks a session that has an active scheduled task (shown only while that row has no status mark of its own) |
+| Recent sessions | Listed at the foot of the workspace flyout, newest first, excluding archived and subagent sessions; of blank sessions only the current one is listed. Open an existing session and see its relative time and host-provided status mark. A trailing clock glyph marks a session that has an active scheduled task (shown only while that row has no status mark of its own) |
 | Scheduled tasks | Three sections — running, paused, ended; only running opens by default. Choose a row or Open panel to enter the task panel |
 | My plugins | Two sections — enabled, and installed but switched off; host bundles are excluded and no switch is offered. Choose a row to enter the plugin manager |
 | More | Open other host panels or expand the native sidebar |
 | Account and settings | See the host avatar and available balances, bonuses, View usage and Top up links; signed-out accounts get a hint; the flyout also names the path to the host Settings panel (expand the sidebar, then Settings at its foot); sign-in, sign-out and payment remain in the host or destination page |
 
-Keyboard: `Tab` to an icon reveals the rail. On a top-row function icon, press `↓` or `→` to enter its flyout, then `Tab` through the list. `Escape` inside the flyout closes it and returns focus to its trigger. `Enter` activates the focused button like a click; activating an icon navigates directly rather than entering its flyout list.
+Keyboard: `Tab` to an icon reveals the rail. On a top-row function icon, press `↓` or `→` to enter its flyout, then `Tab` through the list. `Escape` inside the flyout returns focus to its trigger, but currently reopens the flyout as a known issue. `Enter` activates the focused button like a click; activating an icon navigates directly rather than entering its flyout list.
 
 <a id="preferences"></a>
 ## Preferences and local data
 
-Session lists are paged: the first **10** rows show, and a **Show more** button at the end of the list appends 10 more each time. A row that needs attention (running, waiting for your input, unread completion, or the current session) is lifted above the watermark automatically, so it is never hidden behind Show more. Project session lists page the same way, counting independently.
+Session lists initially show **10 non-blank sessions**; **Show more** appends 10 more each time. Recent sessions raise their watermark for running, waiting, unread-completion and current rows; project lists raise it only for the current session and count independently. Automatic growth stops at 50, so later rows still require Show more. The current blank session stays visible without consuming a regular place.
 
-Every flyout fills the column from below the window chrome to the bottom edge. Its content scrolls as one list: sections are groupings with a title row, not separate scroll areas, so a long list scrolls as a whole and the titles scroll with it. Sections fold, and folding never changes the panel height. Show more is an ordinary row at the end of the list and scrolls with the content; it does not sit in a fixed footer. Paging is not persisted: closing and reopening a flyout starts again at 10 rows.
+Workspace, task and plugin flyouts scroll as one list: sections are groupings with a title row, so a long list scrolls as a whole and the titles scroll with it. Show more is an ordinary row at the end of the list; it does not sit in a fixed footer. Paging is not persisted: closing and reopening a flyout starts again at 10 rows. Filling the available window height is the design goal; see the [acceptance report](docs/desktop-audit-2026-11-11.md) for current positioning, height and section-folding limitations.
 
 Preferences belong to this client and use `localStorage['dsh.sidebar-rail.v1']`:
 
@@ -129,12 +131,13 @@ The host owns the collapse state; the plugin only reads it. Account and balance 
 | --- | --- |
 | No rail after installation | Confirm macOS Desktop, the enabled plugin, a collapsed sidebar and viewport width ≥ 768px; the rail starts hidden and needs the left-edge strip |
 | A recent session is missing | Choose Show more at the end of the list; archived and subagent sessions are excluded, and blank sessions are listed only while they are the current session |
-| Task or plugin loading fails | Missing services, structured failures and requests exceeding 5s enter the failure state; use Open panel for the host page, or close and reopen the flyout to retry |
+| Task or plugin loading fails | Requests fail after 5s and show a retry state. The task list is shared by the workspace and task flyouts; switching between them while a request is still in flight now restarts the request instead of leaving it stuck |
 | No avatar or balance | A missing avatar uses a fallback glyph; unavailable balances get a hint. Account data are read on component mount and are not guaranteed to refresh live; use the host account page for full details |
+| Add project opens an English dialog | Known defect, out of this plugin's reach. The native chooser is the host's `NSOpenPanel`, and the host sets its message text to the hard-coded string `Select Workspace Directory` (`directory-picker-native`), which AppKit never localizes — so the title stays English while its buttons follow the system language. The plugin cannot override it: a Client-only module has no Node access to spawn its own chooser. Picking a directory still registers the project normally |
 | A revealed rail covers the page's left edge | It is a temporary overlay that reserves no host grid space; the hidden default preserves the conversation tab entry, and moving the pointer away lets the rail retract |
 | Sidebar rail unavailable or a boot import error | Keep the visible error and host diagnostics, disable the plugin through the native sidebar, and report the host version, plugin version and reproduction steps in this repository; omit credentials and conversation content |
 
-The plugin keeps the expanded host sidebar and its column width. The top 48px remain clear for macOS window controls; reduced-motion preferences are respected. For light themes, other platforms, real remote failures, paging and scheduled-task marks on a real Desktop window, and the primary balance row on a funded account, rely on the actual results and unverified items in the [verification log](docs/verify.md).
+The plugin keeps the expanded host sidebar and its column width, reserves space for macOS window controls and respects reduced-motion preferences. See the [acceptance report](docs/desktop-audit-2026-11-11.md) for screenshot coverage, interaction issues and unverified paths such as real remote failures and funded accounts.
 
 <a id="development"></a>
 ## Development and contributions
@@ -164,6 +167,8 @@ Follow [ADR-0003](docs/adr/0003-release-pipeline.md) to release: update and push
 
 | Document | Content |
 | --- | --- |
+| [Usage guide (Chinese)](docs/usage.md) | All entries, pagination, state marks and keyboard operations and paired light / dark feature screenshots |
+| [2026-11-11 acceptance report](docs/desktop-audit-2026-11-11.md) | Current-source checks, Desktop evidence, findings and unverified paths |
 | [Product requirements](docs/PRD.md) | Use cases, interactions and acceptance criteria |
 | [Design](docs/design.md) | Additive registration, layout, data sources, cleanup and local storage |
 | [Verification log](docs/verify.md) | Recorded results, historical defects and unverified paths |

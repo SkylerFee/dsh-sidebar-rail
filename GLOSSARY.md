@@ -99,6 +99,8 @@ enabled === true && official !== true && installed !== false && availability !==
 
 **只登记，不跳转、不建会话**——与宿主原生添加工作区的行为对齐。
 
+**已知缺陷：选择器标题是英文。** 底层是宿主用 `osascript` 调起的 `NSOpenPanel`，标题取自宿主硬编码的字符串 `Select Workspace Directory`（`@deepseek-ai/dsh-host-directory-picker-native`）。`NSOpenPanel.message` 是自定义字段，AppKit 不做本地化，所以标题恒为英文、而面板按钮跟随系统语言。插件**无法绕过**：纯 Client 模块没有 Node 权限，不能自己 `spawn` 一个选择器。这是宿主侧的本地化缺口，不是本插件的待办。
+
 ## 任务分区 task sections
 
 定时任务浮层固定为三个分区，对应宿主 `ScheduleStatus` 枚举：

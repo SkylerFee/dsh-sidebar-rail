@@ -1,7 +1,7 @@
 # 0007 浮层改为单一滚动容器，撤销分区独立滚动与 1/3 限高
 
 - 状态：已采纳（2026-11-10）
-- 取代：[ADR-0004](0004-sectioned-flyout.md) 的「分区独立滚动 + 每区 1/3 限高 + 标题固定」三件事。ADR-0004 的另一半——「浮层占满可用高度、高度不随内容与条数变化」——**继续有效**。
+- 取代：[ADR-0004](0004-sectioned-flyout.md) 的「分区独立滚动 + 每区 1/3 限高 + 标题固定」三件事。ADR-0004 的另一半——「浮层占满可用高度、高度不随内容与条数变化」——在本 ADR 里被标注为继续有效，但该条**实际从未落地**（TS 迁移漏传 `topFlush`）；其现状与取舍由 [ADR-0008](0008-flyout-height-follows-current-build.md) 修正。
 - 相关：`.dsr-sections` / `.dsr-section` / `.dsr-section-body` 系列样式、`src/client/model/geometry.ts` 的 `sectionMaxHeight` / `sectionBudgetFor` / `SECTION_HEIGHT_RATIO`、[spec-0.5.0](../spec-0.5.0-native-parity.md)
 
 ## 背景
@@ -22,6 +22,7 @@
 3. **删除 1/3 限高**。`sectionMaxHeight` / `sectionBudgetFor` / `SECTION_HEIGHT_RATIO` 一并删除，不保留空壳——限高取消后它们不再有消费者。
 4. **分区标题随内容滚动**。这是本次最直接的取舍：放弃 ADR-0004 的「标题固定」。整页滚动意味着标题会滚出视野。
 5. **保留 ADR-0004 的另一半**：浮层高度仍钉死为「`--dsh-frame-top-clearance` 之下到窗口底」，**不随内容长短与 `recentCount` 变化**。这条性质与滚动结构无关，且是 0.3.2 修掉的缺陷（浮层高度跳动）的防线，不撤销。
+   - **2026-11-11 修正**：这条在本轮实现中并未真正生效——三个分区浮层漏传 `topFlush`，实际按锚点摆放且高度随内容。见 [ADR-0008](0008-flyout-height-follows-current-build.md)。
 6. **保留分区可折叠**：分区仍能展开/收起，收起时内容卸载；折叠状态仍不持久化。
 
 ## 后果
