@@ -28,7 +28,7 @@ import {
   STORE_KEY,
   TITLE_MARQUEE_PX_PER_MS,
 } from '../src/client/model/constants.ts'
-import { DEFAULT_FLYOUT_ANCHOR, flyoutAnchorFrom, pointerInHotzone, sectionIsOpen } from '../src/client/model/geometry.ts'
+import { DEFAULT_FLYOUT_ANCHOR, flyoutAnchorFrom, keepsRailRevealed, pointerInHotzone, sectionIsOpen } from '../src/client/model/geometry.ts'
 import { normalizeTasks, pickedDirectory, remoteOutcome, sessionHasActiveTask } from '../src/client/model/remote.ts'
 import { shouldMarqueeTitle, titleMarqueeFrame, titleScrollRange } from '../src/client/model/formatting.ts'
 
@@ -455,4 +455,27 @@ test('pointerInHotzone: junk input never reveals', () => {
   assert.equal(pointerInHotzone(5, Number.NaN), false)
   assert.equal(pointerInHotzone(5, 0), false, 'a zero-width hotzone cannot be entered')
   assert.equal(pointerInHotzone(5, -1), false)
+})
+test('reveal gate: only pointermove decides, a synthesized enter cannot reveal', () => {
+  // 窗口边缘跨屏时，React 会把一次带 relatedTarget=null 的 pointerover 合成成
+  // onPointerEnter，而那条事件的 clientX 会被钳进视口、落在热区范围里——
+  // 因此 pointerenter 不能作为唤出判据。唤出只由 pointermove 驱动，
+  // 它的坐标在指针真实位于窗口内时才可信。
+  const revealFromMove = (x: number, inside: boolean): boolean =>
+    inside && pointerInHotzone(x, RAIL_HOTZONE_WIDTH)
+  // 真实窗口内移动：左缘唤出，其余不唤出。
+  assert.equal(revealFromMove(4, true), true)
+  assert.equal(revealFromMove(600, true), false)
+  // 指针已在窗口外（跨屏移出）：无论上报什么坐标都不唤出。
+  assert.equal(revealFromMove(0, false), false, 'an outside pointer never reveals, even at x=0')
+  assert.equal(revealFromMove(600, false), false)
+})
+
+test('reveal gate: the two gates disagree only at the rail width band', () => {
+  // 唤出（<= hotzone+slack）与保持（<= rail width）必须都不覆盖右侧：
+  // 否则右缘事件要么唤出、要么把已展开的轨误保持住。
+  for (const x of [100, 400, 800, 1200, 1512, 2560]) {
+    assert.equal(pointerInHotzone(x, RAIL_HOTZONE_WIDTH), false, `x=${x} must not reveal`)
+    assert.equal(keepsRailRevealed(x, RAIL_REVEAL_WIDTH), false, `x=${x} must not keep`)
+  }
 })

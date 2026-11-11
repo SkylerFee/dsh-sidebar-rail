@@ -178,20 +178,18 @@ export function keepsRailRevealed(x: number, railWidth: number): boolean {
 /**
  * 指针是否落在左侧热区里。
  *
- * 存在这一层坐标判定，是因为「pointerenter 到了热区」并不总等于「指针真在
- * 左缘」。三处场景都只在**指针进入左侧热区**时才应唤出，而浏览器给出的
- * pointerover 可能来自别处：
+ * **不能只靠 pointerenter 判断「进入了左缘」。** 那个事件由 React 从冒泡的
+ * `pointerover` 合成，而窗口边缘跨屏时 Chromium 上报的坐标并不可信：
  *
- * - 多屏环绕布局下，指针停在窗口**右缘的 resize 区**（即已在窗口外、右侧还有
- *   另一块屏）时，Chromium 仍会继续上报 pointer 事件，`pointerover` 的
- *   `relatedTarget` 会变成 null，于是 React 把这条冒泡事件合成为
- *   `onPointerEnter`，热区就被误判成「被进入」——右侧鼠标、左侧轨滑出。
- * - 指针从窗口外回到文档时，同样会以 `relatedTarget = null` 派发一次
- *   `pointerover`。
- * - 元素级的 enter 本身不冒泡，但 React 是从冒泡的 `pointerover` 合成的，
- *   所以「谁被进入」最终由坐标说了算才可靠。
+ * - DSH 右边框贴着屏幕右缘、右侧还有另一块屏时，指针从 DSH 右缘移出去，
+ *   Chromium 仍会派发 pointerover，且 `relatedTarget` 变成 null；React 于是
+ *   合成一次「进入了热区」。实测这次事件带的 `clientX` 会落到热区范围内
+ *   （视口外的坐标被钳到边界），因此**连坐标门禁都拦不住**。
+ * - 结论：判据必须来自连续移动的 `pointermove`，它在指针真实位于窗口内时
+ *   给的坐标才可信。
  *
- * 判定用 `clientX`：它相对视口左上角，与窗口是否全屏、是否有副屏无关。
+ * 判定用 `clientX`：它相对视口左上角，与是否全屏、是否有副屏无关；
+ * `screenX` 在多屏下是全局坐标，反而会误判。
  * @param x - 指针的 client 坐标 x；非有限值时按「不在热区」处理。
  * @param hotzoneWidth - 左侧热区宽度。
  * @returns 指针是否真的在左缘热区内。

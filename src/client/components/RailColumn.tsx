@@ -212,23 +212,16 @@ export function RailColumn(props: RailColumnProps): ReactNode {
   useEffect(() => cancelRetract, [cancelRetract])
 
   /**
-   * 唤出图标轨。
+   * 唤出图标轨（键盘路径）。
    *
-   * 唯一入口：热区、轨自身的 pointerenter、以及键盘焦点捕获都走这里，因此
-   * 「窗口是否聚焦」与「指针是否真在左缘」两道门禁都只需在这一处判一次。
+   * 指针路径**不经过这里**：它由下面的 pointermove 连续判定驱动。原因见
+   * {@link pointerInHotzone} 的文档——窗口边缘跨屏时，pointerenter 的坐标
+   * 会被钳进视口，连坐标门禁都拦不住，只有连续移动的坐标才可信。
    *
-   * 坐标门禁不是多余的：React 的 onPointerEnter 由**冒泡的 pointerover** 合成，
-   * 而 `relatedTarget` 为 null 的 pointerover 会被当成「进入」。多屏环绕布局下，
-   * 指针停在窗口**右缘的 resize 区**（已在窗口外、右侧还有另一块屏）时
-   * Chromium 仍会上报 pointer 事件，于是热区收到一次合成的 enter，右侧动鼠标
-   * 却把左侧的轨拉了出来。键盘路径不带坐标，因此显式放行。
-   * @param event - 触发事件；键盘焦点路径没有指针事件。
+   * 键盘路径没有指针事件，因此不做坐标判定，只要求窗口持有焦点。
    */
-  const revealRail = useCallback((event?: { clientX?: number }) => {
+  const revealRailFromKeyboard = useCallback(() => {
     if (!windowFocused) return
-    const x = event?.clientX
-    // 有 pointer 事件就必须落在左缘热区内；键盘路径（无坐标）直接放行。
-    if (typeof x === 'number' && !pointerInHotzone(x, RAIL_HOTZONE_WIDTH)) return
     setRevealed(true)
   }, [windowFocused])
 
@@ -272,9 +265,28 @@ export function RailColumn(props: RailColumnProps): ReactNode {
    * 走到它上面。
    */
   useEffect(() => {
-    if (!revealed) return undefined
-    /** 指针移动时的收起判定。 */
+    /**
+     * 指针移动时同步图标轨的显隐。
+     *
+     * **唤出与保持共用这一条判据，且都以 pointermove 的坐标为唯一依据。**
+     * 不能用 pointerenter 唤出：窗口边缘跨屏时（DSH 右边框贴屏幕右缘、右侧
+     * 还有一块屏），指针移出窗口会派发一次带 `relatedTarget = null` 的
+     * `pointerover`，React 把它合成成「进入了热区」，而那条事件带的
+     * `clientX` 会被钳进视口、恰好落在热区范围内——连坐标门禁都拦不住。
+     * 连续移动的坐标才可信。
+     * @param event - 指针移动事件。
+     */
     const onMove = (event: PointerEvent): void => {
+      if (!revealed) {
+        // 未展开：只做唤出。
+        if (!windowFocused) return
+        // 触屏没有「悬停」这个持续状态，不参与唤出。
+        if (event.pointerType === 'touch') return
+        if (!pointerInHotzone(event.clientX, RAIL_HOTZONE_WIDTH)) return
+        setRevealed(true)
+        return
+      }
+      // 已展开：只做保持/收起。
       if (open !== null) return
       const railWidth = RAIL_REVEAL_WIDTH
       const target = event.target
@@ -289,7 +301,7 @@ export function RailColumn(props: RailColumnProps): ReactNode {
     return () => {
       window.removeEventListener('pointermove', onMove)
     }
-  }, [revealed, open, panelRef])
+  }, [revealed, open, panelRef, windowFocused])
 
   // 账号座位每个挂载只读一次。按 PRD 的非目标，它不订阅 account/watch，
   // 因此插件挂载期间登录或退出都会让座位保持原样；宿主自己的账号页是权威视图。
@@ -622,7 +634,7 @@ export function RailColumn(props: RailColumnProps): ReactNode {
       triggerRef.current = node
     },
     onFocusFlyout: focusFlyout,
-    onReveal: revealRail,
+    onReveal: revealRailFromKeyboard,
     onCancelRetract: cancelRetract,
     onScheduleRetract: scheduleRetract,
     onBlurCollapse: () => {

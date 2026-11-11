@@ -61,12 +61,13 @@ export interface RailSurfaceProps {
   readonly onFocusFlyout: () => void
   /** 唤出条进入：展开图标轨。 */
   /**
-   * 唤出图标轨。
+   * 键盘路径的唤出。
    *
-   * 带可选事件：指针路径把 clientX 交给它做「是否真在左缘」的判定；键盘焦点
-   * 路径没有指针事件，于是不带坐标、直接放行。
+   * 指针路径不经过它：窗口边缘跨屏时 pointerenter 带的坐标会被钳进视口，
+   * 无法据此判断指针是否真在左缘，因此唤出改由 RailColumn 的 document 级
+   * pointermove 连续判定驱动。
    */
-  readonly onReveal: (event?: { clientX?: number }) => void
+  readonly onReveal: () => void
   /** 取消待收起。 */
   readonly onCancelRetract: () => void
   /** 安排收起。 */
@@ -183,20 +184,19 @@ export function RailSurface(props: RailSurfaceProps): ReactNode {
     // 收起改由指针位置决定（RailColumn 的 effect）。
     h('div', {
       className: 'dsr-rail-hotzone',
-      // 透传事件：坐标门禁要靠 clientX 区分「真的进入左缘」与「多屏右缘
-      // resize 区合成的 enter」。
-      onPointerEnter: (event: { clientX: number }) => {
-        props.onReveal(event)
-      },
+      // 刻意不绑 pointerenter：窗口边缘跨屏时它会带一个被钳进视口的坐标，
+      // 无法区分「真的进入左缘」与「从右缘移出」。唤出统一由 RailColumn 的
+      // document 级 pointermove 连续判定驱动。保留这个元素是为了让热区仍有
+      // 命中面积（-webkit-app-region:no-drag）与可发现的边缘条。
     }),
     h('div', {
       // 轨根元素：与浮层 portal 并列，焦点跨两者时需要它来反查。
       ref: props.railRootRef,
       className: 'dsr-rail-float',
       'data-dsr-revealed': props.revealed === true ? 'true' : undefined,
-      onPointerEnter: (event: { clientX: number }) => {
+      onPointerEnter: () => {
+        // 轨已展开，无需唤出；进入只用于取消待收起。
         props.onCancelRetract()
-        props.onReveal(event)
       },
       // 离开图标轨会收起它，但延迟一小段时间，这样只是掠过边缘的指针
       // 不会让它闪烁。唤出条没有自己的离开处理，这正是两个状态不会互相追逐的原因。
