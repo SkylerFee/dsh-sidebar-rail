@@ -61,9 +61,10 @@
 @keyframes dsr-in { from { opacity:0; transform:translateX(-2px); } to { opacity:1; transform:none; } }
 @media (prefers-reduced-motion: reduce) { .dsr-flyout { animation:none; } }
 /* Flyout title: the "which surface am I in" label. It leads the type scale
-   (16/700) so the section headers below it can sit at 15/700 without inverting
-   the hierarchy: 16 title > 15 section > 14 row > 12 row meta. */
-.dsr-flyout-head { padding:10px var(--dsh-sidebar-row-padding) 6px; font-size:16px; font-weight:700;
+   (15/700) so the section headers below it can sit at 14/700 without inverting
+   the hierarchy: 15 title > 14 section = 14 row > 12 row meta. An earlier pass
+   used 16/15; both read as oversized at a 288px flyout width. */
+.dsr-flyout-head { padding:10px var(--dsh-sidebar-row-padding) 6px; font-size:15px; font-weight:700;
   line-height:22px; color:var(--dsw-alias-label-primary); }
 /* Single-column flyouts (more / account) keep their own scroller; sectioned
    flyouts scroll on .dsr-sections instead (ADR-0007). */
@@ -92,17 +93,22 @@
    text was real heading weight. Vertical padding is explicit rather than folded
    into min-height so the heading keeps symmetrical breathing room. */
 .dsr-section-head { flex:none; display:flex; align-items:center; gap:4px; box-sizing:border-box;
-  min-height:40px; padding:8px var(--dsh-sidebar-inline-padding) 4px var(--dsh-sidebar-row-padding); }
-/* Section header: a real heading, not a caption. 15/700 sits below the flyout
-   title and above the rows, and secondary label colour keeps it a step quieter
-   than the row text it introduces. Was 11px/600/tertiary — smaller than the rows
-   it labelled. */
+  min-height:36px; padding:7px var(--dsh-sidebar-inline-padding) 3px var(--dsh-sidebar-row-padding); }
+/* Section header: a real heading, not a caption. 14/700 matches the row text size
+   and separates itself by weight and colour instead — at 15px the headings read
+   heavier than a 288px flyout wants. Was 11px/600/tertiary, i.e. smaller than the
+   rows it labelled, which is the problem this fixes. */
 .dsr-section-toggle { display:flex; align-items:center; gap:var(--dsh-sidebar-label-gap); flex:1 1 auto; min-width:0;
-  padding:0; border:none; background:transparent; font:inherit; font-size:15px; font-weight:700;
-  line-height:24px; letter-spacing:0; color:var(--dsw-alias-label-secondary); text-align:left; cursor:pointer; }
-.dsr-section-toggle:hover, .dsr-section-toggle:focus-visible { color:var(--dsw-alias-label-primary); outline:none; }
+  padding:0; border:none; background:transparent; font:inherit; font-size:14px; font-weight:700;
+  line-height:22px; letter-spacing:0; color:var(--dsw-alias-label-primary); text-align:left; cursor:pointer; }
+/* Hover was "rise to primary" while the resting colour was secondary; now that the
+   heading already rests at primary, hover signals itself with the row hover fill
+   the rest of the list uses instead. */
+.dsr-section-toggle:hover, .dsr-section-toggle:focus-visible {
+  color:var(--dsw-alias-label-primary); outline:none; text-decoration:underline;
+  text-underline-offset:3px; text-decoration-thickness:1px; }
 .dsr-section-caret { flex:none; display:flex; align-items:center; justify-content:center;
-  width:16px; height:24px; transition:transform 120ms ease; }
+  width:16px; height:22px; transition:transform 120ms ease; }
 .dsr-section[data-dsr-open="false"] .dsr-section-caret { transform:rotate(-90deg); }
 .dsr-section-title-text { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 /* Not a scroller: the section body is plain flow content inside .dsr-sections.
@@ -160,8 +166,8 @@
 /* Non-foldable section heading (the More flyout's "Other panels"): same tier as
    the foldable headers so both kinds of grouping read alike. */
 .dsr-section-title { padding:0 var(--dsh-sidebar-inline-padding) 4px var(--dsh-sidebar-row-padding);
-  font-size:15px; line-height:24px; font-weight:700; letter-spacing:0;
-  color:var(--dsw-alias-label-secondary); }
+  font-size:14px; line-height:22px; font-weight:700; letter-spacing:0;
+  color:var(--dsw-alias-label-primary); }
 /* Rows follow the host's row metrics (ui-workspace Rows.module.css
    .projectRow/.sessionRow): 32px tall, 6px label gap, radius md, and the paint
    inset carried by a transparent inline border so the hover fill stops 3px short
