@@ -11,7 +11,7 @@
 
 1. `main` 必须经过 PR，GitHub Actions 的 `check` 必须成功，分支必须为最新，审查讨论必须解决；禁止删除与强推，无常规绕过身份。目前只有一个维护者，批准 review 数为 0，避免作者无法审核自己导致无法合并；PR 和 CI 仍为强制要求。
 2. `v*` 标签仅管理员可以创建，创建后的更新和删除由另一份无绕过规则禁止。新 Release 开启不可变保护；历史 Release 不会因此自动变为不可变。
-3. Actions 仅允许 checkout、setup-node、upload-artifact、download-artifact 与 CodeQL，工作流引用固定到完整提交 SHA。Dependabot 每周为 Actions 与 npm 开更新 PR，漏洞告警和安全更新在仓库设置启用。
+3. Actions 仅允许 checkout、setup-node、upload-artifact、download-artifact 与 CodeQL 的 init/analyze 子动作，工作流引用固定到完整提交 SHA。Dependabot 每周为 Actions 与 npm 开更新 PR，漏洞告警和安全更新在仓库设置启用。CodeQL 在 PR、主干推送和每周定时运行，也允许手动复查。
 4. `publish.yml` 的构建任务只有 `contents: read`：核对标签、包版本、GitHub 预发布标志及 `main` 祖先，执行完整检查，打包并检查文件白名单、普通文件类型及必要入口，上传唯一 tarball 与 SHA-256。
 5. 最终发布任务使用干净 runner，绑定 `npm-publish` 环境，审批后才启动并取得 `id-token: write`。不 checkout，不安装项目依赖，不执行仓库或包内脚本。只下载本次运行的制品、核对哈希与包身份、检查 registry，然后发布该 tarball。
 6. `npm-publish` 仅允许 `v*` 标签部署，审批人为 `SkylerFee`。单人维护允许发起者审批，这是人工确认步骤，不代表独立双人审批。npm Trusted Publisher 必须同时绑定 `SkylerFee/dsh-sidebar-rail`、`publish.yml` 与 **`npm-publish`**；仅 GitHub job 写环境名不足以收紧 npm 接受的身份。
