@@ -62,6 +62,34 @@ return () => { observer.disconnect() }
 
 - 兜底：拿不到 frame 时一直按「未折叠」处理（不渲染），不在错误状态下画东西。
 
+## 3.5 窗口焦点：轨只在聚焦时出现
+
+图标轨的唤出靠指针位置，但**指针位置本身不足以说明「人正在用这个窗口」**：macOS 上指针滑进一个未聚焦的窗口，浏览器照样派发 `pointerenter`。切到别的应用后，只要指针扫过窗口左缘那条 12px 热区，轨就会滑出来——而人根本没打算用它。
+
+判据因此是 **`document.hasFocus()`**：它回答「这个文档是否拥有键盘焦点」，窗口失去焦点时变 false。宿主自己也用同一判据做同类判断（`ui-directory-picker-browse` 的 `DirectoryBrowser` 在处理卡片 blur 时先 `if (!document.hasFocus()) return`），所以这条判断在本环境（Electron + `dsh-app://`）是被验证过的，不是猜的。
+
+实现分两半（`hooks/use-rail-visibility.ts` 的 `useWindowFocused` + `components/RailColumn.tsx`）：
+
+1. **唤出收敛成单一入口** `revealRail`，先判焦点再改状态。热区 `pointerenter`、轨自身 `pointerenter`、键盘 `onFocusCapture` 三条路径都走它，门禁只需一处。
+2. **失焦立刻收起**。指针可能还停在轨上，但那时人已经切走了；留在屏幕上的轨属于「我刚才在用」。
+
+除 `focus` / `blur` 外还要听 `visibilitychange`：切到别的 Space 或最小化时，focus 事件不保证到达。
+
+键盘路径不需要额外判断：能 `Tab` 聚焦到轨内控件，窗口必然已获得焦点。
+
+### 3.6 焦点在轨与浮层之间移动
+
+轨（`.dsr-rail-float`）和浮层（`.dsr-flyout`）是**两个各自独立的 portal**，都挂到 `document.body`。这带来一个反直觉的后果：**它们之间不会互相冒泡 focus / blur**。
+
+踩过的坑：`Tab` 到头像打开浮层、再 `Tab` 继续走时，轨收起了但浮层留着、头像还是 hover 态。因为
+
+- 焦点从轨走进浮层那一下，轨只看到自己 blur，`relatedTarget` 在浮层里、不在 `currentTarget` 子树内，被 `contains(relatedTarget)` 误判成「离开」。代码用 `open !== null` 放行了这一次，好让焦点能走到浮层；
+- 但放行之后**没有任何人再接住**：浮层当时没有 blur 处理，焦点再从浮层 `Tab` 到页面别处时轨根本收不到事件。
+
+修法是不再依赖冒泡，改成主动反查 `document.activeElement` 是否落在轨根元素或浮层根元素的子树里（`focusInsideRailOrFlyout`），并让**轨和浮层各自**在 `blur` 冒泡结束后（排到下一个宏任务，避免与同一轮的 focus 处理赛跑）查这个判据；焦点真的离开整体时，同时收起轨与关掉浮层。
+
+这也是 `panelRef` 必须真的挂到 `.dsr-flyout` 根节点上的原因——它早先只声明未挂载，导致所有基于它的判断（包括「指针是否在浮层内」）实际都是失效的。
+
 ## 4. portal 定位与避让
 
 轨本体用 `createPortal(document.body)` 渲染，样式 `.dsr-rail-float`：
