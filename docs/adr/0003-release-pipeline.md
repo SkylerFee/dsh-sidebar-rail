@@ -1,6 +1,6 @@
 # 0003 发布走 GitHub Release → OIDC trusted publishing
 
-- 状态：已采纳（2026-11-04）；**首发 0.1.0 已人工执行**（经 npm staged publishing 批准上线），Trusted Publisher 待配置，Release 自动发布从下一个版本开始
+- 状态：已采纳（2026-11-04）；Trusted Publisher 已在后续版本验证生效。2026-11-11 的发布隔离、环境约束及仓库保护规则由 [ADR-0008](0008-github-release-security.md) 补充，以下首发记录保留历史事实。
 - 相关：`.github/workflows/publish.yml`、`package.json` `publishConfig`
 
 ## 背景
