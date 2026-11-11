@@ -161,7 +161,7 @@ npm run hooks:install  # 可选：启用本仓库的提交钩子
 
 PR 标题遵循 Conventional Commits，摘要、说明与验证结果使用简体中文，代码标识符和原始诊断保留英文。按 [PR 模板](.github/pull_request_template.md)填写问题、改动、验证与未验证项；中英文 README 的行为描述同步维护。UI、加载或注册变更需在 [docs/verify.md](docs/verify.md) 记录真实环境与操作结果。详细约束见 [AGENTS.md](AGENTS.md) 和 [CODING_STANDARDS.md](CODING_STANDARDS.md)。
 
-发布按 [ADR-0003](docs/adr/0003-release-pipeline.md)：更新版本并推送后，创建 `v<version>` 的 GitHub Release，由 `publish.yml` 校验并使用 npm OIDC 信任发布；npm 端需配置允许直接发布的 Trusted Publisher。发布执行的是 `npm publish --ignore-scripts`，不会在发布流程里触发构建：创建 Release 之前必须已完成 `npm ci` 与完整 `npm run check`（其中包含构建与 `lib/` 校验）。
+发布遵循 [ADR-0003](docs/adr/0003-release-pipeline.md) 与 [发布安全规则](docs/adr/0008-github-release-security.md)：版本改动必须通过 PR 和 CI 合入 `main`，再创建 `v<version>` Release。无 OIDC 权限的任务完成检查、构建与 tarball 校验；你在 `npm-publish` 环境审批后，独立任务用 npm OIDC 发布该制品，不安装项目依赖或执行包内脚本。npm Trusted Publisher 必须绑定 `publish.yml` 和 `npm-publish` 环境；稳定版本禁止回退 `latest`，预发布标志须与版本一致。
 
 <a id="docs"></a>
 ## 详细文档

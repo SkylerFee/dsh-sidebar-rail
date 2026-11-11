@@ -8,20 +8,25 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
 
-      # 迁移后仓库有开发依赖（TypeScript / esbuild / tsx / React 类型），但**运行时**
-      # 依赖仍为零。用 npm ci 按 package-lock.json 精确安装，再跑完整 check：
-      # typecheck → 源码规则 → 单测 → build → 产物规则 → 产物测试。
+      # 安装、测试和构建只有只读权限，不能申请 npm 发布身份。
       - name: Install
         run: npm ci
 

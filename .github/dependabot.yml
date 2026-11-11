@@ -1,0 +1,24 @@
+version: 2
+updates:
+  # 固定提交的 Actions 仍需定期更新，由 PR 保留审查与 CI 记录。
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: ci(deps)
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore(deps)
+    groups:
+      development-patch-and-minor:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
