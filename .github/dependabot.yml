@@ -22,3 +22,14 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # Major 版本跳跃一律不自动提 PR。本项目的依赖与宿主强相关：
+      # react / react-dom 在构建里是 external，实际实现由宿主注入；typescript
+      # 的 major 会改变类型检查行为。这类升级需要人工判断兼容性并单独验证，
+      # 不适合依赖 CI 绿灯直接合入（此前 React 18→19 的 PR 就卡在 Install）。
+      #
+      # 只忽略 major，minor 与 patch 仍会提 PR —— 否则会冻结在某个补丁版本，
+      # 错过同一主线内的安全修复。
+      - dependency-name: '*'
+        update-types:
+          - version-update:semver-major
