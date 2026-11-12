@@ -8,6 +8,15 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: ci(deps)
+    groups:
+      # codeql-action 的 init 与 analyze 必须同版本：init 会把自身版本写进配置
+      # 文件，analyze 启动时校验「配置版本 == 运行版本」，不一致就整条 job 失败
+      # （实测报错：Loaded a configuration file for version '4.39.3', but
+      # running version '3.39.3'）。dependabot 默认按 action 拆成多个 PR，单独
+      # 合并任一个都会红，因此把它们放进同一个组，一次提交齐。
+      codeql-action:
+        patterns:
+          - 'github/codeql-action*'
 
   - package-ecosystem: npm
     directory: /
