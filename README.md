@@ -2,7 +2,7 @@
 
 # dsh-sidebar-rail
 
-[![CI](https://github.com/SkylerFee/dsh-sidebar-rail/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/SkylerFee/dsh-sidebar-rail/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Node: >=22.19](https://img.shields.io/badge/Node-%3E%3D22.19-brightgreen.svg)](https://nodejs.org) [![Release: v1.0.0](https://img.shields.io/badge/release-v1.0.0-orange.svg)](https://github.com/SkylerFee/dsh-sidebar-rail/releases) [![npm downloads](https://img.shields.io/npm/dt/@skylerfee/dsh-sidebar-rail.svg?label=npm%20downloads)](https://www.npmjs.com/package/@skylerfee/dsh-sidebar-rail) [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
+[![CI](https://github.com/SkylerFee/dsh-sidebar-rail/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/SkylerFee/dsh-sidebar-rail/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Node: >=22.19](https://img.shields.io/badge/Node-%3E%3D22.19-brightgreen.svg)](https://nodejs.org) [![Release: v1.1.0](https://img.shields.io/badge/release-v1.1.0-orange.svg)](https://github.com/SkylerFee/dsh-sidebar-rail/releases) [![npm downloads](https://img.shields.io/npm/dt/@skylerfee/dsh-sidebar-rail.svg?label=npm%20downloads)](https://www.npmjs.com/package/@skylerfee/dsh-sidebar-rail) [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 
 Reach workspaces, recent sessions, scheduled tasks, plugins and your account while the DeepSeek Harness sidebar is collapsed. Runs on macOS and Windows Desktop.
 
@@ -37,7 +37,7 @@ Captured on macOS Desktop `0.2.2-rc.1` on 2026-11-11, using Catppuccin Latte (li
 | Linux Desktop | No rail: the host keeps its own 56px collapsed rail there, so the plugin stands down by column width |
 | Web (any OS) | No rail: the host draws its own collapsed rail |
 
-Recorded Desktop checks used macOS 27.2 and Windows 11, both on Desktop `0.2.2-rc.1`. See `peerDependencies` in [package.json](package.json) for other compatible host versions. Version 1.0.0 is a full rewrite that ships the TypeScript source, the host-native flyout model, paged session lists and the scheduled-task mark together, and adds Windows Desktop support. The published package ships prebuilt `lib/` entries, so installing it needs no compiler. Source development and checks require Node.js ≥ 22.19.0 plus `npm ci` and a build step (see [Development](#development)).
+Recorded Desktop checks used macOS 27.2 and Windows 11, both on Desktop `0.2.2-rc.1`. See `peerDependencies` in [package.json](package.json) for other compatible host versions. Version 1.0.0 is a full rewrite that ships the TypeScript source, the host-native flyout model, paged session lists and the scheduled-task mark together, and adds Windows Desktop support. Version 1.1.0 matches the host in the project lists: subagent sessions are hidden, session rows carry the host status mark, and each project row shows the most attention-worthy state of its sessions. The published package ships prebuilt `lib/` entries, so installing it needs no compiler. Source development and checks require Node.js ≥ 22.19.0 plus `npm ci` and a build step (see [Development](#development)).
 
 <a id="install"></a>
 ## Install and manage
