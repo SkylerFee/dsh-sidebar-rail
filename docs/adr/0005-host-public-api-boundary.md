@@ -48,8 +48,17 @@ Desktop 用 Web profile、Host 绑 `127.0.0.1`，darwin 上应解析为 `native`
 `entity.ts` 里是 `get sessionIds() { return this.record.sessionIds.filter(id => candidateMatches(id, path)) }`
 ——存储 header 的 `cwd` 经 realpath 规范化后必须等于 `workspace.path`。路径失效/不匹配的成员会被剔掉。
 
-同时它**包含归档与空白会话**，且**不含子代理子会话**（`attachSession` 没有 subagent 调用点，
-子代理只继承 `cwd` 到 meta，不走 attach）。所以插件侧不用再按 `origin` 过滤一遍。
+同时它**包含归档与空白会话**。
+
+> **更正（2026-11-13）**：本 ADR 原文在此写「**不含子代理子会话**……所以插件侧不用再按
+> `origin` 过滤一遍」，**该结论已被证伪、不可再采信**。子代理子会话的 header 带着父会话的
+> `cwd` 且标记 `origin: 'subagent'`（`subagent/subagent/src/child-agent.ts:144-150`），而工作区
+> 启动回填按 canonical `cwd` 归组所有持久化 header 写进 `sessionIds`、**完全不看 `origin`**
+> （`workspace/workspace/src/index.ts` 的 `bootstrap`）。因此子代理子会话确实会成为工作区成员。
+> 宿主自己在 `ui-workspace/src/client/tree.ts` 的 `sessionVisible` 里对成员做
+> `origin === 'subagent'` 过滤，插件必须照做——实现见
+> `src/client/model/workspaces.ts` 的 `projectSessionRows`，规则记录在
+> [GLOSSARY.md](../../GLOSSARY.md) 的「项目行展开」条目。
 
 `archivedSessionIds` 在 `WorkspaceSnapshot` 顶层（全局集合），**不在 `WorkspaceView` 上**。
 

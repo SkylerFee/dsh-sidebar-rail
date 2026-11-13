@@ -517,8 +517,10 @@ export function RailColumn(props: RailColumnProps): ReactNode {
    * @returns 该项目下的会话行。
    */
   const rowsForProject = useCallback((row: WorkspaceRow): readonly ProjectSessionRow[] =>
-    projectSessionRows(row.sessionIds, byId, language, archivedIds, shownSessionId),
-  [byId, language, archivedIds, shownSessionId])
+    // `statuses` 与最近会话区读的是同一份 `useSessionStatus` 快照，于是同一个会话
+    // 在两个列表里给出相同的状态标记。
+    projectSessionRows(row.sessionIds, byId, language, archivedIds, shownSessionId, statuses),
+  [byId, language, archivedIds, shownSessionId, statuses])
 
   /**
    * 某个会话是否有活跃的定时任务，供行首的时钟标记判定。

@@ -20,11 +20,12 @@ import {
 import { RECENT_LIST_KEY } from '../model/constants.ts'
 import {
   projectRowNeedsAttention,
+  projectStatusOf,
   recentRowNeedsAttention,
   requiredWatermark,
   watermarkSlice,
 } from '../model/workspaces.ts'
-import type { Translate } from '../locales.ts'
+import { projectStatusLabelKey, statusLabelKey, type Translate } from '../locales.ts'
 import type {
   AccountBalances,
   AccountLinks,
@@ -132,6 +133,10 @@ export function WorkspaceFlyout(props: WorkspaceFlyoutProps): ReactNode {
    */
   const projectRow = (row: WorkspaceRow, pinned: boolean): ReactNode => {
     const openProjects = expandedProjects[row.id] === true
+    // 项目行的状态取旗下会话里最高的那个（宿主不聚合状态，这是本插件补的）。
+    // 折叠时也要算：收起正是「不想展开、只想扫一眼有没有事」的场合。
+    const rows = props.projectSessionRows(row)
+    const status = projectStatusOf(rows)
     return h(ProjectRow, {
       key: `p-${row.id}`,
       title: row.title,
@@ -142,11 +147,14 @@ export function WorkspaceFlyout(props: WorkspaceFlyoutProps): ReactNode {
       onTogglePin: () => props.togglePin(row.id),
       newSessionLabel: t('action.newSession'),
       onNewSession: () => props.startSessionInProject(row.id),
+      status,
+      // 用项目级文案：读屏应听到「旗下有会话运行中」，而不是「这个项目在运行中」。
+      statusLabel: status === 'idle' ? undefined : t(projectStatusLabelKey(status)),
     }, openProjects
       ? h(ProjectSessions, {
         t,
         workspaceId: row.id,
-        rows: props.projectSessionRows(row),
+        rows,
         currentSessionId: props.currentSessionId,
         openSession: props.openSession,
         effectiveWatermark: props.effectiveWatermark,
@@ -200,7 +208,7 @@ export function WorkspaceFlyout(props: WorkspaceFlyoutProps): ReactNode {
         meta: row.meta,
         current: row.active === true,
         status: row.status,
-        statusLabel: t(row.status === 'idle' ? 'status.idle' : `status.${row.status}` as never),
+        statusLabel: t(statusLabelKey(row.status)),
         scheduledTask: props.hasActiveTask(row.id),
         scheduledTaskLabel: t('row.scheduledTask'),
         onClick: () => props.openSession(row.id),
@@ -261,19 +269,29 @@ export function ProjectSessions(props: ProjectSessionsProps): ReactNode {
   if (rows.length === 0) return h(Empty, null, t('empty.projectSessions'))
   const visible = watermarkSlice(rows, props.effectiveWatermark(key, required))
   return [
-    ...visible.rows.map((entry) => h(Row, {
-      key: `ps-${workspaceId}-${entry.id}`,
-      title: entry.title,
-      // 归档行仍然列出但会标注，这样一条不再出现在最近会话区的会话
-      // 不会被读成「不见了」。
-      meta: [entry.meta, entry.archived ? t('status.archived') : ''].filter(Boolean).join(' · '),
-      current: entry.current === true,
-      // 项目会话行没有状态点（项目列表本就不过滤、也不展示运行状态），
-      // 因此这里只可能显示定时任务时钟。
-      scheduledTask: props.hasActiveTask(entry.id),
-      scheduledTaskLabel: t('row.scheduledTask'),
-      onClick: () => props.openSession(entry.id),
-    })),
+    ...visible.rows.map((entry) => {
+      // 归档行与空白行的行尾留空：宿主 Rows.tsx 的槽位判定是
+      // `!row.archived && !row.blank && showStatus`，理由是「已归档」标记本身
+      // 已经说明该会话不活跃，行尾再点点反而是噪声。
+      // 先算成一个值，status 与 statusLabel 就不会各说各话。
+      const shownStatus = entry.archived || entry.blank === true ? undefined : entry.status
+      return h(Row, {
+        key: `ps-${workspaceId}-${entry.id}`,
+        title: entry.title,
+        // 归档行仍然列出但会标注，这样一条不再出现在最近会话区的会话
+        // 不会被读成「不见了」。
+        meta: [entry.meta, entry.archived ? t('status.archived') : ''].filter(Boolean).join(' · '),
+        current: entry.current === true,
+        // 状态点与最近会话区同源同判定：同一个会话在两个列表里不能有两个说法。
+        status: shownStatus,
+        statusLabel: shownStatus === undefined ? undefined : t(statusLabelKey(shownStatus)),
+        // 时钟与状态点争行尾同一格（实际渲染在行尾，见 PRD A15 的既有勘误），
+        // 宿主规则是「状态非 idle 时状态点优先」，该互斥已由 SessionMarkCell 实现。
+        scheduledTask: props.hasActiveTask(entry.id),
+        scheduledTaskLabel: t('row.scheduledTask'),
+        onClick: () => props.openSession(entry.id),
+      })
+    }),
     visible.hiddenCount > 0
       ? h(ShowMore, {
         key: `ps-more-${workspaceId}`,

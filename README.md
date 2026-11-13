@@ -112,7 +112,7 @@ Keyboard: `Tab` to an icon reveals the rail. On a top-row function icon, press `
 <a id="preferences"></a>
 ## Preferences and local data
 
-Session lists initially show **10 non-blank sessions**; **Show more** appends 10 more each time. Recent sessions raise their watermark for running, waiting, unread-completion and current rows; project lists raise it only for the current session and count independently. Automatic growth stops at 50, so later rows still require Show more. The current blank session stays visible without consuming a regular place.
+Session lists initially show **10 non-blank sessions**; **Show more** appends 10 more each time. Both the recent list and each expanded project list raise their watermark for running, waiting, unread-completion and current rows, and count independently. Automatic growth stops at 50, so later rows still require Show more. The current blank session stays visible without consuming a regular place.
 
 Workspace, task and plugin flyouts scroll as one list: sections are groupings with a title row, so a long list scrolls as a whole and the titles scroll with it. Show more is an ordinary row at the end of the list; it does not sit in a fixed footer. Paging is not persisted: closing and reopening a flyout starts again at 10 rows. A flyout is placed beside the icon that opened it and grows with its content up to the space below that anchor, then scrolls as one list; it does not stretch to the window bottom.
 
