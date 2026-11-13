@@ -2,7 +2,7 @@
 
 # dsh-sidebar-rail
 
-[![CI](https://github.com/SkylerFee/dsh-sidebar-rail/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/SkylerFee/dsh-sidebar-rail/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Node: >=22.19](https://img.shields.io/badge/Node-%3E%3D22.19-brightgreen.svg)](https://nodejs.org) [![Release: v1.0.0](https://img.shields.io/badge/release-v1.0.0-orange.svg)](https://github.com/SkylerFee/dsh-sidebar-rail/releases) [![npm downloads](https://img.shields.io/npm/dt/@skylerfee/dsh-sidebar-rail.svg?label=npm%20downloads)](https://www.npmjs.com/package/@skylerfee/dsh-sidebar-rail) [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
+[![CI](https://github.com/SkylerFee/dsh-sidebar-rail/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/SkylerFee/dsh-sidebar-rail/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Node: >=22.19](https://img.shields.io/badge/Node-%3E%3D22.19-brightgreen.svg)](https://nodejs.org) [![Release: v1.1.0](https://img.shields.io/badge/release-v1.1.0-orange.svg)](https://github.com/SkylerFee/dsh-sidebar-rail/releases) [![npm downloads](https://img.shields.io/npm/dt/@skylerfee/dsh-sidebar-rail.svg?label=npm%20downloads)](https://www.npmjs.com/package/@skylerfee/dsh-sidebar-rail) [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 
 给 DeepSeek Harness 折叠后的侧栏补充工作区、最近会话、定时任务、插件和账号入口，支持 macOS 与 Windows Desktop。
 
@@ -37,7 +37,7 @@
 | Linux Desktop | 不渲染：宿主在该平台自己保留 56px 折叠轨，插件按列宽探测自动让位 |
 | Web（任意系统） | 不渲染：宿主自带折叠轨，避免叠成第二条 |
 
-已记录的真机环境为 macOS 27.2 与 Windows 11，宿主均为 `0.2.2-rc.1`；其他宿主版本的兼容范围见 [package.json](package.json) 的 `peerDependencies`。1.0.0 是一次完整重写：TypeScript 源码、贴近宿主的浮层结构、分页会话列表与定时任务标记都在这个版本里，并新增 Windows Desktop 支持。发布包内是已构建的 `lib/` 入口，安装时不需要编译器；源码开发与检查需要 Node.js ≥ 22.19.0，并要先 `npm ci`、再构建（见[开发与贡献](#development)）。
+已记录的真机环境为 macOS 27.2 与 Windows 11，宿主均为 `0.2.2-rc.1`；其他宿主版本的兼容范围见 [package.json](package.json) 的 `peerDependencies`。1.0.0 是一次完整重写：TypeScript 源码、贴近宿主的浮层结构、分页会话列表与定时任务标记都在这个版本里，并新增 Windows Desktop 支持。1.1.0 让项目列表与宿主一致：子代理会话不再列出、会话行带状态标记、项目行显示旗下最需要关注的状态。发布包内是已构建的 `lib/` 入口，安装时不需要编译器；源码开发与检查需要 Node.js ≥ 22.19.0，并要先 `npm ci`、再构建（见[开发与贡献](#development)）。
 
 <a id="install"></a>
 ## 安装与启停
