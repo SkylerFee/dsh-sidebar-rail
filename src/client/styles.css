@@ -71,14 +71,14 @@
 .dsr-flyout-head { padding:10px var(--dsh-sidebar-row-padding) 6px; font-size:14px; font-weight:700;
   line-height:20px; color:var(--dsw-alias-label-primary); }
 /* Single-column flyouts (more / account) keep their own scroller; sectioned
-   flyouts scroll on .dsr-sections instead (ADR-0007). */
+   flyouts scroll on .dsr-sections instead (ADR-0009). */
 .dsr-flyout-body { overflow-y:auto; padding:2px var(--dsh-sidebar-inline-padding) 8px; min-height:0; }
 /* Fixed footer. It must stay put while the list scrolls, so it keeps flex:none
-   and never joins the scroll container (ADR-0007: a long recent list no longer
+   and never joins the scroll container (ADR-0009: a long recent list no longer
    hides the recent-count stepper). */
 .dsr-flyout-foot { flex:none; border-top:1px solid var(--dsw-alias-border-l1);
   padding:6px var(--dsh-sidebar-inline-padding); }
-/* Sections (0.5.0, ADR-0007). The flyout has ONE scroll container and every
+/* Sections (ADR-0009). The flyout has ONE scroll container and every
    section is just a group inside it: no per-section cap, no per-section
    scroller, no separator rules between sections. Section headers therefore
    scroll away with the content -- that is the accepted trade-off, because a

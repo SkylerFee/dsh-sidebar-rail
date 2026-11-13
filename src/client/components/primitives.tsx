@@ -416,13 +416,13 @@ export interface FlyoutSectionProps {
  * 标题是按钮，键盘可达，并带 `aria-expanded` 让状态可被朗读。收起时**卸载**
  * 内容区而不是用 CSS 隐藏——留着挂载会让下次展开回到旧的滚动位置。
  *
- * 分区**不再限高、也不再自己滚动**（ADR-0007）：标题与条目一起随浮层整体滚动，
+ * 分区**不再限高、也不再自己滚动**（ADR-0009）：标题与条目一起随浮层整体滚动，
  * 于是这里既没有 `maxHeight` 入参，也没有内联高度。
  * @param props - 标题、展开标志、收起回调、可选的行内操作、分区内容。
  * @returns 分区元素。
  */
 export function FlyoutSection(props: FlyoutSectionProps): ReactNode {
-  // 没有内联高度：分区高度从此只由内容决定，限高已随 ADR-0007 一并移除。
+  // 没有内联高度：分区高度从此只由内容决定，限高已随 ADR-0009 一并移除。
   return h('div', {
     className: 'dsr-section',
     'data-dsr-section': props.title,

@@ -42,7 +42,7 @@ npm run hooks:install  # 启用 .githooks（pre-commit 跑 check，commit-msg �
 
 本地 checkout 改完 `src/` 必须 build 或保持 watch；`lib/` 是生成目录，不提交 Git。发布走 `npm publish --ignore-scripts`，因此发布前必须已完成完整 `npm run check`。
 
-提交信息用 conventional commits。UI/加载/注册变更必须按 [CODING_STANDARDS.md](CODING_STANDARDS.md) 第 1 条在 [docs/verify.md](docs/verify.md) 留一轮真机记录（环境/操作/结果/未验证项）。
+提交信息用 conventional commits。UI/加载/注册变更必须按 [CODING_STANDARDS.md](CODING_STANDARDS.md) 第 1 条在 PR 里留一轮真机记录（环境/操作/结果/未验证项）。
 
 ## 导航
 
@@ -51,9 +51,8 @@ npm run hooks:install  # 启用 .githooks（pre-commit 跑 check，commit-msg �
 | 支持范围、安装、已知限制 | [README.md](README.md) / [README.zh.md](README.zh.md) |
 | 架构、约束、数据来源、trade-off | [docs/design.md](docs/design.md) |
 | 需求与验收清单 | [docs/PRD.md](docs/PRD.md) |
-| 已验收/未验收的真实环境证据 | [docs/verify.md](docs/verify.md) |
 | 判断类编码规范（review 用） | [CODING_STANDARDS.md](CODING_STANDARDS.md) |
-| 源码结构与构建协议 | [docs/typescript-migration.md](docs/typescript-migration.md)、[ADR-0006](docs/adr/0006-typescript-source-and-build.md) |
+| 源码结构与构建协议 | [ADR-0006](docs/adr/0006-typescript-source-and-build.md) |
 | 不可逆决定 | [docs/adr/](docs/adr/) |
 | 统一用词 | [GLOSSARY.md](GLOSSARY.md) |
 | 机械检查规则 | [scripts/](scripts/)（`check-source.mjs` 管源码约束，`check-artifact.mjs` 管产物约束） |

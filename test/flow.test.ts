@@ -1,7 +1,7 @@
 /**
  * 流程与生命周期测试：迁移后新增的模块边界需要能独立验证的那些行为。
  *
- * 覆盖 docs/typescript-migration.md §5.2 点名的风险：
+ * 覆盖迁移时点名的风险：
  *   - 偏好写入是合并语义：写展开项目不覆盖置顶列表（0.5.1 移除 `recentCount` 后仍成立）；
  *   - 目录选择成功 / 取消 / 失败三种结局；
  *   - 分区的首次切换（默认展开与默认收起都要能翻）；
@@ -222,7 +222,7 @@ test('sectionIsOpen: a default-open section folds and unfolds again', () => {
 })
 
 test('KNOWN K2: a default-closed section needs two clicks before it opens', { todo: 'K2 既有缺陷，迁移不修；单独跟踪' }, () => {
-  // 复现 docs/typescript-migration.md §2.2 的 K2：「已暂停」分区默认收起，
+  // 复现 K2：「已暂停」分区默认收起，
   // 第一次点击不展开，要再点一次才出来。
   //
   // 根因：折叠状态是「id → 是否已收起」的映射，而 toggle 写的是
