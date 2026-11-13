@@ -23,6 +23,7 @@ import {
   deriveSections,
   projectRowNeedsAttention,
   projectSessionRows,
+  projectStatusOf,
   recentRowNeedsAttention,
   requiredWatermark,
   watermarkSlice,
@@ -51,6 +52,8 @@ import {
   keepsRailRevealed,
   sectionIsOpen,
 } from '../src/client/model/geometry.ts'
+import { en, projectStatusLabelKey, statusLabelKey, zh } from '../src/client/locales.ts'
+import { STATUS_MARK_RANK } from '../src/client/model/constants.ts'
 import type { SessionSummaryLike } from '../src/client/model/types.ts'
 
 /** 测试里直接写 `globalThis.__DSH_BOOT__`，这里声明它的形状与可写性。 */
@@ -287,8 +290,8 @@ test('pickedDirectory: an absolute path is required, a relative one is a failure
 
 test('projectSessionRows: lists every member in host order, keeping archived rows', () => {
   // 项目展开要回答「这个项目里到底有什么」：归档会话照列并打标记，也不截条数，
-  // 顺序照抄 sessionIds（spec 3.2）。子代理会话本就不在 sessionIds 里。
-  // 空白会话的可见性见下面两条用例（0.5.1 起只保留当前那个）。
+  // 顺序照抄 sessionIds（spec 3.2）。子代理会话的过滤见下一条用例。
+  // 空白会话的可见性见后面两条用例（只保留当前那个）。
   const byId = {
     s1: session('s1', { displayTitle: 'first', updatedAt: 10 }),
     s2: session('s2', { updatedAt: 30 }),
@@ -298,6 +301,35 @@ test('projectSessionRows: lists every member in host order, keeping archived row
   assert.deepEqual(rows.map((r) => r.id), ['s1', 's3', 's2'], 'host order, not sorted by time')
   assert.equal(rows.length, 3, 'non-blank members are all listed')
   assert.equal(rows[1]!.title, 'title-s3')
+})
+
+test('projectSessionRows: subagent children are hidden, matching the host sessionVisible rule', () => {
+  // 宿主 ui-workspace/tree.ts 的 sessionVisible 第一步就是
+  //   if (session.origin === 'subagent') return false
+  // 也就是说宿主**对工作区成员也做这个过滤**——子代理会话确实可能进入
+  // sessionIds（fork 等路径会 attachSession）。本插件此前只过滤了「最近会话」，
+  // 项目展开列表漏了同一条规则，于是子代理会话混进项目列表。
+  const byId = {
+    s1: session('s1', { updatedAt: 10 }),
+    child: session('child', { origin: 'subagent', updatedAt: 20 }),
+    s2: session('s2', { updatedAt: 30 }),
+  }
+  const rows = projectSessionRows(['s1', 'child', 's2'], byId, 'en', [], 's1')
+  assert.deepEqual(rows.map((r) => r.id), ['s1', 's2'], 'the subagent child produces no row')
+})
+
+test('projectSessionRows: an absent or junk origin never hides a real session', () => {
+  // 回归防线：过滤子代理不能变成「过滤所有 origin 不规范的行」。宿主 legit 的
+  // 普通会话没有 origin 字段或写成其它值，它们必须照常列出——否则修一个 bug
+  // 换来「项目里什么都看不见」。
+  const byId = {
+    plain: session('plain'),
+    other: session('other', { origin: 'user' }),
+    nullish: session('nullish', { origin: null }),
+    child: session('child', { origin: 'subagent' }),
+  }
+  const rows = projectSessionRows(['plain', 'other', 'nullish', 'child'], byId, 'en')
+  assert.deepEqual(rows.map((r) => r.id), ['plain', 'other', 'nullish'], 'only the subagent child is hidden')
 })
 
 test('projectSessionRows: the current blank session stays visible', () => {
@@ -344,6 +376,41 @@ test('projectSessionRows: members missing from the snapshot are dropped', () => 
   const mixed = projectSessionRows(['ghost', 's1', 'phantom'], { s1: session('s1', { displayTitle: 'real' }) }, 'en')
   assert.deepEqual(mixed.map((r) => r.id), ['s1'])
   assert.equal(mixed[0]!.title, 'real')
+})
+
+test('projectSessionRows: rows carry the host status mark, like recent rows', () => {
+  // 项目展开列表此前只有 current / archived 两个状态位，没有 status，
+  // 于是同一个会话在「最近会话」区有状态点、在项目列表里却没有。
+  // deriveSections 已经用 sessionStatusOf + statuses 算出最近行的 status，
+  // 项目行必须走同一条判定，两个列表才不会对同一个会话给出不同说法。
+  const byId = {
+    run: session('run', { updatedAt: 10 }),
+    wait: session('wait', { updatedAt: 20 }),
+    done: session('done', { updatedAt: 30 }),
+    idle: session('idle', { updatedAt: 40 }),
+  }
+  const statuses = new Map([
+    ['run', { running: true }],
+    ['wait', { pendingInteraction: { kind: 'approval' } }],
+    ['done', { completionUnread: true }],
+    ['idle', {}],
+  ])
+  const rows = projectSessionRows(['run', 'wait', 'done', 'idle'], byId, 'en', [], undefined, statuses)
+  assert.deepEqual(
+    rows.map((r) => [r.id, r.status]),
+    [['run', 'ongoing'], ['wait', 'warning'], ['done', 'done'], ['idle', 'idle']],
+  )
+})
+
+test('projectSessionRows: a missing status snapshot degrades to the summary running flag', () => {
+  // 宿主未注入 useSessionStatus 时 statuses 缺席：退回 SessionSummary.running，
+  // 与 sessionStatusOf 在最近会话区用的兜底完全一致，绝不抛错。
+  const byId = {
+    run: session('run', { running: true }),
+    calm: session('calm', { running: false }),
+  }
+  const rows = projectSessionRows(['run', 'calm'], byId, 'en')
+  assert.deepEqual(rows.map((r) => r.status), ['ongoing', 'idle'])
 })
 
 test('projectSessionRows: an empty project yields no rows', () => {
@@ -618,10 +685,98 @@ test('pagination: the recent list marks its current blank session too', () => {
   assert.equal(requiredWatermark(rows, 'blankCur', recentRowNeedsAttention), 0)
 })
 
-test('projectRowNeedsAttention: only the current project session matters', () => {
-  const base = { title: 't', meta: '', archived: false }
+test('projectRowNeedsAttention: an idle non-current row is not attention-worthy', () => {
+  // 保留边界：既非当前、也没有任何状态标记的行不得抬高水位，否则整列会被顶满。
+  const base = { title: 't', meta: '', archived: false, status: 'idle' as const }
   assert.equal(projectRowNeedsAttention({ ...base, id: 'a', current: true }), true)
   assert.equal(projectRowNeedsAttention({ ...base, id: 'b', current: false }), false)
+})
+
+test('projectRowNeedsAttention: any status mark counts, matching the host attention rule', () => {
+  // 宿主 WorkspaceBrowser.tsx#requiredWatermark 的注意力判定对**每个列表**都相同：
+  //   session.running || session.pendingInteraction !== undefined
+  //     || session.completed || session.id === current
+  // 项目列表此前只认 current。一旦项目行有了状态点，这条就必须跟上——否则
+  // 运行中/待操作/未读的会话若排在深水位，状态点会被「显示更多」挡住，
+  // 等于白加。（runningSubagentCount 仍是 PRD 非目标，需要子代理投影。）
+  const base = { title: 't', meta: '', archived: false, current: false }
+  assert.equal(projectRowNeedsAttention({ ...base, id: 'run', status: 'ongoing' }), true)
+  assert.equal(projectRowNeedsAttention({ ...base, id: 'wait', status: 'warning' }), true)
+  assert.equal(projectRowNeedsAttention({ ...base, id: 'done', status: 'done' }), true)
+  assert.equal(projectRowNeedsAttention({ ...base, id: 'calm', status: 'idle' }), false)
+  // current 仍然单独成立。
+  assert.equal(projectRowNeedsAttention({ ...base, id: 'cur', current: true, status: 'idle' }), true)
+})
+
+test('statusLabelKey: every mark maps to a dictionary key that actually exists', () => {
+  // 取代了此前用模板拼接 + `as never` 的写法：那种写法让「键是否真的存在」
+  // 完全逃过类型检查，字典删掉一个键要到运行时才暴露。
+  assert.equal(statusLabelKey('warning'), 'status.warning')
+  assert.equal(statusLabelKey('ongoing'), 'status.ongoing')
+  assert.equal(statusLabelKey('done'), 'status.done')
+  assert.equal(statusLabelKey('idle'), 'status.idle')
+  // 键必须真的在字典里，且在英文侧同样存在。
+  for (const mark of ['warning', 'ongoing', 'done', 'idle'] as const) {
+    const key = statusLabelKey(mark)
+    assert.ok(key in zh, 'zh is missing ' + key)
+    assert.ok(key in en, 'en is missing ' + key)
+  }
+})
+
+test('projectStatusOf: the most attention-worthy child wins', () => {
+  // 宿主在项目层级没有任何状态聚合（GroupNode 只有 containsCurrent），项目行也不画
+  // 状态点，所以这是本插件补的能力。取值沿用会话级同一优先级——「需要你动手」
+  // 比「正在跑」更值得占用项目行那一格，否则待审核的项目会被运行中的项目盖住。
+  const row = (status: 'warning' | 'ongoing' | 'done' | 'idle', id: string) =>
+    ({ id, title: id, meta: '', archived: false, current: false, status })
+  assert.equal(projectStatusOf([row('idle', 'a'), row('ongoing', 'b')]), 'ongoing')
+  assert.equal(projectStatusOf([row('ongoing', 'a'), row('warning', 'b')]), 'warning',
+    'a pending approval outranks a running session')
+  assert.equal(projectStatusOf([row('done', 'a'), row('ongoing', 'b')]), 'ongoing',
+    'running outranks finished-unread')
+  assert.equal(projectStatusOf([row('idle', 'a'), row('done', 'b')]), 'done')
+})
+
+test('projectStatusOf: a project with no marked child shows nothing', () => {
+  // 空项目与全部空闲的项目都不该在项目行上点一个点：那会让每个项目都带噪声。
+  const row = (id: string) => ({ id, title: id, meta: '', archived: false, current: false, status: 'idle' as const })
+  assert.equal(projectStatusOf([]), 'idle')
+  assert.equal(projectStatusOf([row('a'), row('b')]), 'idle')
+  assert.equal(projectStatusOf(undefined), 'idle', 'a missing list must not throw')
+})
+
+test('projectStatusOf: archived children do not raise the project mark', () => {
+  // 归档会话在项目列表里照常列出，但它在宿主那边已经「不活跃」；让一条归档的
+  // 运行中会话把整个项目点亮，读起来像这个项目还在干活。
+  const base = { title: 't', meta: '', current: false }
+  assert.equal(projectStatusOf([{ ...base, id: 'a', archived: true, status: 'ongoing' }]), 'idle')
+  assert.equal(projectStatusOf([
+    { ...base, id: 'a', archived: true, status: 'ongoing' },
+    { ...base, id: 'b', archived: false, status: 'done' },
+  ]), 'done', 'the live child still counts')
+})
+
+test('projectStatusLabelKey: project marks describe the child, not the project', () => {
+  // 主语不同是有意的：会话行的点是「这个会话在跑」，项目行的点是「这个项目里
+  // 有一个会话在跑」。直接复用会话文案会让读屏把项目本身读成运行中。
+  assert.equal(projectStatusLabelKey('warning'), 'project.status.warning')
+  assert.equal(projectStatusLabelKey('ongoing'), 'project.status.ongoing')
+  assert.equal(projectStatusLabelKey('done'), 'project.status.done')
+  for (const mark of ['warning', 'ongoing', 'done'] as const) {
+    const key = projectStatusLabelKey(mark)
+    assert.ok(key in zh, 'zh is missing ' + key)
+    assert.ok(key in en, 'en is missing ' + key)
+    // 文案必须与「旗下」有关：这是它与会话行文案的唯一区别，退化了就说明被合并了。
+    assert.ok(zh[key] !== zh[statusLabelKey(mark)], 'project copy must not collapse into session copy')
+  }
+})
+
+test('STATUS_MARK_RANK: the order matches sessionStatusOf precedence', () => {
+  // 项目汇总取「最高的孩子」，其高低顺序必须与单行判定同向，否则同一份数据
+  // 会在两个层级给出相反的说法（例如单行说 warning、项目却取到 ongoing）。
+  assert.ok(STATUS_MARK_RANK.warning > STATUS_MARK_RANK.ongoing)
+  assert.ok(STATUS_MARK_RANK.ongoing > STATUS_MARK_RANK.done)
+  assert.ok(STATUS_MARK_RANK.done > STATUS_MARK_RANK.idle)
 })
 
 test('normalizeTasks: unwraps RemoteResult, keeps every status, reads fallback fields', () => {

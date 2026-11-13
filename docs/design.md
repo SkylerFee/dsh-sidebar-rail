@@ -197,6 +197,12 @@ transform: translateX(-100%);
 | 项目 | 其余工作区 | 宿主返回顺序 |
 | 最近会话 | 未归档、非子代理的会话；空白会话只保留当前那一个 | `updatedAt` 倒序，分页显示：默认 10 条，注意力行自动突破水位，点「显示更多」再 +10 |
 
+项目展开列表与它共享两条规则：**子代理会话一律不渲染**（宿主 `sessionVisible` 对所有工作区成员生效），**状态标记同源同判定**；注意力水位同样按「运行中 / 有待操作 / 已完成未读 / 当前会话」自动突破。标记实际渲染在行尾，见 §15 的既有勘误。
+
+**项目行自身也带状态标记**（`projectStatusOf`）：取该项目旗下会话里最值得注意的那一个（优先级表 `STATUS_MARK_RANK`：待操作 3 > 运行中 2 > 已完成未读 1 > 空闲 0），归档会话不参与；全部空闲时 `idle` 不画任何东西。宿主在项目层级不聚合状态（`GroupNode` 只有 `containsCurrent`，项目行也不画点），因此这一格是本插件新增的能力，视觉上复用会话行同一套点/环。折叠的项目同样参与——收起时正是「扫一眼有没有事」的场合。
+
+位置是**行尾固定槽**（`.dsr-project-status`，紧随其后是新建会话按钮）：`.dsr-row-main` 占满可伸缩宽度，状态槽 `flex:none` 不被长标题挤压，于是图标位置恒定、标题只在真正放不下时省略。`.dsr-project-status:empty { display:none }` 保证 idle 项目不留下空槽。另需注意全局那条 `.dsr-row:hover .dsr-row-title { text-overflow: clip }` 是为**会话**标题的 marquee 准备的——项目标题没有 marquee，已在项目行内把省略号恢复回来，否则悬停时标题会被硬切且看不到省略号。
+
 - 置顶持久化：`localStorage['dsh.sidebar-rail.v1'] = { pinnedWorkspaceIds: string[] }`，行内图钉按钮切换，写入用合并语义（`{ ...readStore(), ...patch }`）。展开的项目存在同一键的 `expandedProjectIds`（0.4.0 起），写入同样走合并语义，两个字段互不覆盖。
 - 列表分页是组件内状态，不落盘：基础 `PAGE_SIZE = 10`，自动提升上限 `PAGE_SIZE_AUTO_MAX = 50`，只升不降，浮层 `dismiss` / `retract` 时复位。实现见 `hooks/use-flyout.ts`（水位控制器）与 `model/workspaces.ts`（`watermarkSlice` / `requiredWatermark`），照抄宿主 `WorkspaceBrowser` 的同名机制。
 - 折叠状态**不再**由插件持久化：宿主自己持有并持久化，插件只读 `data-sidebar-collapsed`。

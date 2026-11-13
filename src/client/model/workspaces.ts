@@ -1,16 +1,18 @@
 /**
  * 工作区、项目成员与最近会话的纯模型。
  *
- * 两种列表的过滤规则**刻意不同**（0.5.1 起）：
- *   - 项目成员（`projectSessionRows`）：保留全部非空白会话，**只隐藏非当前的空白
- *     会话**（照抄宿主 `sessionVisible`），按宿主 `sessionIds` 顺序；
- *   - 最近会话（`deriveSections`）：过滤子代理、归档与「非当前的空白会话」，
- *     按更新时间倒序。
+ * 两种列表共享宿主 `ui-workspace/tree.ts` 的 `sessionVisible` 前两条规则
+ * （**子代理会话不可见**、**空白会话只留当前那个**），区别只在归档与排序：
+ *   - 项目成员（`projectSessionRows`）：归档照列并标注，按宿主 `sessionIds` 顺序；
+ *   - 最近会话（`deriveSections`）：排除归档，按更新时间倒序。
+ *
+ * 状态标记同理同源：两者都经 `sessionStatusOf` 与 `statusEntryReader`，
+ * `idle` 之外的状态在哪个列表里读到的都一样。
  *
  * 条数截断**不在模型层**：两处都返回全部可见行，分页由渲染层的水位决定
  * （`watermarkSlice` / `requiredWatermark`，spec-0.5.1 §4）。
  */
-import { PAGE_SIZE_AUTO_MAX } from './constants.ts'
+import { PAGE_SIZE_AUTO_MAX, STATUS_MARK_RANK } from './constants.ts'
 import { relativeTime, sessionStatusOf, shortPath } from './formatting.ts'
 import type {
   ProjectSessionRow,
@@ -21,10 +23,30 @@ import type {
   SessionListStateLike,
   SessionStatusLike,
   SessionStatusSnapshotLike,
+  SessionMark,
   SessionSummaryLike,
   WorkspaceRow,
   WorkspaceViewLike,
 } from './types.ts'
+
+/**
+ * 把宿主 `useSessionStatus` 的快照包装成「按 id 取状态条目」。
+ *
+ * `useSessionStatus` 给出 `ReadonlyMap`；为容忍宿主形状变化，普通对象也接受，
+ * 于是畸形快照退化成「没有标记」而不是在渲染期抛错。项目展开列表与最近会话区
+ * 共用这一个读取器，两个列表对同一个会话才会给出相同状态。
+ * @param statuses - 宿主状态快照，或任何取而代之的形状。
+ * @returns 按会话 id 取条目；快照不可用时恒返回 undefined。
+ */
+function statusEntryReader(
+  statuses: SessionStatusSnapshotLike | null | undefined,
+): (id: SessionId) => SessionStatusLike | null | undefined {
+  return (id) => {
+    if (statuses === null || statuses === undefined || typeof statuses !== 'object') return undefined
+    if (statuses instanceof Map) return statuses.get(id)
+    return (statuses as Readonly<Record<string, SessionStatusLike | null | undefined>>)[id]
+  }
+}
 
 /**
  * 构造项目展开后要显示的会话行。
@@ -40,9 +62,12 @@ import type {
  *
  * 条数不在这里截断：分页交给渲染层的水位，「显示更多」才有意义。
  *
- * 子代理子会话不会出现在这里，但这是宿主的行为而非本函数过滤：宿主
- * `attachSession` 没有 subagent 调用点，那些会话根本不进 `sessionIds`。
- * 再按 `origin` 筛一遍，只会在宿主改变行为时误伤真实会话。
+ * **子代理子会话必须过滤**，与宿主 `sessionVisible` 的第一条规则一致。早先这里
+ * 假设「子代理会话根本不进 `sessionIds`」，那是错的：子代理 header 带着父会话的
+ * `cwd` 且标 `origin: 'subagent'`，而工作区启动回填按 canonical `cwd` 归组所有持久化
+ * header 写进 `sessionIds`、不看 `origin`，于是它们确实会成为工作区成员。宿主
+ * `tree.ts` 因此对成员也做 `origin === 'subagent'` 过滤，插件必须照做。
+ * （注意：`fork` 命令产生的是**普通会话**，meta 里没有 `origin: 'subagent'`，与这条无关。）
  *
  * 快照里缺失的成员**直接丢弃，不产出任何行**：`sessionIds` 来自工作区
  * registry，`byId` 来自会话快照，重命名或删除的瞬间两者可能差一帧。旧行为在这里
@@ -56,7 +81,9 @@ import type {
  * @param language - 当前 locale id，用于相对时间。
  * @param archivedIds - 归档会话 id，只用于打标记。
  * @param shownSessionId - 主视图正在显示的会话；用于打标记，并决定哪个空白会话保留。
- * @returns 行数组：不排序，除「非当前的空白会话」外不过滤；缺摘要的成员被丢弃，
+ * @param statuses - `useSessionStatus` 的快照（以 SessionId 为键）；宿主未注入时缺席，
+ *   此时退回 `SessionSummary.running`，与最近会话区同一兜底。
+ * @returns 行数组：不排序，除子代理、非当前的空白会话外不过滤；缺摘要的成员被丢弃，
  *   因此长度可能小于传入的成员数（空项目返回零行，由渲染层显示空态）。
  */
 export function projectSessionRows(
@@ -65,10 +92,13 @@ export function projectSessionRows(
   language: string | null | undefined,
   archivedIds?: readonly SessionId[] | null | undefined,
   shownSessionId?: SessionId | undefined,
+  statuses?: SessionStatusSnapshotLike | null | undefined,
 ): ProjectSessionRow[] {
   if (!Array.isArray(sessionIds)) return []
   const summaries = byId !== null && byId !== undefined && typeof byId === 'object' ? byId : {}
   const archived = new Set<SessionId>(Array.isArray(archivedIds) ? archivedIds : [])
+  // 状态快照的读取与「最近会话」共用同一个形状容忍函数（见 statusEntryReader）。
+  const statusOf = statusEntryReader(statuses)
   const rows: ProjectSessionRow[] = []
   let total = 0
   let missing = 0
@@ -82,7 +112,13 @@ export function projectSessionRows(
       missing += 1
       continue
     }
-    // 宿主规则：空白会话里只有当前那一个可见（spec-0.5.1 §3）。
+    // 宿主规则一：子代理子会话一律不可见。
+    // 宿主 ui-workspace/tree.ts 的 sessionVisible 第一行就是
+    // `if (session.origin === 'subagent') return false`，且它对**工作区成员**同样生效：
+    // 工作区启动回填按 cwd 归组所有持久化 header 写进 sessionIds，不看 origin，
+    // 子代理子会话（继承父 cwd）因此会成为成员。此前这里漏了这条。
+    if (entry.origin === 'subagent') continue
+    // 宿主规则二：空白会话里只有当前那一个可见（spec-0.5.1 §3）。
     if (entry.blank === true && id !== shownSessionId) continue
     rows.push({
       id,
@@ -90,6 +126,8 @@ export function projectSessionRows(
       meta: relativeTime(entry.updatedAt, language),
       archived: archived.has(id),
       current: id === shownSessionId,
+      // 与最近会话行同一判定：宿主状态快照优先，缺席时退回 summary.running。
+      status: sessionStatusOf(entry, statusOf(id)),
       // 走到这里的空白行只可能是「当前那一个」。标记出来，水位函数才会让它
       // 恒显示且不占名额（宿主 watermarkRows 的 blank 分支）。
       blank: entry.blank === true,
@@ -243,13 +281,48 @@ export function recentRowNeedsAttention(row: RecentSessionRow): boolean {
 /**
  * 项目会话行是否需要引起注意（用于自动水位）。
  *
- * 项目行只有 `current` 一个状态位：宿主把它作为「值得注意」的一项，插件照抄。
- * 若调用方还想把 `running` / 待交互算进来，可另传基于 `sessions.byId` 的判定函数。
+ * 与最近会话区、以及宿主 `WorkspaceBrowser#requiredWatermark` 的判定一致：
+ * 运行中 / 有待操作 / 已完成未读 / 当前会话，四种任一即可。宿主对**每个列表**
+ * 都用同一套判定，所以项目列表没有理由更严格——只认 `current` 时，深水位上
+ * 运行中的会话会被「显示更多」挡住，行首的状态点也就没人看得到。
+ *
+ * **与宿主的一处差异（有意）**：宿主还看 `runningSubagentCount`，那需要
+ * `projectionsBySession.subagentCatalog`；PRD 把子代理投影列为非目标。
  * @param row - 一条项目会话行。
- * @returns 该行是主视图当前会话时为 true。
+ * @returns 该行带任何状态标记、或就是主视图当前会话时为 true。
  */
 export function projectRowNeedsAttention(row: ProjectSessionRow): boolean {
-  return row.current === true
+  return row.current === true || row.status !== 'idle'
+}
+
+/**
+ * 求一个项目在行上应显示的状态标记：取其**最值得注意**的那个会话。
+ *
+ * 宿主在项目层级没有任何状态聚合——`GroupNode` 只有 `containsCurrent`，
+ * 项目行也不画状态点——所以这是本插件补的能力，风格上仍与宿主一致：
+ * 只用宿主已有的四种标记，不引入新的视觉语言。
+ *
+ * 取值规则：**沿用会话级同一优先级**（待操作 > 运行中 > 未读完成 > 空闲）。
+ * 取「最高」而不是「任意一个」是刻意的——「需要你动手」比「正在跑」更值得
+ * 占用项目行那一格，否则一个待审核的项目会被同项目里随便哪个运行中的会话盖住。
+ *
+ * 归档会话不参与：它在项目列表里照常列出，但宿主已将其视为不活跃；让一条归档的
+ * 运行中会话点亮整个项目，读起来像这个项目还在干活。
+ * @param rows - 该项目已归一化的会话行。
+ * @returns 最高优先级标记；无子会话或全部空闲时为 `idle`（渲染层画成空）。
+ */
+export function projectStatusOf(
+  rows: readonly ProjectSessionRow[] | null | undefined,
+): SessionMark {
+  // 不用 Array.isArray：它把 readonly 数组收窄成 any[]，反而丢掉元素的类型。
+  if (!Array.isArray(rows)) return 'idle'
+  let best: SessionMark = 'idle'
+  for (const row of rows as readonly ProjectSessionRow[]) {
+    if (row === null || row === undefined || typeof row !== 'object') continue
+    if (row.archived === true) continue
+    if (STATUS_MARK_RANK[row.status] > STATUS_MARK_RANK[best]) best = row.status
+  }
+  return best
 }
 
 /**
@@ -297,13 +370,7 @@ export function deriveSections(
   pinnedRows.sort((a, b) => (pinnedRank.get(a.id) ?? 0) - (pinnedRank.get(b.id) ?? 0))
   const shownSessionId = currentSessionId(sessions, panelCovering)
   const byId = sessions?.byId ?? {}
-  // `useSessionStatus` 给出 ReadonlyMap；为容忍宿主形状变化，普通对象也接受，
-  // 于是畸形快照退化成「没有标记」而不是在渲染期抛错。
-  const statusOf = (id: SessionId) => {
-    if (statuses === null || statuses === undefined || typeof statuses !== 'object') return undefined
-    if (statuses instanceof Map) return statuses.get(id)
-    return (statuses as Readonly<Record<string, SessionStatusLike | null | undefined>>)[id]
-  }
+  const statusOf = statusEntryReader(statuses)
   const recentRows: RecentSessionRow[] = []
   for (const entry of Object.values(byId)) {
     if (entry === null || entry === undefined || typeof entry !== 'object') continue

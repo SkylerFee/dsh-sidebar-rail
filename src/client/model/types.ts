@@ -33,7 +33,13 @@ export interface SessionSummaryLike {
   readonly displayTitle?: string | null | undefined
   readonly updatedAt?: number | undefined
   readonly running?: boolean | undefined
-  readonly origin?: string | undefined
+  /**
+   * 会话来源标记。`'subagent'` 表示子代理子会话。
+   *
+   * 显式接受 `null`：跨边界快照里该字段可能缺席或写成 null，过滤逻辑必须
+   * 按「不等于 'subagent'」处理，不能假定它一定是字符串。
+   */
+  readonly origin?: string | null | undefined
   readonly blank?: boolean | undefined
   readonly retainedBy?: { readonly mainView?: number | undefined } | null | undefined
 }
@@ -108,6 +114,13 @@ export interface ProjectSessionRow {
   readonly meta: string
   readonly archived: boolean
   readonly current: boolean
+  /**
+   * 宿主会话状态标记，与最近会话行同一判定（{@link SessionMark}）。
+   *
+   * 两个列表必须对同一个会话给出相同说法，否则用户会在同一浮层里看到
+   * 「最近会话有状态点、项目列表没有」。`idle` 由渲染层画成空。
+   */
+  readonly status: SessionMark
   /**
    * 该行是否为空白会话。
    *

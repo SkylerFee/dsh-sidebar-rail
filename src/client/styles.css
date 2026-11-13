@@ -257,6 +257,33 @@
 .dsr-project-main { gap:var(--dsh-sidebar-label-gap); }
 .dsr-project-folder { flex:none; display:inline-flex; align-items:center; justify-content:center;
   width:16px; height:20px; color:var(--dsw-alias-label-tertiary); }
+/* A project's status mark sits in a FIXED trailing slot, immediately before the
+   New Session button: it belongs to the "how is this row doing" tail of the row,
+   the same place a session row puts its mark. Pinning it here (rather than after
+   the name) lets the title take the row's whole flexible width -- the name no
+   longer gives up space to a dot that comes and goes, so it only ellipsises when
+   it genuinely does not fit.
+
+   flex:none keeps it from being squeezed by a long title; the mark borrows the
+   session row's dot geometry so a project dot and a session dot read as one
+   language. An idle project renders nothing (StateMark returns null), so quiet
+   rows keep their original spacing -- the gap below is carried by this rule
+   rather than by a reserved empty slot. */
+.dsr-project-status { display:inline-flex; align-items:center; justify-content:center;
+  flex:none; margin-right:2px; }
+/* An idle project (or one whose sessions all read as idle) renders no dot at all.
+   The wrapper is still in the tree so the flex order stays put, but an empty one
+   must occupy nothing: otherwise every quiet project would gain a couple of
+   pixels of dead space the row never had before. */
+.dsr-project-status:empty { display:none; }
+/* The hover rule that drops the ellipsis (above) exists for session titles, which
+   scroll their overflow into view while hovered. A project title has no marquee,
+   so clipping it on hover would hard-cut the name with no way to read the rest --
+   and it would erase the ellipsis the row is supposed to show. */
+@media (hover: hover) {
+  .dsr-project-main:hover .dsr-row-title,
+  .dsr-row-wrap:hover .dsr-project-main .dsr-row-title { text-overflow:ellipsis; }
+}
 /* An expanded project is the "you are looking inside this" state; the host tints
    its folder with the business colour in the same situation (.folderActive). */
 .dsr-project-main[aria-expanded="true"] .dsr-project-folder { color:var(--dsw-alias-state-business-primary); }

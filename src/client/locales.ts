@@ -6,6 +6,8 @@
  * namespace 仍是常量 `NS`，文案语义未改动。
  */
 
+import type { SessionMark } from './model/types.ts'
+
 /** 中文文案：键集合是唯一事实来源，英文必须完整覆盖。 */
 export const zh = {
   'rail.label': '导航图标轨',
@@ -38,6 +40,9 @@ export const zh = {
   'status.warning': '等待你的操作',
   'status.done': '已完成，未查看',
   'status.idle': '空闲',
+  'project.status.warning': '旗下有会话等待你的操作',
+  'project.status.ongoing': '旗下有会话运行中',
+  'project.status.done': '旗下有会话已完成未查看',
   'section.panels': '其他面板',
   'pin.pin': '置顶项目',
   'pin.unpin': '取消置顶',
@@ -92,6 +97,9 @@ export const en: Record<MessageKey, string> = {
   'status.warning': 'Waiting for you',
   'status.done': 'Finished, unread',
   'status.idle': 'Idle',
+  'project.status.warning': 'A session inside is waiting for you',
+  'project.status.ongoing': 'A session inside is running',
+  'project.status.done': 'A session inside finished unread',
   'section.panels': 'Other panels',
   'pin.pin': 'Pin project',
   'pin.unpin': 'Unpin project',
@@ -120,3 +128,41 @@ export type Translate = (key: MessageKey) => string
 
 /** 未注入 locale 面时的翻译替身：原样返回键名。 */
 export const rawKeyTranslator: Translate = (key) => String(key)
+
+/**
+ * 会话状态标记对应的字典键。
+ *
+ * 用显式映射而不是模板拼接 `\`status.\${mark}\``：拼接结果只能靠 `as never` 压过
+ * 类型检查，那种写法规避了「键是否真的存在」的校验——字典里删掉一个键时
+ * 编译期不会报错，运行时直接露出键名。这里四个键由 `Record` 逐个声明，
+ * 增删状态标记会立刻在类型层暴露。
+ * @param mark - 会话状态标记。
+ * @returns 该标记对应的字典键。
+ */
+export function statusLabelKey(mark: SessionMark): MessageKey {
+  const keys: Record<SessionMark, MessageKey> = {
+    warning: 'status.warning',
+    ongoing: 'status.ongoing',
+    done: 'status.done',
+    idle: 'status.idle',
+  }
+  return keys[mark]
+}
+
+/**
+ * 项目行状态标记对应的字典键。
+ *
+ * 与会话行分开是因为**主语不同**：会话行的点是「这个会话在跑」，项目行的点是
+ * 「这个项目里有一个会话在跑」。同一个词直接复用会让读屏把项目本身读成运行中。
+ * @param mark - 该项目旗下会话的最高状态标记。
+ * @returns 该标记对应的字典键；`idle` 不该走到这里（渲染层不画）。
+ */
+export function projectStatusLabelKey(mark: SessionMark): MessageKey {
+  const keys: Record<SessionMark, MessageKey> = {
+    warning: 'project.status.warning',
+    ongoing: 'project.status.ongoing',
+    done: 'project.status.done',
+    idle: 'status.idle',
+  }
+  return keys[mark]
+}

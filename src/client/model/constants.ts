@@ -5,6 +5,8 @@
  * 让 model 层与组件层读到同一份数字，不复制多份。
  */
 
+import type { SessionMark } from './types.ts'
+
 /** 本插件拥有的 locale 命名空间（不得与宿主命名空间冲突）。 */
 export const NS = 'sidebarRail'
 
@@ -84,6 +86,23 @@ export const VISIBLE_PENDING_KINDS: ReadonlySet<string> = new Set([
   'plan-review',
   'question',
 ])
+
+/**
+ * 状态标记的优先级序号，数字越大越值得注意。
+ *
+ * 与 {@link sessionStatusOf} 的判定顺序同向：待操作 > 运行中 > 未读完成 > 空闲。
+ * 项目层级的汇总（`projectStatusOf`）据此取「最高的那个孩子」，
+ * 与单行判定用同一套优先级，两处不会出现相反的说法。
+ *
+ * 用显式表而不是比较字符串：顺序一旦变化，这里集中改一处；也让「哪个更高」
+ * 成为可单测的事实，而不是散落在 if 里的隐含约定。
+ */
+export const STATUS_MARK_RANK: Readonly<Record<SessionMark, number>> = {
+  idle: 0,
+  done: 1,
+  ongoing: 2,
+  warning: 3,
+}
 /**
  * 标题溢出多少像素以上才滚动显示。
  *

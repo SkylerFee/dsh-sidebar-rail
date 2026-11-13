@@ -256,6 +256,15 @@ export interface ProjectRowProps {
   readonly onTogglePin: () => void
   readonly newSessionLabel: string
   readonly onNewSession: () => void
+  /**
+   * 该项目旗下会话的最高状态标记（{@link projectStatusOf} 的结果）。
+   *
+   * 宿主在项目层级不聚合状态，这一格是本插件补的；`idle` 不画任何东西，
+   * 因此「没有值得注意的会话」与「没有状态数据」都表现为同一个安静的行。
+   */
+  readonly status?: SessionMark | undefined
+  /** 状态标记的无障碍文案。 */
+  readonly statusLabel?: string | undefined
   readonly children?: ReactNode
 }
 
@@ -294,7 +303,16 @@ export function ProjectRow(props: ProjectRowProps): ReactNode {
       }, props.open === true ? h(IconFolderOpen) : h(IconFolderClose)),
       h('span', { className: 'dsr-row-main' },
         h('span', { className: 'dsr-row-title' }, props.title),
-        props.meta === undefined || props.meta === '' ? null : h('span', { className: 'dsr-row-meta' }, props.meta))),
+        props.meta === undefined || props.meta === ''
+          ? null
+          : h('span', { className: 'dsr-row-meta' }, props.meta)),
+      // 状态点排在加号之前的**固定位置**：它属于「这一行现在怎么样」的尾部信息，
+      // 与会话行把标记放在行尾同一个道理（见 PRD A15 的既有裁决）。固定在这里
+      // 也让标题拿到整行的可伸缩宽度——项目名不再为一个时有时无的点让位，
+      // 长名字的省略只发生在真正放不下的时候。idle 时 StateMark 不渲染，
+      // 因此安静的项目行不会留下空槽。
+      h('span', { className: 'dsr-project-status' },
+        h(StateMark, { status: props.status ?? 'idle', label: props.statusLabel ?? '' }))),
       h('button', {
         type: 'button',
         className: 'dsr-project-action',
