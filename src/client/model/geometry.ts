@@ -5,7 +5,7 @@
  * 宿主 chrome 带高度从调用方传入，模块本身不读 DOM。
  *
  * 0.5.0 起不再有「分区限高」：浮层内容是单一滚动容器，分区只是分组
- * （见 docs/adr/0007-single-scroll-flyout.md），所以 sectionMaxHeight /
+ * （见 docs/adr/0009-flyout-scroll-and-height.md），所以 sectionMaxHeight /
  * sectionBudgetFor 与 SECTION_HEIGHT_RATIO 一并删除。
  */
 import {

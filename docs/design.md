@@ -1,6 +1,6 @@
 # dsh-sidebar-rail · 设计说明
 
-> 本文与实现同步维护。验证记录见 [verify.md](verify.md)，需求与验收见 [PRD](PRD.md)。
+> 本文与实现同步维护。需求与验收见 [PRD](PRD.md)。
 
 客户端静态模块的 `window.__ModuleLoader__.load({ id, factory })` 使用完整包名 `@skylerfee/dsh-sidebar-rail` 作为 `id`，与 `package.json.name` 和 bundle patch 的模块 `name` 一致。宿主按该包名导入工厂；不能把注册 ID 改成去掉作用域的短名。`shell.overlay` 条目 ID 和本地存储键仍使用各自已有的值。
 
@@ -112,10 +112,10 @@ transform: translateX(-100%);
 - **显式 `-webkit-app-region: no-drag`**：Electron 的 app-region 是**几何**而不是 stacking，浮轨盖住窗口拖拽带时必须自己 opt out（即便 body 级 portal 通常已继承 no-drag），否则点图标会拖窗口。
 - **窄窗口不渲染**：判定不是 CSS 媒体查询，而是纯函数 `shouldRenderRail(platform, collapsed, viewportWidth)`（阈值 `RAIL_MIN_VIEWPORT = 768`），`RailOverlay` 用 `window.innerWidth` + `resize` 监听驱动；不满足即 `return null`，组件整体卸载。768 = 680（宿主正文最小宽）+ 56（轨宽）+ 32（两侧安全）。为什么不用 CSS：阈值语义是「正文是否还放得下」，与轨自身盒模型无关；做成纯函数还能被单测覆盖边界（`src/client/model/geometry.ts`，由 `test/*.test.ts` 直接导入执行）。为什么不是 900：旧实现的 900 是拍的，与宿主 drawer 断点（768）无对应关系；按 680 正文可读宽推导更可解释。
 - **浮层位置**：`.dsr-flyout` 也是 `position: fixed`（portal 到 body），宽 288px，`left = rect.right + 8`。`flyoutPlacement` 根据触发按钮与视口计算顶部或底部距离，并以内联 `maxHeight` 限制剩余可视高度；账号浮层从头像底边向上展开。
-- **浮层定高的来历与现状**：0.3.x 曾用「视口 70%」给工作区浮层定高（`workspaceFlyoutHeight` + `WORKSPACE_FLYOUT_VIEWPORT_RATIO`），因为该浮层内容长度差异最大（两条或二十条最近会话）。0.4.0 计划改为**从 chrome 带下沿占到底边**（`flyoutSectionedHeight`），但这条**实际未落地**：三个分区浮层的 `shell()` 调用自 TS 迁移起漏传 `topFlush`，于是走 `flyoutPlacement` 的锚点分支——按触发图标摆放、由内容撑开、以 `maxHeight` 封顶。取舍见 [ADR-0008](adr/0008-flyout-height-follows-current-build.md)。
-- **单一滚动容器（ADR-0007 的形态；票 #11 已落地）**：浮层 body 用 `.dsr-sections` 承载所有分区，整块内容共用一个 `overflow-y:auto` 滚动区。分区（`.dsr-section`）只是「标题行 + 条目组」，**不是滚动单元**，也没有高度上限：内容多就整页一起滚，标题跟着滚走；内容少就没有滚动条。分区之间的分隔线已移除，分组靠标题字重与留白区分。
-- **浮层高度随内容（不是钉死）**：`.dsr-flyout` 不写内联 `height`；面板由内容撑开，`maxHeight` 按锚点以下的剩余空间封顶，超出即整块滚动。分区收起/展开只让内容变短，内容跨过 `maxHeight` 边界之前面板外框不动。`topFlush` 与 `flyoutSectionedHeight` 仍保留在代码里，作为「将来若要恢复全高」的唯一入口，但三个分区浮层当前不传它。见 [ADR-0008](adr/0008-flyout-height-follows-current-build.md)。
-- **为什么不再分区独立滚动**：0.4.0 的三段式（固定标题 + 独立滚动 + 1/3 限高）在真机上让列表被切碎、多个滚动条并存，与宿主侧栏「一个列表 + 分组标题」的习惯相反。见 [ADR-0007](adr/0007-single-scroll-flyout.md)。0.4.0 的旧结构（分区 `max-height`、分区 `border-top`、分区独立 `overflow`）已随票 #11 从源码移除，不再存在两套并行的滚动模型。
+- **浮层定高的来历与现状**：0.3.x 曾用「视口 70%」给工作区浮层定高（`workspaceFlyoutHeight` + `WORKSPACE_FLYOUT_VIEWPORT_RATIO`），因为该浮层内容长度差异最大（两条或二十条最近会话）。0.4.0 计划改为**从 chrome 带下沿占到底边**（`flyoutSectionedHeight`），但这条**实际未落地**：三个分区浮层的 `shell()` 调用自 TS 迁移起漏传 `topFlush`，于是走 `flyoutPlacement` 的锚点分支——按触发图标摆放、由内容撑开、以 `maxHeight` 封顶。取舍见 [ADR-0009](adr/0009-flyout-scroll-and-height.md)。
+- **单一滚动容器（ADR-0009 的形态；票 #11 已落地）**：浮层 body 用 `.dsr-sections` 承载所有分区，整块内容共用一个 `overflow-y:auto` 滚动区。分区（`.dsr-section`）只是「标题行 + 条目组」，**不是滚动单元**，也没有高度上限：内容多就整页一起滚，标题跟着滚走；内容少就没有滚动条。分区之间的分隔线已移除，分组靠标题字重与留白区分。
+- **浮层高度随内容（不是钉死）**：`.dsr-flyout` 不写内联 `height`；面板由内容撑开，`maxHeight` 按锚点以下的剩余空间封顶，超出即整块滚动。分区收起/展开只让内容变短，内容跨过 `maxHeight` 边界之前面板外框不动。`topFlush` 与 `flyoutSectionedHeight` 仍保留在代码里，作为「将来若要恢复全高」的唯一入口，但三个分区浮层当前不传它。见 [ADR-0009](adr/0009-flyout-scroll-and-height.md)。
+- **为什么不再分区独立滚动**：0.4.0 的三段式（固定标题 + 独立滚动 + 1/3 限高）在真机上让列表被切碎、多个滚动条并存，与宿主侧栏「一个列表 + 分组标题」的习惯相反。见 [ADR-0009](adr/0009-flyout-scroll-and-height.md)。0.4.0 的旧结构（分区 `max-height`、分区 `border-top`、分区独立 `overflow`）已随票 #11 从源码移除，不再存在两套并行的滚动模型。
 
 ## 5. 为什么不改宿主列宽
 
@@ -166,7 +166,7 @@ transform: translateX(-100%);
 
 ## 9. 卸载恢复
 
-插件卸载 / 禁用后，overlay 注册释放，组件 effect 清理 keydown、pointermove、定时器和 MutationObserver，样式节点与 portal DOM 随之移除。宿主侧栏与正文结构不由插件修改；`localStorage['dsh.sidebar-rail.v1']` 中的置顶与展开项目偏好保留，不写宿主存储。实际卸载验收范围见 [verify.md](verify.md)。
+插件卸载 / 禁用后，overlay 注册释放，组件 effect 清理 keydown、pointermove、定时器和 MutationObserver，样式节点与 portal DOM 随之移除。宿主侧栏与正文结构不由插件修改；`localStorage['dsh.sidebar-rail.v1']` 中的置顶与展开项目偏好保留，不写宿主存储。
 
 ## 10. 数据来源（全部只读）
 
@@ -237,9 +237,9 @@ transform: translateX(-100%);
 - 文字：`--dsw-alias-label-primary / secondary / tertiary`；悬停：`--dsw-alias-interactive-bg-hover / active`；浮层底：`--dsw-alias-bg-overlay`；边框：`--dsw-alias-border-l1`（浮层内）/ `--dsw-alias-border-l3`（浮轨右边框）；当前态与展开按钮：`--dsw-specific-sidebar-nav-item-active`；浮轨底色：`--dsw-specific-sidebar-fill`。
 - 圆角用 `--dsw-radius-sm`（按钮、行）与 `--dsw-radius-lg`（浮层），阴影用 `--dsw-shadow-lv3`，与宿主 `HoverCard` 的组合一致。这些变量由 `ui-theme`（`styles/base.css`、`styles/gradient-shadow-text.css`，经 `styles.ts` 内联注入）全局提供，但**不在 Theme token 注册表**里，因此 `Theme.listTokens` 查不到它们——不能据此判断变量不存在。仅当变量缺失时才落到括号里的 fallback。
 - 几何：浮轨 56px、按钮 36×36、图标 20px、头像 26px、浮层 288px。
-- 可访问性：每个图标按钮有 `aria-label`；当前面板用 `aria-current="page"`；浮层 `role="dialog"` + `aria-label`；顶部功能图标支持方向键进入浮层，浮层内 Escape 返回触发按钮；`prefers-reduced-motion: reduce` 关闭浮层入场与轨道滑动动画。实现支持不等于完整键盘路径已验收，具体结果见 [verify.md](verify.md)。
+- 可访问性：每个图标按钮有 `aria-label`；当前面板用 `aria-current="page"`；浮层 `role="dialog"` + `aria-label`；顶部功能图标支持方向键进入浮层，浮层内 Escape 返回触发按钮；`prefers-reduced-motion: reduce` 关闭浮层入场与轨道滑动动画。实现支持不等于完整键盘路径已验收。
 - **添加项目**：调用宿主公开的 `uiWorkspace.pickDirectory()` 与 `workspaces.create({ path })`。选择器标题由宿主硬编码为英文（`NSOpenPanel.message` 不参与本地化），插件层无法覆盖——纯 Client 模块没有 Node 权限自行调起选择器。这是已知的宿主侧本地化缺口，记录在 README 与 GLOSSARY，不作为本插件待办。
-- **会话行尾那一格**（`.dsr-row-mark`，16×16）：定时任务时钟与状态点**互斥**。规格原写「行首 16px 格」，但 `Row()` 里 `SessionMarkCell` 排在 `.dsr-row-main` 之后，实际渲染在行尾；2026-11-11 验收报告 F5 指出该落差，按用户裁决保持现状、如实记录——只有该行状态为 `idle` 且存在活跃定时任务时才画时钟，否则画状态点。时钟 SVG 自绘（16px 视框、`stroke-width: 1`、`currentColor`，照抄宿主 `clock-outline` artwork），不 import 宿主包；图标 `aria-hidden`，含义由 `.dsr-visually-hidden` 文本送达读屏。点击时钟 `stopPropagation`，不触发行的打开。
+- **会话行尾那一格**（`.dsr-row-mark`，16×16）：定时任务时钟与状态点**互斥**。规格原写「行首 16px 格」，但 `Row()` 里 `SessionMarkCell` 排在 `.dsr-row-main` 之后，实际渲染在行尾；2026-11-11 的真机验收指出了该落差，按用户裁决保持现状、如实记录——只有该行状态为 `idle` 且存在活跃定时任务时才画时钟，否则画状态点。时钟 SVG 自绘（16px 视框、`stroke-width: 1`、`currentColor`，照抄宿主 `clock-outline` artwork），不 import 宿主包；图标 `aria-hidden`，含义由 `.dsr-visually-hidden` 文本送达读屏。点击时钟 `stopPropagation`，不触发行的打开。
 - **唤出只由 `pointermove` 驱动，`pointerenter` 不参与**（`model/geometry.ts` 的 `pointerInHotzone` + `RailColumn` 的单条 pointermove effect）：`onPointerEnter` 到达热区**不等于**指针真在左缘。React 的 `onPointerEnter` 由**冒泡的 `pointerover`** 合成，`relatedTarget` 为 null 即视为「进入」；当 DSH 右边框贴着屏幕右缘、右侧还有另一块屏时，指针从 DSH 右缘移出会派发这样一次 pointerover，而**它的 `clientX` 会被钳进视口、恰好落在热区范围内**——所以连坐标门禁也拦不住（第一版修法正是因此失效）。结论是判据必须取连续移动的 `pointermove`，它在指针真实位于窗口内时才给可信坐标；`clientX` 相对视口，与是否全屏、是否有副屏无关（`screenX` 在多屏下是全局坐标，会误判）。键盘焦点路径没有指针事件，仍直接放行。收起判据 `keepsRailRevealed` 方向安全：跨屏时坐标被钳向左侧，只会让它保持展开而不会误收起。
 - **标题溢出时的滚动显示**（`hooks/use-title-marquee.ts` + `model/formatting.ts`）：会话标题超出所在格子时，指针停在行上期间以恒定速度滚到末端并停在那里，指针离开则一步回到起点。逐字照抄宿主 `ui-workspace` 的 `useTitleMarquee`：速度 `0.03 px/ms`、静止阈值 `8px`（溢出不大于它就不动，为几像素滚动读起来像抖动）、`prefers-reduced-motion` 直接跳到末端而不逐帧、触屏点按不触发。离开时一步回位而非反向滚回——静止态有省略号且格子更窄，反向途中文字会与省略号相撞。
   - DOM 契约与宿主一致：标题元素自身 `overflow:hidden` 并承载 `scrollLeft`，两个 `data-` 标记驱动两端 12px 渐隐遮罩（`data-scrolled` 表示已离开起点、需要左渐隐；`data-clipped` 表示右侧仍有内容在外、需要右渐隐；到末端时右渐隐熄灭，最后一个字满强度显示）。遮罩加在标题自身而不是行上，因此行首的状态点/时钟与行尾的图钉保持原色。

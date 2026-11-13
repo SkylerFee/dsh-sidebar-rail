@@ -37,7 +37,7 @@
 | Linux Desktop | 不渲染：宿主在该平台自己保留 56px 折叠轨，插件按列宽探测自动让位 |
 | Web（任意系统） | 不渲染：宿主自带折叠轨，避免叠成第二条 |
 
-已记录的真机环境为 macOS 27.2 与 Windows 11，宿主均为 `0.2.2-rc.1`；其他宿主版本的兼容范围见 [package.json](package.json) 的 `peerDependencies`。1.0.0 是一次完整重写：TypeScript 源码、贴近宿主的浮层结构、分页会话列表与定时任务标记都在这个版本里，并新增 Windows Desktop 支持。实际结果与限制见[本轮验收报告](docs/desktop-audit-2026-11-11.md)。发布包内是已构建的 `lib/` 入口，安装时不需要编译器；源码开发与检查需要 Node.js ≥ 22.19.0，并要先 `npm ci`、再构建（见[开发与贡献](#development)）。
+已记录的真机环境为 macOS 27.2 与 Windows 11，宿主均为 `0.2.2-rc.1`；其他宿主版本的兼容范围见 [package.json](package.json) 的 `peerDependencies`。1.0.0 是一次完整重写：TypeScript 源码、贴近宿主的浮层结构、分页会话列表与定时任务标记都在这个版本里，并新增 Windows Desktop 支持。发布包内是已构建的 `lib/` 入口，安装时不需要编译器；源码开发与检查需要 Node.js ≥ 22.19.0，并要先 `npm ci`、再构建（见[开发与贡献](#development)）。
 
 <a id="install"></a>
 ## 安装与启停
@@ -92,7 +92,7 @@ dsh plugin --profile desktop add @skylerfee/dsh-sidebar-rail
 <a id="usage"></a>
 ## 使用方法
 
-逐项操作、状态说明与成对的浅色 / 深色功能截图见[使用指南](docs/usage.zh.md)；实际通过项与已知问题见[验收报告](docs/desktop-audit-2026-11-11.md)。
+逐项操作、状态说明与成对的浅色 / 深色功能截图见[使用指南](docs/usage.zh.md)。
 
 1. 用宿主按钮收起侧栏，将指针移到窗口左缘、顶部窗口控件下方，唤出图标轨。
 2. 在图标上停留约 120ms 打开浮层；移出后约 200ms 关闭浮层。在轨内切换图标只切换浮层。
@@ -114,7 +114,7 @@ dsh plugin --profile desktop add @skylerfee/dsh-sidebar-rail
 
 会话列表**分页显示**：默认 10 条非空会话，列表末尾的**「显示更多」**每次再加 10 条。最近会话按运行中 / 等待操作 / 完成未读 / 当前会话提高显示水位，项目展开列表只按当前会话提高水位，各自独立计数；自动提升上限为 50，更靠后的条目需点「显示更多」。当前空白会话始终显示且不占普通条数。
 
-工作区、任务与插件的浮层内容作为**一个列表整块滚动**：分区只是带标题行的分组，不是各自独立的滚动区，因此长列表统一滚动、标题随内容滚走。「显示更多」是列表末尾的一个普通条目，随内容一起滚动，不占固定底栏。分页状态**不持久化**：关掉再打开浮层，列表重新从 10 条开始。浮层贴在打开它的图标旁，高度随内容增长到该锚点以下的可用空间为止，超出后整块滚动，不拉到窗口底。当前定位与分区折叠的限制见[验收报告](docs/desktop-audit-2026-11-11.md)。
+工作区、任务与插件的浮层内容作为**一个列表整块滚动**：分区只是带标题行的分组，不是各自独立的滚动区，因此长列表统一滚动、标题随内容滚走。「显示更多」是列表末尾的一个普通条目，随内容一起滚动，不占固定底栏。分页状态**不持久化**：关掉再打开浮层，列表重新从 10 条开始。浮层贴在打开它的图标旁，高度随内容增长到该锚点以下的可用空间为止，超出后整块滚动，不拉到窗口底。
 
 偏好保存在当前客户端的 `localStorage['dsh.sidebar-rail.v1']`：
 
@@ -138,7 +138,7 @@ dsh plugin --profile desktop add @skylerfee/dsh-sidebar-rail
 | 图标轨展开时覆盖页面左侧 | 它是浮在正文上的临时层，不占宿主栅格宽度；默认隐藏用于保留会话页「对话」标签的入口，可移开指针让轨收起 |
 | 出现 `Sidebar rail unavailable` 或启动导入错误 | 保留界面错误与宿主诊断日志，通过原生侧栏进入插件管理停用，并在本仓库反馈宿主版本、插件版本和复现步骤；不要附凭据或会话正文 |
 
-插件不接管展开态侧栏，不修改宿主列宽。顶部为 macOS 窗口控件留出空间；支持减少动态效果的系统偏好。截图覆盖、交互问题、真实 remote 故障及有余额账号等未验证范围，以[验收报告](docs/desktop-audit-2026-11-11.md)为准。
+插件不接管展开态侧栏，不修改宿主列宽。顶部为 macOS 窗口控件留出空间；支持减少动态效果的系统偏好。
 
 <a id="development"></a>
 ## 开发与贡献
@@ -159,7 +159,7 @@ npm run hooks:install  # 可选：启用本仓库的提交钩子
 
 脚本以 [package.json](package.json) 为准，上面与之一致。源码在 `src/`，按职责拆成 TypeScript / TSX 模块，esbuild 只做转换与打包、不做类型检查。`lib/` 是生成目录，不提交 Git，改完 `src/` 必须重新构建，因此本地 checkout 不再「改完即生效」。运行时依赖仍为零：客户端只向宿主 `require` `react` 与 `react-dom`。注册测试检查工厂 ID 与完整作用域包名一致；这些检查不能替代 Desktop 真实界面验收。
 
-PR 标题遵循 Conventional Commits，摘要、说明与验证结果使用简体中文，代码标识符和原始诊断保留英文。按 [PR 模板](.github/pull_request_template.md)填写问题、改动、验证与未验证项；中英文 README 的行为描述同步维护。UI、加载或注册变更需在 [docs/verify.md](docs/verify.md) 记录真实环境与操作结果。详细约束见 [AGENTS.md](AGENTS.md) 和 [CODING_STANDARDS.md](CODING_STANDARDS.md)。
+PR 标题遵循 Conventional Commits，摘要、说明与验证结果使用简体中文，代码标识符和原始诊断保留英文。按 [PR 模板](.github/pull_request_template.md)填写问题、改动、验证与未验证项；中英文 README 的行为描述同步维护。UI、加载或注册变更需在 PR 中记录真实环境与操作结果。详细约束见 [AGENTS.md](AGENTS.md) 和 [CODING_STANDARDS.md](CODING_STANDARDS.md)。
 
 发布遵循 [ADR-0003](docs/adr/0003-release-pipeline.md) 与 [发布安全规则](docs/adr/0008-github-release-security.md)：版本改动必须通过 PR 和 CI 合入 `main`，再创建 `v<version>` Release。无 OIDC 权限的任务完成检查、构建与 tarball 校验；你在 `npm-publish` 环境审批后，独立任务用 npm OIDC 发布该制品，不安装项目依赖或执行包内脚本。npm Trusted Publisher 必须绑定 `publish.yml` 和 `npm-publish` 环境；稳定版本禁止回退 `latest`，预发布标志须与版本一致。
 
@@ -169,13 +169,10 @@ PR 标题遵循 Conventional Commits，摘要、说明与验证结果使用简�
 | 文档 | 内容 |
 | --- | --- |
 | [使用指南](docs/usage.zh.md)（[English](docs/usage.md)） | 全部入口、分页与状态标记、键盘操作，以及成对的浅色 / 深色功能截图 |
-| [2026-11-11 验收报告](docs/desktop-audit-2026-11-11.md) | 最新源码的检查结果、真机证据、问题与未验证范围 |
 | [产品需求](docs/PRD.md) | 使用场景、交互规格与验收清单 |
 | [设计说明](docs/design.md) | 增量挂载、布局、数据来源、清理与本地存储 |
-| [验证记录](docs/verify.md) | 各轮真实结果、历史缺陷与未验证项 |
 | [术语表](GLOSSARY.md) | 轨、侧栏、浮层、当前会话等统一用词 |
-| [TypeScript 迁移指南](docs/typescript-migration.md) | 模块划分、构建协议、测试迁移与分阶段计划 |
-| [架构决策](docs/adr/) | 窄窗判定、TypeScript 源码与构建工具链（[ADR-0006](docs/adr/0006-typescript-source-and-build.md)）、发布流程 |
+| [架构决策](docs/adr/) | 窄窗判定、TypeScript 源码与构建工具链（[ADR-0006](docs/adr/0006-typescript-source-and-build.md)）、浮层滚动与高度（[ADR-0009](docs/adr/0009-flyout-scroll-and-height.md)）、发布流程 |
 
 ## 许可证
 

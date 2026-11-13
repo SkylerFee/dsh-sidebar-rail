@@ -6,9 +6,9 @@
 
 实现形态：源码在 `src/`（TypeScript / TSX，按职责分模块），由 `scripts/build.mjs` 生成 `lib/index.js` 与 `lib/client.js`。工具链决定见 [ADR-0006](docs/adr/0006-typescript-source-and-build.md)；`lib/` 是生成目录，不提交 Git、不手工编辑。
 
-## 1. 什么时候必须更新 `docs/verify.md`
+## 1. 什么时候必须记录真机验收
 
-任何改变用户可见行为的改动（渲染、交互、样式、加载方式），都要在 `docs/verify.md` 追加一轮记录，且必须写清四件事：
+任何改变用户可见行为的改动（渲染、交互、样式、加载方式），都要在本次 PR 里追加一轮真机记录，且必须写清四件事：
 
 1. 环境（宿主版本、平台、主题、语言）
 2. 操作（怎么复现到那个状态，包括合成输入的命令）
@@ -21,7 +21,7 @@
 
 - **纯函数必须单测**：`src/client/model/`、`src/client/host-adapter.ts` 里的纯逻辑由 `test/*.test.ts` 直接 `import` 执行（经 `tsx`），不再靠 `#region` 切片。改这些函数必须同时改测试。
 - **可单测的判定要留在纯层**：几何、分组、归一化、状态转换这类逻辑放进 `model/`（不 import React、不访问 DOM），别埋在组件里——组件里的逻辑只能靠真机验收。
-- **渲染与样式不进单测**：这个仓库没有 jsdom，也不需要——组件行为靠真机验收（`docs/verify.md`）确认。若确需组件渲染测试，先说明它能捕获哪个具体风险、为什么更小的流程测试不够。
+- **渲染与样式不进单测**：这个仓库没有 jsdom，也不需要——组件行为靠真机验收确认。若确需组件渲染测试，先说明它能捕获哪个具体风险、为什么更小的流程测试不够。
 - **产物协议单独测**：`test/*.test.mjs` 消费已构建的 `lib/`，在只有 `window.__ModuleLoader__` 的 VM 里验证注册、工厂 `require`、`inject` / `apply` 与清理。它证明生成物能被宿主加载，不替代行为单测。
 
 ## 3. 异步与失败处理
@@ -54,7 +54,7 @@
 - **关键判定入口与结果要打日志**，用 `[dsh-sidebar-rail]` 前缀；日志不得包含会话正文、凭据或完整用户数据。
 - CSS 类一律 `.dsr-*` 前缀；`localStorage` 只用 `dsh.sidebar-rail.v1`；样式节点带 `data-dsh-sidebar-rail` 标记。CSS 在 `src/client/styles.css`，作为文本打进产物，仍由 `apply` 的 effect 注入与清理。
 - 文案走 `src/client/locales.ts` 的 `zh` / `en` 字典（类型与脚本校验两侧对齐），**不要在 JSX 里硬编码中英文**。
-- 类型导入用 `import type`；模块职责与依赖方向见 [docs/typescript-migration.md](docs/typescript-migration.md) §3，不要新建收纳杂项的 `utils.ts`。
+- 类型导入用 `import type`；模块职责与依赖方向见 [ADR-0006](docs/adr/0006-typescript-source-and-build.md)，不要新建收纳杂项的 `utils.ts`。
 
 ## 7. 渲染层没有单测，靠这些规则兜底
 
@@ -67,7 +67,7 @@
   中间值另取名字（`sessionRows`）。0.4.0 的 #3 票真实踩过。
 - **只在打开态执行的代码路径，单测与静态检查都不会跑到。**
   浮层正文、`projectRow` 这类只在 `open === '…'` 分支里求值的函数，出错只有真机能暴露。
-  改动它们时，必须在 review 里逐个调用点核对变量来源，并在 `docs/verify.md` 记录真机结果。
+  改动它们时，必须在 review 里逐个调用点核对变量来源，并记录真机结果。
 - **新增的 `useState` 要问「谁负责把它重置」。**
   轨组件常驻挂载（`RailColumn` 从不卸载），所以组件 state 会跨浮层开关存活。
   凡是不持久化的 UI 状态，都必须在该浮层关闭时显式清空，否则下次打开会继承上次的状态。
@@ -75,7 +75,6 @@
 ## 相关文档
 
 - 硬约束与导航：[AGENTS.md](AGENTS.md)
-- 迁移总纲与目标结构：[docs/typescript-migration.md](docs/typescript-migration.md)
 - 架构与实现细节：[docs/design.md](docs/design.md)
 - 不可逆决定：[docs/adr/](docs/adr/)（工具链见 [ADR-0006](docs/adr/0006-typescript-source-and-build.md)，被取代的旧决定见 [ADR-0002](docs/adr/0002-zero-dependency-no-build.md)）
 - 术语表：[GLOSSARY.md](GLOSSARY.md)

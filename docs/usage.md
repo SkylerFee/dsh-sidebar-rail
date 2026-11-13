@@ -2,9 +2,9 @@
 
 **[简体中文](usage.zh.md)** | English
 
-This guide describes version 0.4.0. It has not been published to npm yet; when installing any published version, rely on what that version actually offers. See [README](../README.md#install) for installation and toggling, and the [acceptance report](desktop-audit-2026-11-11.md) for results and unverified paths from this round.
+This guide describes version 0.4.0. It has not been published to npm yet; when installing any published version, rely on what that version actually offers. See [README](../README.md#install) for installation and toggling.
 
-Screenshots were captured on 2026-11-11 against macOS Desktop `0.2.2-rc.1` with a Chinese UI, using **Catppuccin Latte** (light) and **Catppuccin Frappé** (dark). Each pair below keeps the whole icon rail and the flyout bounds shown; long lists appear twice, at the top and at the scrolled end. Business names and amounts are blurred, non-plugin page content is masked, and controls, times, groupings, state icons and action entries are not redrawn. Images open at full size; the [screenshot index](images/README.md) records scenes and coverage.
+Screenshots were captured on 2026-11-11 against macOS Desktop `0.2.2-rc.1` with a Chinese UI, using **Catppuccin Latte** (light) and **Catppuccin Frappé** (dark). Each pair below keeps the whole icon rail and the flyout bounds shown; long lists appear twice, at the top and at the scrolled end. Business names and amounts are blurred, non-plugin page content is masked, and controls, times, groupings, state icons and action entries are not redrawn. Images open at full size.
 
 ## Revealing and retracting
 
@@ -14,7 +14,7 @@ From top to bottom: workspaces, scheduled tasks, plugins, more, with account and
 
 After switching to another application the rail retracts; coming back to DSH needs the hot zone again or keyboard focus. When the host sidebar is expanded, the viewport narrows below 768px, or you use the Web client, the plugin draws no rail and you keep using host navigation.
 
-The rail in the screenshots is shown revealed; it is hidden by default and is not a permanent sidebar. Flyouts currently do not reach the full height described by the spec, so the blank area under a short flyout is real behaviour — see the acceptance report.
+The rail in the screenshots is shown revealed; it is hidden by default and is not a permanent sidebar. Flyouts currently do not reach the full height described by the spec, so the blank area under a short flyout is real behaviour.
 
 ## Workspaces and projects
 
@@ -58,11 +58,11 @@ A list shows **10 non-blank sessions** by default, and Show more at the end adds
 
 Paging lives only as long as one flyout opening; closing and reopening restores the default watermark. The old Recent count stepper and the plugin detail settings block have been removed.
 
-The **clock** on a session row means the session is involved in an active scheduled task; in the current version it renders at the **row end**, which differs from the row-start position in the spec. When the row has a running, unread or waiting state dot, the dot takes precedence. The clock is absent while the task list is still loading or failed to load, and sessions stay browsable. Clicking the clock itself does not open the session; clicking the session title navigates. The verification boundary for the mark's position and the mutual exclusion rule is in the acceptance report.
+The **clock** on a session row means the session is involved in an active scheduled task; in the current version it renders at the **row end**, which differs from the row-start position in the spec. When the row has a running, unread or waiting state dot, the dot takes precedence. The clock is absent while the task list is still loading or failed to load, and sessions stay browsable. Clicking the clock itself does not open the session; clicking the session title navigates. The mark's position and the mutual exclusion rule are described above.
 
 **When a session title is too long, rest the pointer on that row**: the title crawls to its far edge and holds there, and returns to the start as soon as the pointer leaves. Overflow of 8px or less does not scroll (a few pixels of movement reads as jitter), a touch tap does not trigger it, and reduced motion jumps straight to the far edge. The 12px fade appears only at the edge that needs it, and the right fade lifts at the far edge so the last character reads at full strength.
 
-Long lists scroll as one block inside a single content area, with section titles scrolling away with the content. Show more scrolls with the list instead of sitting in a fixed footer. See the [acceptance report](desktop-audit-2026-11-11.md) for how the speced flyout height differs from the current build.
+Long lists scroll as one block inside a single content area, with section titles scrolling away with the content. Show more scrolls with the list instead of sitting in a fixed footer.
 
 **End of the recent list**: the screenshot shows all 10 sessions on this page plus Show more, with the clock visible at the right of the last row. Clicking Show more this round grew the list to 20 rows; the screenshot keeps the pre-click button and clock so the location is identifiable.
 
@@ -80,7 +80,7 @@ The task flyout groups into running, paused and ended, with only running expande
 
 Clicking a task entry or Open panel at the bottom opens the host task panel; it never runs, pauses or deletes a task, and does not promise to locate one task's detail. Editing and management happen in the host panel.
 
-A missing service, a failed response or a request past 5 seconds should show a failure hint, while a successful but empty result shows an empty state. See the [acceptance report](desktop-audit-2026-11-11.md) for this version's fast-switching loading issue and the default-closed section click limit; if loading never ends, close the flyout and reopen it.
+A missing service, a failed response or a request past 5 seconds should show a failure hint, while a successful but empty result shows an empty state; if loading never ends, close the flyout and reopen it.
 
 **Default state**: only running is expanded, with Open panel at the bottom. The two active task names are blurred; their planned times are kept.
 
@@ -167,10 +167,10 @@ Preferences live in the current client's `localStorage['dsh.sidebar-rail.v1']` a
 | --- | --- |
 | No rail | Focus DSH, confirm the Desktop app (macOS or Windows), the plugin enabled, the sidebar collapsed and width ≥ 768px, then move into the left-edge hot zone |
 | A session is not in the first 10 | Scroll to the end of its list and click Show more; also check the blank, archived and subagent filtering rules |
-| Tasks keep loading, or no clock appears | Close and reopen the flyout, and use the host task panel if needed; see the acceptance report for the current fast-switching defect |
+| Tasks keep loading, or no clock appears | Close and reopen the flyout, and use the host task panel if needed |
 | Add project fails | Use the host add path from the hint; cancelling a picker never counts as a successful registration |
 | The Add project dialog is in English | Known defect outside this plugin: the host hard-codes the title (`Select Workspace Directory`) and `NSOpenPanel.message` is not localized by the system. Picking a directory still registers the project |
 | Balance or avatar missing | Rely on the host account page; never attach account credentials or balance screenshots to a report |
 | The plugin breaks navigation | Expand the native sidebar, open plugin management and disable it, keeping the host version, plugin version and reproduction steps |
 
-Screenshots only describe the appearance and content of the scene they capture; real network failures, signed-out accounts, every session state and other platforms are covered by the [acceptance report](desktop-audit-2026-11-11.md).
+Screenshots only describe the appearance and content of the scene they capture; real network failures, signed-out accounts, every session state and other platforms are outside the scope of these screenshots.

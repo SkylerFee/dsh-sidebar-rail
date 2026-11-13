@@ -76,8 +76,10 @@ export type FlyoutShell = (
 /**
  * 构造一个把面板挂到 `document.body` 的浮层外壳函数。
  *
- * 面板高度用内联 `height` 钉住。分区化的面板把 body 放进 `.dsr-sections`，那是
- * 浮层里**唯一**的滚动容器（ADR-0007）：分区只是分组，不再各自限高或独立滚动。
+ * 高度默认随内容：不写内联 `height`，面板由内容撑开、以 `maxHeight` 封顶（ADR-0009）。
+ * 只有调用方传 `topFlush` 时才改用 `flyoutSectionedHeight` 钉住整列——当前三个分区浮层
+ * 都不传，账号与「更多」浮层亦如此。分区化的面板把 body 放进 `.dsr-sections`，那是
+ * 浮层里**唯一**的滚动容器：分区只是分组，不再各自限高或独立滚动。
  * @param options - 定位所需的一切与交互回调。
  * @returns 可用于渲染一个浮层的外壳函数。
  */

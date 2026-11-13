@@ -37,7 +37,7 @@ Captured on macOS Desktop `0.2.2-rc.1` on 2026-11-11, using Catppuccin Latte (li
 | Linux Desktop | No rail: the host keeps its own 56px collapsed rail there, so the plugin stands down by column width |
 | Web (any OS) | No rail: the host draws its own collapsed rail |
 
-Recorded Desktop checks used macOS 27.2 and Windows 11, both on Desktop `0.2.2-rc.1`. See `peerDependencies` in [package.json](package.json) for other compatible host versions. Version 1.0.0 is a full rewrite that ships the TypeScript source, the host-native flyout model, paged session lists and the scheduled-task mark together, and adds Windows Desktop support. See the [current acceptance report](docs/desktop-audit-2026-11-11.md) for results and limitations. The published package ships prebuilt `lib/` entries, so installing it needs no compiler. Source development and checks require Node.js ≥ 22.19.0 plus `npm ci` and a build step (see [Development](#development)).
+Recorded Desktop checks used macOS 27.2 and Windows 11, both on Desktop `0.2.2-rc.1`. See `peerDependencies` in [package.json](package.json) for other compatible host versions. Version 1.0.0 is a full rewrite that ships the TypeScript source, the host-native flyout model, paged session lists and the scheduled-task mark together, and adds Windows Desktop support. The published package ships prebuilt `lib/` entries, so installing it needs no compiler. Source development and checks require Node.js ≥ 22.19.0 plus `npm ci` and a build step (see [Development](#development)).
 
 <a id="install"></a>
 ## Install and manage
@@ -92,7 +92,7 @@ The assistant can also call `plugin_manager` with `set_bundle` (enable/disable) 
 <a id="usage"></a>
 ## Usage
 
-See the [usage guide](docs/usage.md) for detailed operations, state descriptions and paired light / dark feature screenshots. Actual results and known issues are in the [acceptance report](docs/desktop-audit-2026-11-11.md).
+See the [usage guide](docs/usage.md) for detailed operations, state descriptions and paired light / dark feature screenshots.
 
 1. Collapse the sidebar with the host button. Move the pointer to the window's left edge, below the window controls, to reveal the rail.
 2. Hover an icon for about 120ms to open its flyout. Leaving closes the flyout after about 200ms. Moving between rail icons switches the flyout without retracting the rail.
@@ -114,7 +114,7 @@ Keyboard: `Tab` to an icon reveals the rail. On a top-row function icon, press `
 
 Session lists initially show **10 non-blank sessions**; **Show more** appends 10 more each time. Recent sessions raise their watermark for running, waiting, unread-completion and current rows; project lists raise it only for the current session and count independently. Automatic growth stops at 50, so later rows still require Show more. The current blank session stays visible without consuming a regular place.
 
-Workspace, task and plugin flyouts scroll as one list: sections are groupings with a title row, so a long list scrolls as a whole and the titles scroll with it. Show more is an ordinary row at the end of the list; it does not sit in a fixed footer. Paging is not persisted: closing and reopening a flyout starts again at 10 rows. A flyout is placed beside the icon that opened it and grows with its content up to the space below that anchor, then scrolls as one list; it does not stretch to the window bottom. See the acceptance report for current positioning and section-folding limits.
+Workspace, task and plugin flyouts scroll as one list: sections are groupings with a title row, so a long list scrolls as a whole and the titles scroll with it. Show more is an ordinary row at the end of the list; it does not sit in a fixed footer. Paging is not persisted: closing and reopening a flyout starts again at 10 rows. A flyout is placed beside the icon that opened it and grows with its content up to the space below that anchor, then scrolls as one list; it does not stretch to the window bottom.
 
 Preferences belong to this client and use `localStorage['dsh.sidebar-rail.v1']`:
 
@@ -138,7 +138,7 @@ The host owns the collapse state; the plugin only reads it. Account and balance 
 | A revealed rail covers the page's left edge | It is a temporary overlay that reserves no host grid space; the hidden default preserves the conversation tab entry, and moving the pointer away lets the rail retract |
 | Sidebar rail unavailable or a boot import error | Keep the visible error and host diagnostics, disable the plugin through the native sidebar, and report the host version, plugin version and reproduction steps in this repository; omit credentials and conversation content |
 
-The plugin keeps the expanded host sidebar and its column width, reserves space for macOS window controls and respects reduced-motion preferences. See the [acceptance report](docs/desktop-audit-2026-11-11.md) for screenshot coverage, interaction issues and unverified paths such as real remote failures and funded accounts.
+The plugin keeps the expanded host sidebar and its column width, reserves space for macOS window controls and respects reduced-motion preferences.
 
 <a id="development"></a>
 ## Development and contributions
@@ -159,7 +159,7 @@ npm run hooks:install  # Optional: enable this repository's commit hooks
 
 Scripts are defined in [package.json](package.json), which is authoritative; the list above mirrors it. Source lives in `src/` as TypeScript / TSX split by responsibility, and esbuild only transpiles and bundles — it does not type-check. `lib/` is a generated directory: it is not committed to Git and must be rebuilt after any `src/` change, so a local checkout is no longer "edit and it runs". Runtime dependencies remain zero: the client only requires the host-provided `react` / `react-dom`. The registration test requires the factory ID to match the full scoped package name. These checks do not replace real Desktop validation.
 
-Use Conventional Commits for PR titles, with the summary, description and verification results in Simplified Chinese. Keep code identifiers and original diagnostics in English. Follow the [PR template](.github/pull_request_template.md) for the problem, changes, validation and unverified items; update both README languages when behaviour changes. UI, loading or registration changes require real environment and operation results in [docs/verify.md](docs/verify.md). See [AGENTS.md](AGENTS.md) and [CODING_STANDARDS.md](CODING_STANDARDS.md) for the full rules.
+Use Conventional Commits for PR titles, with the summary, description and verification results in Simplified Chinese. Keep code identifiers and original diagnostics in English. Follow the [PR template](.github/pull_request_template.md) for the problem, changes, validation and unverified items; update both README languages when behaviour changes. UI, loading or registration changes require real environment and operation results in the pull request. See [AGENTS.md](AGENTS.md) and [CODING_STANDARDS.md](CODING_STANDARDS.md) for the full rules.
 
 Follow [ADR-0003](docs/adr/0003-release-pipeline.md) and the [release security rules](docs/adr/0008-github-release-security.md): merge version changes into `main` through a PR and CI, then create a `v<version>` Release. A job without OIDC builds, checks and inspects the tarball. After approval in `npm-publish`, a separate job publishes that exact artifact with npm OIDC, without installing project dependencies or running package scripts. The npm Trusted Publisher must bind both `publish.yml` and the `npm-publish` environment. Stable releases cannot move `latest` backwards, and the GitHub prerelease flag must match the package version.
 
@@ -169,13 +169,10 @@ Follow [ADR-0003](docs/adr/0003-release-pipeline.md) and the [release security r
 | Document | Content |
 | --- | --- |
 | [Usage guide](docs/usage.md) ([中文](docs/usage.zh.md)) | All entries, pagination, state marks and keyboard operations and paired light / dark feature screenshots |
-| [2026-11-11 acceptance report](docs/desktop-audit-2026-11-11.md) | Current-source checks, Desktop evidence, findings and unverified paths |
 | [Product requirements](docs/PRD.md) | Use cases, interactions and acceptance criteria |
 | [Design](docs/design.md) | Additive registration, layout, data sources, cleanup and local storage |
-| [Verification log](docs/verify.md) | Recorded results, historical defects and unverified paths |
 | [Glossary](GLOSSARY.md) | Shared terms for the rail, sidebar, flyout and current session |
-| [TypeScript migration](docs/typescript-migration.md) | Module layout, build protocol, test migration and staged plan |
-| [Architecture decisions](docs/adr/) | Narrow-window eligibility, TypeScript source plus build toolchain ([ADR-0006](docs/adr/0006-typescript-source-and-build.md)) and release workflow |
+| [Architecture decisions](docs/adr/) | Narrow-window eligibility, TypeScript source plus build toolchain ([ADR-0006](docs/adr/0006-typescript-source-and-build.md)), flyout scroll and height ([ADR-0009](docs/adr/0009-flyout-scroll-and-height.md)) and release workflow |
 
 ## License
 

@@ -2,7 +2,7 @@
 
 - 状态：已采纳（2026-11-10）
 - 取代：[ADR-0002](0002-zero-dependency-no-build.md) 的「无构建、无 devDependency」**工具链决定**——只在工具链维度取代。ADR-0002 的历史理由与其余约束继续有效，原文保留不删。
-- 相关：`src/`、`scripts/build.mjs`、`scripts/check-source.mjs`、`scripts/check-artifact.mjs`、`tsconfig.json`、`.npmrc`、`package-lock.json`、`package.json`（`devDependencies` / `exports` / `files`）、`lib/`（生成目录）、[TypeScript 迁移执行指南](../typescript-migration.md)
+- 相关：`src/`、`scripts/build.mjs`、`scripts/check-source.mjs`、`scripts/check-artifact.mjs`、`tsconfig.json`、`.npmrc`、`package-lock.json`、`package.json`（`devDependencies` / `exports` / `files`）、`lib/`（生成目录）
 
 ## 背景
 
